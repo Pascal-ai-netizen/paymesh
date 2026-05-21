@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
   <title>PayMesh</title>
   <link rel="stylesheet" href="style.css" />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap" rel="stylesheet"/>
 </head>
 <body>
 
@@ -15,10 +14,11 @@
       <div class="login-logo">⚡</div>
       <h1 class="login-title">PayMesh</h1>
       <p class="login-sub">India's First Offline Payment App</p>
+      <p class="login-dev">Crafted by <span>Utkarsh Goyal</span></p>
       <div class="card form-card">
         <div class="form-group">
           <label>Full Name</label>
-          <input type="text" id="login-name" placeholder="Utkarsh Goyal" />
+          <input type="text" id="login-name" placeholder="Your full name" autocomplete="off"/>
         </div>
         <div class="form-group">
           <label>Phone Number</label>
@@ -26,11 +26,12 @@
         </div>
         <div class="form-group">
           <label>Your UPI ID</label>
-          <input type="text" id="login-upi" placeholder="name@ybl"/>
+          <input type="text" id="login-upi" placeholder="name@ybl" autocomplete="off"/>
         </div>
         <button class="btn-primary" onclick="loginUser()">🚀 Get Started</button>
         <div id="login-msg" class="msg"></div>
       </div>
+      <div class="dev-footer">PayMesh v1.0 · Built by <span>Utkarsh Goyal</span></div>
     </div>
   </div>
 
@@ -41,7 +42,7 @@
         <div class="logo">⚡ PayMesh</div>
         <div class="greeting" id="display-name">Hi there 👋</div>
       </div>
-      <button class="icon-btn" onclick="logoutUser()">⎋</button>
+      <button class="icon-btn" onclick="logoutUser()" title="Logout">⎋</button>
     </div>
 
     <div class="wallet-card">
@@ -51,7 +52,6 @@
       <div class="wallet-glow"></div>
     </div>
 
-    <!-- TOP ROW -->
     <div class="grid-2">
       <button class="action-btn send-btn" onclick="showScreen('screen-send')">
         <span class="action-icon">📤</span>
@@ -61,10 +61,6 @@
         <span class="action-icon">📥</span>
         <span>Receive</span>
       </button>
-    </div>
-
-    <!-- MIDDLE ROW -->
-    <div class="grid-2">
       <button class="action-btn voucher-btn" onclick="showScreen('screen-voucher')">
         <span class="action-icon">🎫</span>
         <span>Voucher</span>
@@ -75,7 +71,6 @@
       </button>
     </div>
 
-    <!-- SCAN FULL WIDTH -->
     <div class="grid-1">
       <button class="action-btn scan-btn" onclick="startScan()">
         <span class="action-icon">📷</span>
@@ -84,7 +79,9 @@
     </div>
 
     <div class="section-title">Recent Transactions</div>
-    <div id="tx-list"><div class="tx-empty">No transactions yet</div></div>
+    <div id="tx-list"><div class="tx-empty">No transactions yet ✨</div></div>
+
+    <div class="dev-footer">PayMesh v1.0 · <span>Utkarsh Goyal</span></div>
   </div>
 
   <!-- LOAD -->
@@ -94,9 +91,9 @@
       <div class="screen-title">Load Money</div>
     </div>
     <div class="card">
-      <p class="info-text">Pay to this UPI ID 👇</p>
+      <p class="info-text">Pay exactly the amount to this UPI ID 👇</p>
       <div class="upi-box" id="display-upi">loading...</div>
-      <p class="hint">After paying enter UTR number below</p>
+      <p class="hint">After paying come back and enter your UTR number below</p>
     </div>
     <div class="card">
       <div class="form-group">
@@ -104,12 +101,13 @@
         <input type="number" id="load-amount" placeholder="100"/>
       </div>
       <div class="form-group">
-        <label>UTR Number (12 digits from GPay/PhonePe)</label>
-        <input type="text" id="load-utr" placeholder="426813597284" maxlength="12"/>
+        <label>UTR Number (12 digits from GPay / PhonePe)</label>
+        <input type="text" id="load-utr" placeholder="e.g. 426813597284" maxlength="12"/>
       </div>
       <button class="btn-primary" onclick="submitLoad()">✅ Verify and Load</button>
       <div id="load-msg" class="msg"></div>
     </div>
+    <div class="dev-footer">PayMesh · <span>Utkarsh Goyal</span></div>
   </div>
 
   <!-- SEND -->
@@ -130,6 +128,7 @@
       <button class="btn-primary" onclick="sendMoney()">📤 Send Now</button>
       <div id="send-msg" class="msg"></div>
     </div>
+    <div class="dev-footer">PayMesh · <span>Utkarsh Goyal</span></div>
   </div>
 
   <!-- RECEIVE -->
@@ -141,9 +140,10 @@
     <div class="card center-card">
       <p class="info-text">Your PayMesh QR Code</p>
       <div id="receive-qr" class="qr-wrap"></div>
-      <p class="hint">Ask sender to scan this QR</p>
+      <p class="hint">Ask sender to scan this QR with PayMesh</p>
       <div class="upi-box" id="receive-upi-display"></div>
     </div>
+    <div class="dev-footer">PayMesh · <span>Utkarsh Goyal</span></div>
   </div>
 
   <!-- VOUCHER -->
@@ -158,10 +158,11 @@
         <label>Amount (₹)</label>
         <input type="number" id="voucher-amount" placeholder="Enter amount"/>
       </div>
-      <button class="btn-primary" onclick="generateVoucher()">🎫 Generate Voucher</button>
+      <button class="btn-primary" onclick="generateVoucher()">🎫 Generate Offline Voucher</button>
       <div id="voucher-msg" class="msg"></div>
     </div>
     <div id="voucher-display"></div>
+    <div class="dev-footer">PayMesh · <span>Utkarsh Goyal</span></div>
   </div>
 
   <!-- SCAN VOUCHER -->
@@ -171,9 +172,9 @@
       <div class="screen-title">Scan Voucher</div>
     </div>
     <div class="card center-card">
-      <p class="info-text">Point camera at voucher QR code</p>
+      <p class="info-text">Point camera at the PayMesh voucher QR code</p>
       <div class="scanner-wrap">
-        <video id="scanner-video" autoplay playsinline></video>
+        <video id="scanner-video" autoplay playsinline muted></video>
         <div class="scanner-overlay">
           <div class="scanner-frame">
             <div class="corner tl"></div>
@@ -184,25 +185,26 @@
           </div>
         </div>
       </div>
-      <p class="hint">Hold steady over the QR code</p>
+      <p class="hint">Hold steady — scanning automatically</p>
     </div>
     <div id="scan-result" class="card hidden">
-      <div class="scan-result-title">🎫 Voucher Detected</div>
-      <div id="scan-voucher-code" class="voucher-code-text" style="margin:12px 0; font-size:14px;"></div>
+      <div class="scan-result-title">🎫 Voucher Detected!</div>
+      <div id="scan-voucher-code" class="voucher-code-text" style="margin:12px 0;font-size:13px;letter-spacing:2px;"></div>
       <div id="scan-voucher-amount" class="scan-amount"></div>
       <div id="scan-voucher-from" class="scan-from"></div>
       <button class="btn-primary" onclick="redeemVoucher()">✅ Redeem ₹<span id="scan-amount-btn">0</span></button>
       <div id="scan-msg" class="msg"></div>
     </div>
+    <div class="dev-footer">PayMesh · <span>Utkarsh Goyal</span></div>
   </div>
 
   <!-- SUCCESS OVERLAY -->
   <div id="success-overlay" class="overlay hidden">
     <div class="overlay-card">
-      <div class="success-icon">✅</div>
-      <h2 id="overlay-title">Payment Sent!</h2>
+      <div class="success-icon" id="overlay-icon">✅</div>
+      <h2 id="overlay-title">Done!</h2>
       <p id="overlay-sub">Transaction complete</p>
-      <button class="btn-primary" onclick="closeOverlay()">Done</button>
+      <button class="btn-primary" onclick="closeOverlay()">🎉 Done</button>
     </div>
   </div>
 
