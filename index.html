@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+  <title>PayMesh</title>
+  <link rel="stylesheet" href="style.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap" rel="stylesheet"/>
+</head>
+<body>
+
+  <!-- LOGIN -->
+  <div id="screen-login" class="screen active">
+    <div class="login-wrap">
+      <div class="login-logo">⚡</div>
+      <h1 class="login-title">PayMesh</h1>
+      <p class="login-sub">India's First Offline Payment App</p>
+      <div class="card form-card">
+        <div class="form-group">
+          <label>Full Name</label>
+          <input type="text" id="login-name" placeholder="Utkarsh Goyal" />
+        </div>
+        <div class="form-group">
+          <label>Phone Number</label>
+          <input type="tel" id="login-phone" placeholder="10 digit number" maxlength="10"/>
+        </div>
+        <div class="form-group">
+          <label>Your UPI ID</label>
+          <input type="text" id="login-upi" placeholder="name@ybl"/>
+        </div>
+        <button class="btn-primary" onclick="loginUser()">🚀 Get Started</button>
+        <div id="login-msg" class="msg"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- HOME -->
+  <div id="screen-home" class="screen">
+    <div class="topbar">
+      <div>
+        <div class="logo">⚡ PayMesh</div>
+        <div class="greeting" id="display-name">Hi there 👋</div>
+      </div>
+      <button class="icon-btn" onclick="logoutUser()">⎋</button>
+    </div>
+
+    <div class="wallet-card">
+      <div class="wallet-label">Wallet Balance</div>
+      <div class="wallet-amount">₹<span id="wallet-balance">0.00</span></div>
+      <div class="wallet-sub">Works offline · QR Voucher System</div>
+      <div class="wallet-glow"></div>
+    </div>
+
+    <!-- TOP ROW -->
+    <div class="grid-2">
+      <button class="action-btn send-btn" onclick="showScreen('screen-send')">
+        <span class="action-icon">📤</span>
+        <span>Send</span>
+      </button>
+      <button class="action-btn receive-btn" onclick="showScreen('screen-receive')">
+        <span class="action-icon">📥</span>
+        <span>Receive</span>
+      </button>
+    </div>
+
+    <!-- MIDDLE ROW -->
+    <div class="grid-2">
+      <button class="action-btn voucher-btn" onclick="showScreen('screen-voucher')">
+        <span class="action-icon">🎫</span>
+        <span>Voucher</span>
+      </button>
+      <button class="action-btn load-btn" onclick="showScreen('screen-load')">
+        <span class="action-icon">💰</span>
+        <span>Load</span>
+      </button>
+    </div>
+
+    <!-- SCAN FULL WIDTH -->
+    <div class="grid-1">
+      <button class="action-btn scan-btn" onclick="startScan()">
+        <span class="action-icon">📷</span>
+        <span>Scan Voucher — Pay Offline</span>
+      </button>
+    </div>
+
+    <div class="section-title">Recent Transactions</div>
+    <div id="tx-list"><div class="tx-empty">No transactions yet</div></div>
+  </div>
+
+  <!-- LOAD -->
+  <div id="screen-load" class="screen">
+    <div class="topbar">
+      <button class="back-btn" onclick="showScreen('screen-home')">← Back</button>
+      <div class="screen-title">Load Money</div>
+    </div>
+    <div class="card">
+      <p class="info-text">Pay to this UPI ID 👇</p>
+      <div class="upi-box" id="display-upi">loading...</div>
+      <p class="hint">After paying enter UTR number below</p>
+    </div>
+    <div class="card">
+      <div class="form-group">
+        <label>Amount Paid (₹)</label>
+        <input type="number" id="load-amount" placeholder="100"/>
+      </div>
+      <div class="form-group">
+        <label>UTR Number (12 digits from GPay/PhonePe)</label>
+        <input type="text" id="load-utr" placeholder="426813597284" maxlength="12"/>
+      </div>
+      <button class="btn-primary" onclick="submitLoad()">✅ Verify and Load</button>
+      <div id="load-msg" class="msg"></div>
+    </div>
+  </div>
+
+  <!-- SEND -->
+  <div id="screen-send" class="screen">
+    <div class="topbar">
+      <button class="back-btn" onclick="showScreen('screen-home')">← Back</button>
+      <div class="screen-title">Send Money</div>
+    </div>
+    <div class="card">
+      <div class="form-group">
+        <label>Recipient Phone Number</label>
+        <input type="tel" id="send-phone" placeholder="10 digit number" maxlength="10"/>
+      </div>
+      <div class="form-group">
+        <label>Amount (₹)</label>
+        <input type="number" id="send-amount" placeholder="Enter amount"/>
+      </div>
+      <button class="btn-primary" onclick="sendMoney()">📤 Send Now</button>
+      <div id="send-msg" class="msg"></div>
+    </div>
+  </div>
+
+  <!-- RECEIVE -->
+  <div id="screen-receive" class="screen">
+    <div class="topbar">
+      <button class="back-btn" onclick="showScreen('screen-home')">← Back</button>
+      <div class="screen-title">Receive Money</div>
+    </div>
+    <div class="card center-card">
+      <p class="info-text">Your PayMesh QR Code</p>
+      <div id="receive-qr" class="qr-wrap"></div>
+      <p class="hint">Ask sender to scan this QR</p>
+      <div class="upi-box" id="receive-upi-display"></div>
+    </div>
+  </div>
+
+  <!-- VOUCHER -->
+  <div id="screen-voucher" class="screen">
+    <div class="topbar">
+      <button class="back-btn" onclick="showScreen('screen-home')">← Back</button>
+      <div class="screen-title">Offline Voucher</div>
+    </div>
+    <div class="card">
+      <p class="info-text">Generate a voucher to pay offline without internet 📡</p>
+      <div class="form-group">
+        <label>Amount (₹)</label>
+        <input type="number" id="voucher-amount" placeholder="Enter amount"/>
+      </div>
+      <button class="btn-primary" onclick="generateVoucher()">🎫 Generate Voucher</button>
+      <div id="voucher-msg" class="msg"></div>
+    </div>
+    <div id="voucher-display"></div>
+  </div>
+
+  <!-- SCAN VOUCHER -->
+  <div id="screen-scan" class="screen">
+    <div class="topbar">
+      <button class="back-btn" onclick="stopScan()">← Back</button>
+      <div class="screen-title">Scan Voucher</div>
+    </div>
+    <div class="card center-card">
+      <p class="info-text">Point camera at voucher QR code</p>
+      <div class="scanner-wrap">
+        <video id="scanner-video" autoplay playsinline></video>
+        <div class="scanner-overlay">
+          <div class="scanner-frame">
+            <div class="corner tl"></div>
+            <div class="corner tr"></div>
+            <div class="corner bl"></div>
+            <div class="corner br"></div>
+            <div class="scanner-line"></div>
+          </div>
+        </div>
+      </div>
+      <p class="hint">Hold steady over the QR code</p>
+    </div>
+    <div id="scan-result" class="card hidden">
+      <div class="scan-result-title">🎫 Voucher Detected</div>
+      <div id="scan-voucher-code" class="voucher-code-text" style="margin:12px 0; font-size:14px;"></div>
+      <div id="scan-voucher-amount" class="scan-amount"></div>
+      <div id="scan-voucher-from" class="scan-from"></div>
+      <button class="btn-primary" onclick="redeemVoucher()">✅ Redeem ₹<span id="scan-amount-btn">0</span></button>
+      <div id="scan-msg" class="msg"></div>
+    </div>
+  </div>
+
+  <!-- SUCCESS OVERLAY -->
+  <div id="success-overlay" class="overlay hidden">
+    <div class="overlay-card">
+      <div class="success-icon">✅</div>
+      <h2 id="overlay-title">Payment Sent!</h2>
+      <p id="overlay-sub">Transaction complete</p>
+      <button class="btn-primary" onclick="closeOverlay()">Done</button>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
