@@ -110,6 +110,7 @@ body{
 .icon-btn:active{transform:scale(.88)}
 .screen-title{font-size:17px;font-weight:600;color:var(--text);letter-spacing:-.4px}
 
+/* FIX: type=button explicitly set in HTML to prevent accidental submit */
 .back-btn{
   display:flex;align-items:center;gap:6px;
   background:none;border:none;color:var(--text2);
@@ -221,7 +222,6 @@ body{
 }
 .action-btn:hover .action-icon{transform:scale(1.1) translateY(-1px)}
 
-/* themed icons */
 .send-icon{background:linear-gradient(145deg,rgba(77,159,255,.18),rgba(77,159,255,.07));border:1px solid rgba(77,159,255,.2);color:var(--blue)}
 .recv-icon{background:linear-gradient(145deg,rgba(0,232,122,.18),rgba(0,232,122,.07));border:1px solid rgba(0,232,122,.2);color:var(--em)}
 .vouch-icon{background:linear-gradient(145deg,rgba(255,184,48,.18),rgba(255,184,48,.07));border:1px solid rgba(255,184,48,.2);color:var(--amber)}
@@ -232,7 +232,6 @@ body{
 .vouch-btn:hover{border-color:rgba(255,184,48,.22);box-shadow:0 8px 28px rgba(255,184,48,.1)}
 .load-btn:hover{border-color:rgba(0,232,122,.22);box-shadow:0 8px 28px rgba(0,232,122,.1)}
 
-/* scan */
 .scan-btn{
   width:100%;flex-direction:row;gap:14px;padding:18px 24px;
   border-radius:18px;
@@ -400,6 +399,19 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
 .voucher-code{font-family:var(--mono);color:var(--text);font-size:13.5px;font-weight:700;letter-spacing:4px;margin-bottom:6px;word-break:break-all}
 .voucher-sub{color:var(--text3);font-size:12px;font-weight:600}
 
+/* FIX: voucher-entry spacing for stacked vouchers */
+.voucher-entry{margin-bottom:4px}
+
+/* ── PERSON QR RESULT (scan screen) ── */
+.person-result-card{
+  background:linear-gradient(135deg,rgba(77,159,255,.09),rgba(77,159,255,.04));
+  border:1px solid rgba(77,159,255,.2);border-radius:var(--r2);
+  padding:20px;margin:0 14px 10px;
+}
+.person-result-name{font-size:20px;font-weight:700;color:var(--text);margin-bottom:4px}
+.person-result-phone{font-size:12px;color:var(--text3);font-weight:600;font-family:var(--mono);margin-bottom:2px}
+.person-result-upi{font-size:11px;color:var(--text3);font-weight:500;margin-bottom:18px}
+
 /* ── NOTICE ── */
 .notice{
   background:linear-gradient(135deg,rgba(255,184,48,.1),rgba(255,184,48,.05));
@@ -518,6 +530,17 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
 .confetti-piece{position:fixed;pointer-events:none;z-index:9999;animation:cFall linear forwards}
 @keyframes cFall{0%{transform:translateY(-10px) rotate(0deg) scale(1);opacity:1}75%{opacity:1}100%{transform:translateY(100vh) rotate(720deg) scale(.7);opacity:0}}
 
+/* ── RESTORE BTN ── */
+.restore-btn{
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  width:calc(100% - 28px);margin:0 14px 12px;
+  padding:12px;border-radius:var(--r);
+  background:var(--surface);border:1px solid var(--border);
+  color:var(--text3);font:600 12px/1 var(--sans);cursor:pointer;
+  transition:all .2s;
+}
+.restore-btn:hover{color:var(--text2);border-color:var(--border2);background:var(--surface2)}
+
 ::selection{background:rgba(0,232,122,.22);color:var(--em2)}
 </style>
 </head>
@@ -530,7 +553,6 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
 <div id="screen-login" class="screen active">
   <div class="login-wrap">
     <div class="login-logo">
-      <!-- Lightning bolt SVG -->
       <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
         <path d="M18 4L8 18H16L14 28L24 14H16L18 4Z" fill="url(#lgGrad)" stroke="rgba(0,232,122,0.4)" stroke-width="1"/>
         <defs>
@@ -557,12 +579,13 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
         <label>Your UPI ID</label>
         <input type="text" id="login-upi" placeholder="name@ybl" autocomplete="off">
       </div>
-      <button class="btn-primary" onclick="loginUser()">
+      <!-- FIX: type=button prevents accidental form submit -->
+      <button type="button" class="btn-primary" onclick="loginUser()">
         <span>Get Started</span>
       </button>
       <div id="login-msg" class="msg"></div>
     </div>
-    <p class="dev-footer">PayMesh v1.0 · Built by <span>Utkarsh Goyal</span></p>
+    <p class="dev-footer">PayMesh v2.0 · Built by <span>Utkarsh Goyal</span></p>
   </div>
 </div>
 
@@ -588,7 +611,7 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
         <div class="greeting" id="display-name">Hi there 👋</div>
       </div>
     </div>
-    <button class="icon-btn" onclick="logoutUser()" title="Logout">
+    <button type="button" class="icon-btn" onclick="logoutUser()" title="Logout">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
         <polyline points="16 17 21 12 16 7"/>
@@ -597,7 +620,6 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
     </button>
   </div>
 
-  <!-- Wallet Card -->
   <div class="wallet-card">
     <div class="wallet-label">
       <span class="live-dot"></span>
@@ -610,60 +632,50 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
     </div>
   </div>
 
-  <!-- Actions 2x2 -->
   <div class="grid2">
-    <!-- Send -->
-    <button class="action-btn send-btn" onclick="showScreen('screen-send')">
+    <button type="button" class="action-btn send-btn" onclick="showScreen('screen-send')">
       <div class="action-icon send-icon">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="22" y1="2" x2="11" y2="13"/>
-          <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+          <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
         </svg>
       </div>
       Send
     </button>
-    <!-- Receive -->
-    <button class="action-btn recv-btn" onclick="showScreen('screen-receive')">
+    <button type="button" class="action-btn recv-btn" onclick="showScreen('screen-receive')">
       <div class="action-icon recv-icon">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="8 17 12 21 16 17"/>
-          <line x1="12" y1="3" x2="12" y2="21"/>
+          <polyline points="8 17 12 21 16 17"/><line x1="12" y1="3" x2="12" y2="21"/>
         </svg>
       </div>
       Receive
     </button>
-    <!-- Voucher -->
-    <button class="action-btn vouch-btn" onclick="showScreen('screen-voucher')">
+    <button type="button" class="action-btn vouch-btn" onclick="showScreen('screen-voucher')">
       <div class="action-icon vouch-icon">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="2" y="7" width="20" height="14" rx="2" ry="2"/>
-          <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>
+          <rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>
         </svg>
       </div>
       Voucher
     </button>
-    <!-- Load -->
-    <button class="action-btn load-btn" onclick="showScreen('screen-load')">
+    <button type="button" class="action-btn load-btn" onclick="showScreen('screen-load')">
       <div class="action-icon load-icon">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="12" y1="5" x2="12" y2="19"/>
-          <polyline points="19 12 12 5 5 12"/>
+          <line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 5 5 12"/>
         </svg>
       </div>
       Load
     </button>
   </div>
 
-  <!-- Scan -->
   <div class="grid1">
-    <button class="action-btn scan-btn" onclick="startScan()">
+    <button type="button" class="action-btn scan-btn" onclick="startScan()">
       <div class="action-icon">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
           <rect x="3" y="3" width="5" height="5"/><rect x="16" y="3" width="5" height="5"/><rect x="3" y="16" width="5" height="5"/>
           <path d="M21 16h-3a2 2 0 0 0-2 2v3"/><path d="M21 21v-1"/><path d="M15 15h3"/>
         </svg>
       </div>
-      Scan Voucher — Pay Offline
+      Scan QR — Pay or Receive
     </button>
   </div>
 
@@ -677,7 +689,8 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
 ═══════════════════════════════════════ -->
 <div id="screen-send" class="screen">
   <div class="topbar">
-    <button class="back-btn" onclick="showScreen('screen-home')">
+    <!-- FIX: type=button on all back buttons -->
+    <button type="button" class="back-btn" onclick="showScreen('screen-home')">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
       Back
     </button>
@@ -694,7 +707,7 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
       <label>Amount (₹)</label>
       <input type="number" id="send-amount" placeholder="Enter amount" min="1">
     </div>
-    <button class="btn-primary" onclick="sendMoney()">Send Now</button>
+    <button type="button" class="btn-primary" onclick="sendMoney()">Send Now</button>
     <div id="send-msg" class="msg"></div>
   </div>
 </div>
@@ -704,7 +717,7 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
 ═══════════════════════════════════════ -->
 <div id="screen-receive" class="screen">
   <div class="topbar">
-    <button class="back-btn" onclick="showScreen('screen-home')">
+    <button type="button" class="back-btn" onclick="showScreen('screen-home')">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
       Back
     </button>
@@ -713,9 +726,10 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
   </div>
   <div style="height:12px"></div>
   <div class="card center-card">
-    <p class="info-text">Your PayMesh QR Code</p>
+    <!-- FIX: clarified label — this QR is scannable with the app's scanner -->
+    <p class="info-text">Your PayMesh QR — ask sender to scan this with PayMesh</p>
     <div id="receive-qr" class="qr-wrap"></div>
-    <p class="hint">Ask sender to scan this QR with PayMesh</p>
+    <p class="hint">Sender scans this → amount pre-filled → they confirm send</p>
     <div class="upi-box" id="receive-upi-display"></div>
   </div>
 </div>
@@ -725,7 +739,7 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
 ═══════════════════════════════════════ -->
 <div id="screen-voucher" class="screen">
   <div class="topbar">
-    <button class="back-btn" onclick="showScreen('screen-home')">
+    <button type="button" class="back-btn" onclick="showScreen('screen-home')">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
       Back
     </button>
@@ -739,9 +753,15 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
       <label>Amount (₹)</label>
       <input type="number" id="voucher-amount" placeholder="Enter amount" min="1">
     </div>
-    <button class="btn-primary" onclick="generateVoucher()">Generate Offline Voucher</button>
+    <button type="button" class="btn-primary" onclick="generateVoucher()">Generate Offline Voucher</button>
     <div id="voucher-msg" class="msg"></div>
   </div>
+  <!-- FIX: restore button is explicit, not automatic on screen entry -->
+  <button type="button" class="restore-btn" onclick="restoreVoucher()">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.95"/></svg>
+    Restore previous vouchers
+  </button>
+  <!-- FIX: voucher-display is a list — prependVoucher adds here, never replaces -->
   <div id="voucher-display"></div>
 </div>
 
@@ -750,7 +770,7 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
 ═══════════════════════════════════════ -->
 <div id="screen-load" class="screen">
   <div class="topbar">
-    <button class="back-btn" onclick="showScreen('screen-home')">
+    <button type="button" class="back-btn" onclick="showScreen('screen-home')">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
       Back
     </button>
@@ -772,7 +792,7 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
       <label>UTR Number (12 digits from GPay / PhonePe)</label>
       <input type="text" id="load-utr" placeholder="e.g. 426813597284" maxlength="12">
     </div>
-    <button class="btn-primary" onclick="submitLoad()">Verify and Load</button>
+    <button type="button" class="btn-primary" onclick="submitLoad()">Verify and Load</button>
     <div id="load-msg" class="msg"></div>
   </div>
 </div>
@@ -782,16 +802,17 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
 ═══════════════════════════════════════ -->
 <div id="screen-scan" class="screen">
   <div class="topbar">
-    <button class="back-btn" onclick="stopScan()">
+    <button type="button" class="back-btn" onclick="stopScan()">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
       Back
     </button>
-    <span class="screen-title">Scan Voucher</span>
+    <span class="screen-title">Scan QR</span>
     <div style="width:60px"></div>
   </div>
   <div style="height:16px"></div>
   <div class="card center-card">
-    <p class="info-text">Point camera at the PayMesh voucher QR code</p>
+    <!-- FIX: updated hint — scanner handles both voucher QR and person QR -->
+    <p class="info-text">Scan a Voucher QR or a PayMesh Receive QR</p>
     <div class="scanner-wrap">
       <video id="scanner-video" autoplay playsinline muted></video>
       <div class="scanner-overlay">
@@ -804,13 +825,26 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
     </div>
     <p class="hint">Hold steady — scanning automatically</p>
   </div>
+
+  <!-- Voucher QR result (existing) -->
   <div id="scan-result" class="card hidden">
     <div style="font-size:9px;font-weight:700;color:var(--em);letter-spacing:2px;text-transform:uppercase;margin-bottom:6px">Voucher Detected!</div>
     <div id="scan-voucher-code" class="upi-box" style="margin:12px 0;font-size:13px;letter-spacing:2px"></div>
     <div id="scan-voucher-amount" style="font-family:var(--mono);font-size:42px;font-weight:700;color:var(--text);letter-spacing:-2px;margin:10px 0"></div>
     <div id="scan-voucher-from" style="font-size:12px;color:var(--text3);margin-bottom:18px;font-weight:600"></div>
-    <button class="btn-primary" onclick="redeemVoucher()">Redeem ₹<span id="scan-amount-btn">0</span></button>
+    <button type="button" class="btn-primary" onclick="redeemVoucher()">Redeem ₹<span id="scan-amount-btn">0</span></button>
     <div id="scan-msg" class="msg"></div>
+  </div>
+
+  <!-- FIX: Person QR result panel — new -->
+  <div id="scan-send-result" class="person-result-card hidden">
+    <div style="font-size:9px;font-weight:700;color:var(--blue);letter-spacing:2px;text-transform:uppercase;margin-bottom:14px">PayMesh User Detected</div>
+    <div class="person-result-name" id="scan-person-name"></div>
+    <div class="person-result-phone" id="scan-person-phone"></div>
+    <div class="person-result-upi" id="scan-person-upi"></div>
+    <button type="button" class="btn-primary" onclick="proceedToSend()" style="background:linear-gradient(135deg,#4D9FFF,#6ab4ff);box-shadow:0 6px 24px rgba(77,159,255,.3);">
+      Send Money to this person →
+    </button>
   </div>
 </div>
 
@@ -826,7 +860,7 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
     </div>
     <h2 id="overlay-title">Done!</h2>
     <p id="overlay-sub">Transaction complete</p>
-    <button class="btn-primary" onclick="closeOverlay()">Done</button>
+    <button type="button" class="btn-primary" onclick="closeOverlay()">Done</button>
   </div>
 </div>
 
