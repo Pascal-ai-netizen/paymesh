@@ -1,214 +1,839 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
-  <title>PayMesh</title>
-  <link rel="stylesheet" href="style.css" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>PayMesh</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+:root{
+  --bg:#03050A;
+  --bg1:#070B14;
+  --bg2:#0B1020;
+  --surface:rgba(255,255,255,0.04);
+  --surface2:rgba(255,255,255,0.07);
+  --surface3:rgba(255,255,255,0.11);
+  --border:rgba(255,255,255,0.07);
+  --border2:rgba(255,255,255,0.12);
+  --border3:rgba(255,255,255,0.20);
+  --em:#00E87A;
+  --em2:#00FFA3;
+  --em-dim:rgba(0,232,122,0.12);
+  --em-glow:rgba(0,232,122,0.25);
+  --blue:#4D9FFF;
+  --blue-dim:rgba(77,159,255,0.12);
+  --amber:#FFB830;
+  --amber-dim:rgba(255,184,48,0.12);
+  --red:#FF4D6A;
+  --red-dim:rgba(255,77,106,0.12);
+  --text:#EEF2FF;
+  --text2:#7A8BAA;
+  --text3:#3A4558;
+  --mono:'Space Mono',monospace;
+  --sans:'Space Grotesk',system-ui,sans-serif;
+  --r:14px;--r2:20px;--r3:28px;
+  --ease:cubic-bezier(0.16,1,0.3,1);
+  --spring:cubic-bezier(0.34,1.56,0.64,1);
+}
+html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
+body{
+  background:var(--bg);
+  color:var(--text);
+  font-family:var(--sans);
+  font-size:15px;
+  line-height:1.5;
+  min-height:100svh;
+  overflow-x:hidden;
+  -webkit-font-smoothing:antialiased;
+}
+
+/* ── AMBIENT BG ── */
+.ambient{
+  position:fixed;inset:0;pointer-events:none;z-index:0;
+  background:
+    radial-gradient(ellipse 70% 50% at 15% 0%,rgba(0,232,122,0.08) 0%,transparent 60%),
+    radial-gradient(ellipse 50% 40% at 85% 100%,rgba(77,159,255,0.07) 0%,transparent 55%);
+  animation:ambientDrift 18s ease-in-out infinite alternate;
+}
+@keyframes ambientDrift{
+  0%{opacity:1;transform:scale(1)}
+  100%{opacity:.75;transform:scale(1.06) translate(6px,-4px)}
+}
+
+/* ── SCREENS ── */
+.screen{display:none;position:fixed;inset:0;overflow-y:auto;overflow-x:hidden;z-index:1;padding-bottom:max(40px,env(safe-area-inset-bottom))}
+.screen::-webkit-scrollbar{width:2px}
+.screen::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+.screen.active{display:block;animation:screenIn .4s var(--ease) both}
+@keyframes screenIn{from{opacity:0;transform:translateY(20px) scale(.985)}to{opacity:1;transform:none}}
+
+/* ── TOPBAR ── */
+.topbar{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:16px 18px 14px;
+  position:sticky;top:0;z-index:50;
+  background:rgba(3,5,10,.82);
+  backdrop-filter:blur(48px) saturate(180%);
+  -webkit-backdrop-filter:blur(48px) saturate(180%);
+  border-bottom:1px solid var(--border);
+}
+.topbar::after{
+  content:'';position:absolute;bottom:-1px;left:15%;right:15%;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(0,232,122,.35),transparent);
+}
+.logo{display:flex;align-items:center;gap:10px}
+.logo-mark{
+  width:34px;height:34px;border-radius:10px;
+  background:linear-gradient(135deg,rgba(0,232,122,.18),rgba(0,232,122,.06));
+  border:1px solid rgba(0,232,122,.22);
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 0 20px rgba(0,232,122,.12);
+}
+.logo-text{font-size:18px;font-weight:700;color:var(--text);letter-spacing:-.5px;line-height:1}
+.logo-text span{
+  background:linear-gradient(90deg,var(--em),var(--em2));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text
+}
+.greeting{font-size:11px;color:var(--text3);font-weight:500;letter-spacing:.3px;margin-top:2px}
+
+.icon-btn{
+  width:36px;height:36px;
+  background:var(--surface);border:1px solid var(--border);
+  color:var(--text2);border-radius:var(--r);
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+  transition:all .2s;position:relative;overflow:hidden;
+}
+.icon-btn:hover{background:var(--surface2);border-color:var(--border2);color:var(--text)}
+.icon-btn:active{transform:scale(.88)}
+.screen-title{font-size:17px;font-weight:600;color:var(--text);letter-spacing:-.4px}
+
+.back-btn{
+  display:flex;align-items:center;gap:6px;
+  background:none;border:none;color:var(--text2);
+  font:700 14px/1 var(--sans);cursor:pointer;padding:6px 0;
+  transition:color .18s;
+}
+.back-btn:hover{color:var(--text)}
+.back-btn svg{transition:transform .22s var(--ease)}
+.back-btn:hover svg{transform:translateX(-4px)}
+.back-btn:active{color:var(--em)}
+
+/* ── WALLET CARD ── */
+.wallet-card{
+  margin:14px 14px 12px;
+  padding:28px 24px 26px;
+  border-radius:var(--r3);
+  position:relative;overflow:hidden;
+  background:
+    linear-gradient(155deg,rgba(0,232,122,.07) 0%,rgba(255,255,255,.02) 45%,rgba(77,159,255,.05) 100%);
+  border:1px solid rgba(0,232,122,.14);
+  box-shadow:
+    0 1px 0 rgba(255,255,255,.06) inset,
+    0 -1px 0 rgba(0,0,0,.35) inset,
+    0 28px 56px rgba(0,0,0,.55),
+    0 0 0 1px rgba(0,0,0,.3);
+}
+.wallet-card::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:1.5px;
+  background:linear-gradient(90deg,transparent,rgba(0,232,122,.5) 35%,rgba(0,255,163,.9) 50%,rgba(0,232,122,.5) 65%,transparent);
+  background-size:200%;
+  animation:shimmerTop 3.5s ease-in-out infinite;
+}
+@keyframes shimmerTop{
+  0%{background-position:-100%;opacity:.5}
+  50%{background-position:200%;opacity:1}
+  100%{background-position:-100%;opacity:.5}
+}
+.wallet-card::after{
+  content:'';position:absolute;
+  width:280px;height:280px;
+  background:radial-gradient(circle,rgba(0,232,122,.09) 0%,rgba(77,159,255,.05) 45%,transparent 70%);
+  bottom:-140px;right:-90px;border-radius:50%;pointer-events:none;
+  animation:orbFloat 7s ease-in-out infinite alternate;
+}
+@keyframes orbFloat{0%{transform:scale(1)}100%{transform:scale(1.2) translate(-8px,-8px)}}
+.wallet-label{
+  font-size:9px;font-weight:700;
+  color:var(--text3);letter-spacing:2.5px;text-transform:uppercase;
+  margin-bottom:16px;position:relative;display:flex;align-items:center;gap:8px;
+}
+.live-dot{
+  width:5px;height:5px;background:var(--em);border-radius:50%;
+  box-shadow:0 0 0 0 var(--em-glow);
+  animation:ping 2.2s ease-out infinite;
+}
+@keyframes ping{
+  0%{box-shadow:0 0 0 0 var(--em-glow)}
+  65%{box-shadow:0 0 0 7px rgba(0,232,122,0)}
+  100%{box-shadow:0 0 0 0 rgba(0,232,122,0)}
+}
+.wallet-amount{
+  font-family:var(--mono);
+  font-size:50px;font-weight:700;color:var(--text);
+  line-height:1;margin-bottom:18px;
+  letter-spacing:-2px;position:relative;
+  text-shadow:0 0 80px rgba(0,232,122,.18);
+}
+.currency{
+  font-size:22px;vertical-align:super;
+  font-weight:400;opacity:.55;letter-spacing:0;margin-right:3px;
+}
+.wallet-sub{
+  font-size:12px;color:var(--text2);font-weight:500;
+  display:flex;align-items:center;gap:8px;letter-spacing:.2px;
+}
+.wallet-tag{
+  background:var(--em-dim);border:1px solid rgba(0,232,122,.18);
+  color:var(--em);border-radius:6px;padding:2px 8px;
+  font-size:10px;font-weight:700;letter-spacing:.5px;
+}
+
+/* ── ACTION GRID ── */
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:0 14px 10px}
+.grid1{padding:0 14px 12px}
+
+.action-btn{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:12px;padding:22px 12px;
+  border-radius:var(--r2);border:1px solid var(--border);
+  background:var(--surface);
+  color:var(--text2);font:700 12px/1 var(--sans);letter-spacing:.2px;
+  cursor:pointer;position:relative;overflow:hidden;
+  transition:background .2s,border-color .2s,transform .16s var(--spring),box-shadow .2s;
+}
+.action-btn::before{
+  content:'';position:absolute;
+  top:0;left:-120%;width:65%;height:100%;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.04),transparent);
+  transform:skewX(-15deg);transition:left .55s ease;
+}
+.action-btn:hover::before{left:150%}
+.action-btn:hover{background:var(--surface2);transform:translateY(-2px)}
+.action-btn:active{transform:scale(.92);transition-duration:.08s}
+
+.action-icon{
+  width:48px;height:48px;border-radius:14px;
+  display:flex;align-items:center;justify-content:center;
+  transition:transform .25s var(--spring);
+}
+.action-btn:hover .action-icon{transform:scale(1.1) translateY(-1px)}
+
+/* themed icons */
+.send-icon{background:linear-gradient(145deg,rgba(77,159,255,.18),rgba(77,159,255,.07));border:1px solid rgba(77,159,255,.2);color:var(--blue)}
+.recv-icon{background:linear-gradient(145deg,rgba(0,232,122,.18),rgba(0,232,122,.07));border:1px solid rgba(0,232,122,.2);color:var(--em)}
+.vouch-icon{background:linear-gradient(145deg,rgba(255,184,48,.18),rgba(255,184,48,.07));border:1px solid rgba(255,184,48,.2);color:var(--amber)}
+.load-icon{background:linear-gradient(145deg,rgba(0,232,122,.18),rgba(0,232,122,.07));border:1px solid rgba(0,232,122,.2);color:var(--em)}
+
+.send-btn:hover{border-color:rgba(77,159,255,.22);box-shadow:0 8px 28px rgba(77,159,255,.1)}
+.recv-btn:hover{border-color:rgba(0,232,122,.22);box-shadow:0 8px 28px rgba(0,232,122,.1)}
+.vouch-btn:hover{border-color:rgba(255,184,48,.22);box-shadow:0 8px 28px rgba(255,184,48,.1)}
+.load-btn:hover{border-color:rgba(0,232,122,.22);box-shadow:0 8px 28px rgba(0,232,122,.1)}
+
+/* scan */
+.scan-btn{
+  width:100%;flex-direction:row;gap:14px;padding:18px 24px;
+  border-radius:18px;
+  background:linear-gradient(100deg,rgba(0,232,122,.1),rgba(0,232,122,.05) 55%,rgba(77,159,255,.07));
+  border:1px solid rgba(0,232,122,.2);
+  color:var(--em);font-size:14px;font-weight:700;
+  letter-spacing:.1px;justify-content:center;
+}
+.scan-btn .action-icon{
+  width:38px;height:38px;border-radius:11px;
+  background:rgba(0,232,122,.15);color:var(--em2);border:none;
+  box-shadow:0 0 20px rgba(0,232,122,.18);
+}
+.scan-btn:hover{
+  background:linear-gradient(100deg,rgba(0,232,122,.16),rgba(0,232,122,.09) 55%,rgba(77,159,255,.12));
+  border-color:rgba(0,232,122,.34);
+  box-shadow:0 8px 32px rgba(0,232,122,.15);
+  color:var(--em2);
+}
+
+/* ── CARDS ── */
+.card{
+  background:var(--surface);border-radius:var(--r2);
+  padding:20px;margin:0 14px 10px;
+  border:1px solid var(--border);position:relative;overflow:hidden;
+  box-shadow:0 1px 0 rgba(255,255,255,.04) inset,0 12px 28px rgba(0,0,0,.25);
+  animation:slideUp .35s var(--ease) both;
+}
+.card::before{
+  content:'';position:absolute;top:0;left:10%;right:10%;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.07),transparent);
+}
+.card:nth-child(2){animation-delay:.05s}
+.card:nth-child(3){animation-delay:.1s}
+@keyframes slideUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+
+/* ── SECTION LABEL ── */
+.section-label{
+  font-size:9px;font-weight:700;letter-spacing:2.5px;text-transform:uppercase;
+  color:var(--text3);padding:18px 18px 8px;
+}
+
+/* ── FORM ── */
+.form-group{margin-bottom:16px}
+.form-group label{
+  display:block;font-size:9px;font-weight:700;
+  color:var(--text3);margin-bottom:9px;letter-spacing:2px;text-transform:uppercase;
+}
+.form-group input{
+  width:100%;padding:14px 16px;
+  background:rgba(0,0,0,.4);border:1px solid var(--border2);
+  border-radius:var(--r);color:var(--text);
+  font:600 15px/1 var(--sans);outline:none;
+  transition:border-color .22s,box-shadow .22s,background .22s;
+  caret-color:var(--em);-webkit-appearance:none;
+}
+.form-group input:focus{
+  border-color:rgba(0,232,122,.45);background:rgba(0,232,122,.03);
+  box-shadow:0 0 0 3.5px rgba(0,232,122,.1),0 0 20px rgba(0,232,122,.06);
+}
+.form-group input::placeholder{color:var(--text3);font-weight:500}
+input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
+
+/* ── PRIMARY BTN ── */
+.btn-primary{
+  width:100%;padding:15px;border:none;border-radius:var(--r);
+  font:800 15px/1 var(--sans);letter-spacing:.3px;cursor:pointer;
+  position:relative;overflow:hidden;margin-top:4px;
+  color:#011A0A;
+  background:linear-gradient(135deg,var(--em) 0%,#00F5A8 55%,var(--em2) 100%);
+  box-shadow:0 6px 24px rgba(0,232,122,.3),0 1px 0 rgba(255,255,255,.22) inset;
+  transition:transform .15s var(--spring),box-shadow .2s;
+}
+.btn-primary::before{
+  content:'';position:absolute;top:-50%;left:-80%;width:55%;height:200%;
+  background:linear-gradient(105deg,transparent,rgba(255,255,255,.2),transparent);
+  transform:skewX(-18deg);transition:left .6s ease;
+}
+.btn-primary:hover{
+  box-shadow:0 10px 36px rgba(0,232,122,.42),0 1px 0 rgba(255,255,255,.28) inset;
+  transform:translateY(-1px);
+}
+.btn-primary:hover::before{left:135%}
+.btn-primary:active{transform:scale(.96) translateY(1px);box-shadow:0 3px 12px rgba(0,232,122,.22)}
+
+/* ── MSG ── */
+.msg{margin-top:12px;padding:12px 16px;border-radius:var(--r);font:600 13px/1.55 var(--sans);display:none}
+.msg.success{
+  display:block;background:linear-gradient(135deg,rgba(0,232,122,.1),rgba(0,232,122,.05));
+  color:var(--em);border:1px solid rgba(0,232,122,.18);
+  animation:msgPop .28s var(--spring) both;
+}
+.msg.error{
+  display:block;background:linear-gradient(135deg,rgba(255,77,106,.1),rgba(255,77,106,.05));
+  color:var(--red);border:1px solid rgba(255,77,106,.18);
+  animation:msgPop .28s var(--spring) both;
+}
+@keyframes msgPop{from{opacity:0;transform:scale(.96) translateY(6px)}to{opacity:1;transform:none}}
+
+/* ── TX LIST ── */
+.tx-empty{text-align:center;color:var(--text3);padding:52px 20px;font-size:13px;font-weight:500}
+#tx-list{margin:0 14px 12px;border-radius:var(--r2);overflow:hidden;border:1px solid var(--border);background:var(--surface)}
+#tx-list:has(.tx-empty){border:none;background:none}
+
+.tx-row{
+  display:flex;align-items:center;padding:14px 18px;
+  border-bottom:1px solid rgba(255,255,255,.04);
+  position:relative;cursor:default;
+  animation:txIn .3s var(--ease) both;
+}
+.tx-row:last-child{border-bottom:none}
+.tx-row::before{content:'';position:absolute;inset:0;background:var(--surface2);opacity:0;transition:opacity .16s}
+.tx-row:hover::before{opacity:1}
+@keyframes txIn{from{opacity:0;transform:translateX(-10px)}to{opacity:1;transform:none}}
+
+.tx-av{
+  width:42px;height:42px;border-radius:13px;
+  background:var(--surface2);border:1px solid var(--border2);
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--mono);font-size:15px;font-weight:700;color:var(--text2);
+  margin-right:14px;flex-shrink:0;position:relative;z-index:1;
+}
+.tx-mid{flex:1;min-width:0;position:relative;z-index:1}
+.tx-name{font-size:14px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tx-time{font-size:11px;color:var(--text3);margin-top:2px;font-weight:500}
+.tx-amt{font-family:var(--mono);font-size:13.5px;font-weight:700;flex-shrink:0;margin-left:10px;position:relative;z-index:1}
+.debit{color:var(--red)}.credit{color:var(--em)}.pending{color:var(--amber)}
+
+/* ── UPI BOX ── */
+.upi-box{
+  background:rgba(0,0,0,.45);border:1px solid var(--border2);
+  border-radius:var(--r);padding:14px 18px;
+  font:500 13.5px/1 var(--mono);color:var(--text);
+  text-align:center;margin:12px 0;word-break:break-all;letter-spacing:.5px;
+}
+
+/* ── QR ── */
+.qr-wrap{display:flex;justify-content:center;margin:18px 0}
+.qr-wrap canvas,.qr-wrap img{
+  border-radius:18px;padding:16px;background:#fff;
+  box-shadow:0 0 0 1px rgba(255,255,255,.1),0 16px 48px rgba(0,0,0,.55),0 0 60px rgba(0,232,122,.08);
+  animation:qrPop .5s var(--spring) both;
+}
+@keyframes qrPop{from{opacity:0;transform:scale(.82) rotate(-3deg)}to{opacity:1;transform:none}}
+
+/* ── VOUCHER ── */
+.voucher-card{
+  background:linear-gradient(145deg,rgba(255,184,48,.08),rgba(255,184,48,.03) 60%,rgba(255,212,100,.05));
+  border:1px solid rgba(255,184,48,.18);border-radius:var(--r2);
+  padding:24px;margin:0 14px 10px;position:relative;overflow:hidden;
+  box-shadow:0 1px 0 rgba(255,212,100,.1) inset,0 12px 32px rgba(0,0,0,.3);
+  animation:vReveal .42s var(--spring) both;
+}
+.voucher-card::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:1.5px;
+  background:linear-gradient(90deg,transparent,rgba(255,184,48,.6),rgba(255,212,100,.9),rgba(255,184,48,.6),transparent);
+}
+.voucher-card::after{
+  content:'';position:absolute;width:180px;height:180px;
+  background:radial-gradient(circle,rgba(255,184,48,.08) 0%,transparent 70%);
+  top:-70px;right:-50px;border-radius:50%;pointer-events:none;
+}
+@keyframes vReveal{from{opacity:0;transform:scale(.93) translateY(10px)}to{opacity:1;transform:none}}
+.voucher-label{font-size:9px;font-weight:700;letter-spacing:2.5px;color:var(--amber);text-transform:uppercase;margin-bottom:14px}
+.voucher-code{font-family:var(--mono);color:var(--text);font-size:13.5px;font-weight:700;letter-spacing:4px;margin-bottom:6px;word-break:break-all}
+.voucher-sub{color:var(--text3);font-size:12px;font-weight:600}
+
+/* ── NOTICE ── */
+.notice{
+  background:linear-gradient(135deg,rgba(255,184,48,.1),rgba(255,184,48,.05));
+  border:1px solid rgba(255,184,48,.2);border-radius:var(--r);
+  padding:13px 16px;font:600 12px/1.65 var(--sans);
+  color:rgba(255,212,100,.88);margin-bottom:18px;
+}
+
+/* ── LOGIN ── */
+.login-wrap{
+  min-height:100svh;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;padding:48px 18px;position:relative;
+}
+.login-wrap::before{
+  content:'';position:absolute;
+  width:480px;height:480px;
+  background:radial-gradient(circle,rgba(0,232,122,.08) 0%,rgba(77,159,255,.05) 50%,transparent 70%);
+  top:-80px;left:50%;transform:translateX(-50%);border-radius:50%;pointer-events:none;
+  animation:loginGlow 9s ease-in-out infinite alternate;
+}
+@keyframes loginGlow{0%{transform:translateX(-50%) scale(1)}100%{transform:translateX(-50%) scale(1.18)}}
+.login-logo{
+  width:72px;height:72px;
+  background:linear-gradient(145deg,rgba(0,232,122,.18),rgba(0,232,122,.06));
+  border:1px solid rgba(0,232,122,.28);border-radius:22px;
+  display:flex;align-items:center;justify-content:center;
+  margin-bottom:24px;
+  box-shadow:0 0 0 1px rgba(0,232,122,.08),0 12px 40px rgba(0,232,122,.2),0 1px 0 rgba(255,255,255,.08) inset;
+  animation:logoIn .6s var(--spring) both;position:relative;
+}
+@keyframes logoIn{from{opacity:0;transform:scale(.6) rotate(-15deg)}to{opacity:1;transform:none}}
+.login-title{
+  font-size:38px;font-weight:700;color:var(--text);
+  margin-bottom:6px;letter-spacing:-1.5px;
+  animation:fadeUp .5s var(--ease) .08s both;
+}
+.login-title span{background:linear-gradient(90deg,var(--em),var(--em2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.login-sub{font-size:14px;color:var(--text2);margin-bottom:2px;font-weight:500;animation:fadeUp .5s var(--ease) .13s both}
+.login-dev{font-size:11px;color:var(--text3);margin-bottom:36px;font-weight:600;animation:fadeUp .5s var(--ease) .18s both}
+.login-dev span{color:var(--text2);font-weight:700}
+.form-card{width:100%;max-width:400px;animation:fadeUp .5s var(--ease) .22s both}
+@keyframes fadeUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
+
+/* ── OVERLAY ── */
+.overlay{
+  position:fixed;inset:0;
+  background:rgba(3,5,10,.9);
+  backdrop-filter:blur(40px) saturate(180%);
+  -webkit-backdrop-filter:blur(40px) saturate(180%);
+  display:flex;align-items:center;justify-content:center;z-index:500;
+  animation:oFadeIn .22s ease both;
+}
+@keyframes oFadeIn{from{opacity:0}to{opacity:1}}
+.overlay.hidden{display:none}
+.overlay-card{
+  background:rgba(255,255,255,.05);border-radius:var(--r3);
+  padding:44px 32px 36px;text-align:center;
+  width:300px;max-width:calc(100vw - 32px);
+  border:1px solid var(--border2);
+  box-shadow:0 0 0 1px rgba(0,0,0,.3),0 32px 72px rgba(0,0,0,.6),0 1px 0 rgba(255,255,255,.06) inset;
+  animation:oPop .42s var(--spring) both;position:relative;overflow:hidden;
+}
+.overlay-card::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:1.5px;
+  background:linear-gradient(90deg,transparent,rgba(0,232,122,.6),transparent);
+}
+@keyframes oPop{from{opacity:0;transform:scale(.82) translateY(28px)}to{opacity:1;transform:none}}
+.success-icon{
+  width:72px;height:72px;
+  background:linear-gradient(145deg,rgba(0,232,122,.18),rgba(0,232,122,.07));
+  border:1px solid rgba(0,232,122,.25);border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  margin:0 auto 22px;
+  box-shadow:0 0 40px rgba(0,232,122,.2),0 1px 0 rgba(255,255,255,.1) inset;
+  animation:iconBounce .5s var(--spring) .1s both;
+}
+@keyframes iconBounce{from{transform:scale(0) rotate(-20deg);opacity:0}to{transform:none;opacity:1}}
+.overlay-card h2{font-size:24px;font-weight:700;color:var(--text);margin-bottom:8px;letter-spacing:-.6px}
+.overlay-card p{color:var(--text2);font-size:13.5px;margin-bottom:28px;font-weight:500;line-height:1.6}
+
+/* ── SCANNER ── */
+.scanner-wrap{
+  position:relative;width:100%;max-width:260px;
+  margin:18px auto;border-radius:22px;overflow:hidden;
+  aspect-ratio:1;background:#000;
+  border:1px solid var(--border2);
+  box-shadow:0 0 0 1px var(--border),0 0 50px rgba(0,232,122,.1),0 20px 48px rgba(0,0,0,.6);
+}
+#scanner-video{width:100%;height:100%;object-fit:cover;display:block}
+.scanner-overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.2)}
+.scanner-frame{width:178px;height:178px;position:relative}
+.corner{position:absolute;width:26px;height:26px;border-color:var(--em);border-style:solid}
+.tl{top:0;left:0;border-width:2.5px 0 0 2.5px;border-radius:8px 0 0 0}
+.tr{top:0;right:0;border-width:2.5px 2.5px 0 0;border-radius:0 8px 0 0}
+.bl{bottom:0;left:0;border-width:0 0 2.5px 2.5px;border-radius:0 0 0 8px}
+.br{bottom:0;right:0;border-width:0 2.5px 2.5px 0;border-radius:0 0 8px 0}
+.scanner-line{
+  position:absolute;left:3%;right:3%;height:1.5px;top:3%;
+  background:linear-gradient(90deg,transparent,var(--em) 30%,var(--em2) 50%,var(--em) 70%,transparent);
+  animation:scanBeam 2.4s ease-in-out infinite;
+  box-shadow:0 0 10px var(--em),0 0 20px rgba(0,232,122,.3);
+}
+@keyframes scanBeam{0%{top:3%;opacity:0}10%{opacity:1}90%{opacity:1}100%{top:95%;opacity:0}}
+
+/* ── MISC ── */
+.info-text{font-size:13px;color:var(--text2);margin-bottom:8px;font-weight:500}
+.hint{font-size:11.5px;color:var(--text3);margin-top:10px;line-height:1.65;font-weight:500}
+.center-card{text-align:center}
+.hidden{display:none!important}
+
+/* ── RIPPLE ── */
+.ripple{position:absolute;border-radius:50%;background:rgba(255,255,255,.06);transform:scale(0);animation:rippleX .6s ease-out forwards;pointer-events:none;z-index:0}
+@keyframes rippleX{0%{transform:scale(0);opacity:.8}100%{transform:scale(6);opacity:0}}
+
+/* ── CONFETTI ── */
+.confetti-piece{position:fixed;pointer-events:none;z-index:9999;animation:cFall linear forwards}
+@keyframes cFall{0%{transform:translateY(-10px) rotate(0deg) scale(1);opacity:1}75%{opacity:1}100%{transform:translateY(100vh) rotate(720deg) scale(.7);opacity:0}}
+
+::selection{background:rgba(0,232,122,.22);color:var(--em2)}
+</style>
 </head>
 <body>
+<div class="ambient"></div>
 
-  <!-- LOGIN -->
-  <div id="screen-login" class="screen active">
-    <div class="login-wrap">
-      <div class="login-logo">⚡</div>
-      <h1 class="login-title">PayMesh</h1>
-      <p class="login-sub">India's First Offline Payment App</p>
-      <p class="login-dev">Crafted by <span>Utkarsh Goyal</span></p>
-      <div class="card form-card">
-        <div class="form-group">
-          <label>Full Name</label>
-          <input type="text" id="login-name" placeholder="Your full name" autocomplete="off"/>
-        </div>
-        <div class="form-group">
-          <label>Phone Number</label>
-          <input type="tel" id="login-phone" placeholder="10 digit number" maxlength="10"/>
-        </div>
-        <div class="form-group">
-          <label>Your UPI ID</label>
-          <input type="text" id="login-upi" placeholder="name@ybl" autocomplete="off"/>
-        </div>
-        <button class="btn-primary" onclick="loginUser()">🚀 Get Started</button>
-        <div id="login-msg" class="msg"></div>
-      </div>
-      <div class="dev-footer">PayMesh v1.0 · Built by <span>Utkarsh Goyal</span></div>
+<!-- ══════════════════════════════════════
+     LOGIN SCREEN
+═══════════════════════════════════════ -->
+<div id="screen-login" class="screen active">
+  <div class="login-wrap">
+    <div class="login-logo">
+      <!-- Lightning bolt SVG -->
+      <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+        <path d="M18 4L8 18H16L14 28L24 14H16L18 4Z" fill="url(#lgGrad)" stroke="rgba(0,232,122,0.4)" stroke-width="1"/>
+        <defs>
+          <linearGradient id="lgGrad" x1="8" y1="4" x2="24" y2="28" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#00E87A"/>
+            <stop offset="100%" stop-color="#00FFA3"/>
+          </linearGradient>
+        </defs>
+      </svg>
     </div>
+    <h1 class="login-title">Pay<span>Mesh</span></h1>
+    <p class="login-sub">Payments, simplified.</p>
+    <p class="login-dev">Offline-first · QR Voucher System · <span>v2.0</span></p>
+    <div class="form-card card" style="max-width:400px">
+      <div class="form-group">
+        <label>Phone / UPI ID</label>
+        <input type="tel" id="login-phone" placeholder="9876543210 or user@upi" autocomplete="tel">
+      </div>
+      <div class="form-group">
+        <label>MPIN</label>
+        <input type="password" id="login-pin" placeholder="••••••" maxlength="6" autocomplete="current-password">
+      </div>
+      <button class="btn-primary" onclick="loginUser()">
+        <span>Sign In</span>
+      </button>
+      <div id="login-msg" class="msg"></div>
+    </div>
+    <p style="font-size:11px;color:var(--text3);margin-top:20px;font-weight:600">Demo: any phone + any 4-digit PIN</p>
   </div>
+</div>
 
-  <!-- HOME -->
-  <div id="screen-home" class="screen">
-    <div class="topbar">
+<!-- ══════════════════════════════════════
+     HOME SCREEN
+═══════════════════════════════════════ -->
+<div id="screen-home" class="screen">
+  <div class="topbar">
+    <div class="logo">
+      <div class="logo-mark">
+        <svg width="18" height="18" viewBox="0 0 32 32" fill="none">
+          <path d="M18 4L8 18H16L14 28L24 14H16L18 4Z" fill="url(#hGrad)"/>
+          <defs>
+            <linearGradient id="hGrad" x1="8" y1="4" x2="24" y2="28" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#00E87A"/>
+              <stop offset="100%" stop-color="#00FFA3"/>
+            </linearGradient>
+          </defs>
+        </svg>
+      </div>
       <div>
-        <div class="logo">⚡ PayMesh</div>
-        <div class="greeting" id="display-name">Hi there 👋</div>
+        <div class="logo-text">Pay<span>Mesh</span></div>
+        <div class="greeting">Hi, <span id="home-greeting-name">there</span> 👋</div>
       </div>
-      <button class="icon-btn" onclick="logoutUser()" title="Logout">⎋</button>
     </div>
-
-    <div class="wallet-card">
-      <div class="wallet-label">Wallet Balance</div>
-      <div class="wallet-amount">₹<span id="wallet-balance">0.00</span></div>
-      <div class="wallet-sub">Works offline · QR Voucher System</div>
-      <div class="wallet-glow"></div>
-    </div>
-
-    <div class="grid-2">
-      <button class="action-btn send-btn" onclick="showScreen('screen-send')">
-        <span class="action-icon">📤</span>
-        <span>Send</span>
-      </button>
-      <button class="action-btn receive-btn" onclick="showScreen('screen-receive')">
-        <span class="action-icon">📥</span>
-        <span>Receive</span>
-      </button>
-      <button class="action-btn voucher-btn" onclick="showScreen('screen-voucher')">
-        <span class="action-icon">🎫</span>
-        <span>Voucher</span>
-      </button>
-      <button class="action-btn load-btn" onclick="showScreen('screen-load')">
-        <span class="action-icon">💰</span>
-        <span>Load</span>
-      </button>
-    </div>
-
-    <div class="grid-1">
-      <button class="action-btn scan-btn" onclick="startScan()">
-        <span class="action-icon">📷</span>
-        <span>Scan Voucher — Pay Offline</span>
-      </button>
-    </div>
-
-    <div class="section-title">Recent Transactions</div>
-    <div id="tx-list"><div class="tx-empty">No transactions yet ✨</div></div>
-
-    <div class="dev-footer">PayMesh v1.0 · <span>Utkarsh Goyal</span></div>
+    <button class="icon-btn" onclick="logoutUser()" title="Logout">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+        <polyline points="16 17 21 12 16 7"/>
+        <line x1="21" y1="12" x2="9" y2="12"/>
+      </svg>
+    </button>
   </div>
 
-  <!-- LOAD -->
-  <div id="screen-load" class="screen">
-    <div class="topbar">
-      <button class="back-btn" onclick="showScreen('screen-home')">← Back</button>
-      <div class="screen-title">Load Money</div>
+  <!-- Wallet Card -->
+  <div class="wallet-card">
+    <div class="wallet-label">
+      <span class="live-dot"></span>
+      Wallet Balance
     </div>
-    <div class="card">
-      <p class="info-text">Pay exactly the amount to this UPI ID 👇</p>
-      <div class="upi-box" id="display-upi">loading...</div>
-      <p class="hint">After paying come back and enter your UTR number below</p>
+    <div class="wallet-amount"><span class="currency">₹</span><span id="home-balance">0.00</span></div>
+    <div class="wallet-sub">
+      <span class="wallet-tag">OFFLINE</span>
+      <span>QR Voucher System · Works anywhere</span>
     </div>
-    <div class="card">
-      <div class="form-group">
-        <label>Amount Paid (₹)</label>
-        <input type="number" id="load-amount" placeholder="100"/>
-      </div>
-      <div class="form-group">
-        <label>UTR Number (12 digits from GPay / PhonePe)</label>
-        <input type="text" id="load-utr" placeholder="e.g. 426813597284" maxlength="12"/>
-      </div>
-      <button class="btn-primary" onclick="submitLoad()">✅ Verify and Load</button>
-      <div id="load-msg" class="msg"></div>
-    </div>
-    <div class="dev-footer">PayMesh · <span>Utkarsh Goyal</span></div>
   </div>
 
-  <!-- SEND -->
-  <div id="screen-send" class="screen">
-    <div class="topbar">
-      <button class="back-btn" onclick="showScreen('screen-home')">← Back</button>
-      <div class="screen-title">Send Money</div>
-    </div>
-    <div class="card">
-      <div class="form-group">
-        <label>Recipient Phone Number</label>
-        <input type="tel" id="send-phone" placeholder="10 digit number" maxlength="10"/>
+  <!-- Actions 2x2 -->
+  <div class="grid2">
+    <!-- Send -->
+    <button class="action-btn send-btn" onclick="showScreen('screen-send')">
+      <div class="action-icon send-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="22" y1="2" x2="11" y2="13"/>
+          <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+        </svg>
       </div>
-      <div class="form-group">
-        <label>Amount (₹)</label>
-        <input type="number" id="send-amount" placeholder="Enter amount"/>
+      Send
+    </button>
+    <!-- Receive -->
+    <button class="action-btn recv-btn" onclick="showScreen('screen-receive')">
+      <div class="action-icon recv-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="8 17 12 21 16 17"/>
+          <line x1="12" y1="3" x2="12" y2="21"/>
+        </svg>
       </div>
-      <button class="btn-primary" onclick="sendMoney()">📤 Send Now</button>
-      <div id="send-msg" class="msg"></div>
-    </div>
-    <div class="dev-footer">PayMesh · <span>Utkarsh Goyal</span></div>
+      Receive
+    </button>
+    <!-- Voucher -->
+    <button class="action-btn vouch-btn" onclick="showScreen('screen-voucher')">
+      <div class="action-icon vouch-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="2" y="7" width="20" height="14" rx="2" ry="2"/>
+          <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>
+        </svg>
+      </div>
+      Voucher
+    </button>
+    <!-- Load -->
+    <button class="action-btn load-btn" onclick="showScreen('screen-load')">
+      <div class="action-icon load-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="12" y1="5" x2="12" y2="19"/>
+          <polyline points="19 12 12 5 5 12"/>
+        </svg>
+      </div>
+      Load
+    </button>
   </div>
 
-  <!-- RECEIVE -->
-  <div id="screen-receive" class="screen">
-    <div class="topbar">
-      <button class="back-btn" onclick="showScreen('screen-home')">← Back</button>
-      <div class="screen-title">Receive Money</div>
+  <!-- Scan -->
+  <div class="grid1">
+    <button class="action-btn scan-btn" onclick="startScan()">
+      <div class="action-icon">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="5" height="5"/><rect x="16" y="3" width="5" height="5"/><rect x="3" y="16" width="5" height="5"/>
+          <path d="M21 16h-3a2 2 0 0 0-2 2v3"/><path d="M21 21v-1"/><path d="M15 15h3"/>
+        </svg>
+      </div>
+      Scan Voucher — Pay Offline
+    </button>
+  </div>
+
+  <div class="section-label">Recent Transactions</div>
+  <div id="tx-list"><div class="tx-empty">No transactions yet</div></div>
+  <p class="dev-footer">PayMesh <span>v2.0</span> · Offline-first payments</p>
+</div>
+
+<!-- ══════════════════════════════════════
+     SEND SCREEN
+═══════════════════════════════════════ -->
+<div id="screen-send" class="screen">
+  <div class="topbar">
+    <button class="back-btn" onclick="showScreen('screen-home')">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+      Back
+    </button>
+    <span class="screen-title">Send Money</span>
+    <div style="width:60px"></div>
+  </div>
+  <div style="height:12px"></div>
+  <div class="card">
+    <div class="form-group">
+      <label>Recipient UPI ID</label>
+      <input type="text" id="send-to" placeholder="user@paymesh or phone">
+    </div>
+    <div class="form-group">
+      <label>Amount (₹)</label>
+      <input type="number" id="send-amount" placeholder="0.00" min="1">
+    </div>
+    <div class="form-group">
+      <label>Note (optional)</label>
+      <input type="text" id="send-note" placeholder="What's this for?">
+    </div>
+    <button class="btn-primary" onclick="sendMoney()">Send Money</button>
+    <div id="send-msg" class="msg"></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     RECEIVE SCREEN
+═══════════════════════════════════════ -->
+<div id="screen-receive" class="screen">
+  <div class="topbar">
+    <button class="back-btn" onclick="showScreen('screen-home')">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+      Back
+    </button>
+    <span class="screen-title">Receive</span>
+    <div style="width:60px"></div>
+  </div>
+  <div style="height:12px"></div>
+  <div class="card center-card">
+    <p class="info-text">Share your UPI ID or QR code</p>
+    <div class="upi-box" id="receive-upi">—</div>
+    <div class="qr-wrap" id="receive-qr-wrap"></div>
+    <p class="hint">Screenshot this QR and share it anywhere — even without internet.</p>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     VOUCHER SCREEN
+═══════════════════════════════════════ -->
+<div id="screen-voucher" class="screen">
+  <div class="topbar">
+    <button class="back-btn" onclick="showScreen('screen-home')">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+      Back
+    </button>
+    <span class="screen-title">Create Voucher</span>
+    <div style="width:60px"></div>
+  </div>
+  <div style="height:12px"></div>
+  <div class="card">
+    <div class="notice">Vouchers let you send money offline. The recipient scans the QR to redeem.</div>
+    <div class="form-group">
+      <label>Voucher Amount (₹)</label>
+      <input type="number" id="voucher-amount" placeholder="100" min="1">
+    </div>
+    <button class="btn-primary" onclick="generateVoucher()">Generate Voucher</button>
+    <div id="voucher-msg" class="msg"></div>
+  </div>
+  <div id="voucher-result" class="hidden">
+    <div class="voucher-card" id="voucher-card-display">
+      <div class="voucher-label">Voucher · Offline Payment</div>
+      <div class="voucher-code" id="voucher-code-text"></div>
+      <div class="voucher-sub" id="voucher-amount-text"></div>
     </div>
     <div class="card center-card">
-      <p class="info-text">Your PayMesh QR Code</p>
-      <div id="receive-qr" class="qr-wrap"></div>
-      <p class="hint">Ask sender to scan this QR with PayMesh</p>
-      <div class="upi-box" id="receive-upi-display"></div>
+      <div class="qr-wrap" id="voucher-qr-wrap"></div>
+      <p class="hint">Share this QR. Recipient scans it with PayMesh to claim funds.</p>
     </div>
-    <div class="dev-footer">PayMesh · <span>Utkarsh Goyal</span></div>
   </div>
+</div>
 
-  <!-- VOUCHER -->
-  <div id="screen-voucher" class="screen">
-    <div class="topbar">
-      <button class="back-btn" onclick="showScreen('screen-home')">← Back</button>
-      <div class="screen-title">Offline Voucher</div>
-    </div>
-    <div class="card">
-      <p class="info-text">Generate a voucher to pay offline without internet 📡</p>
-      <div class="form-group">
-        <label>Amount (₹)</label>
-        <input type="number" id="voucher-amount" placeholder="Enter amount"/>
-      </div>
-      <button class="btn-primary" onclick="generateVoucher()">🎫 Generate Offline Voucher</button>
-      <div id="voucher-msg" class="msg"></div>
-    </div>
-    <div id="voucher-display"></div>
-    <div class="dev-footer">PayMesh · <span>Utkarsh Goyal</span></div>
+<!-- ══════════════════════════════════════
+     LOAD SCREEN
+═══════════════════════════════════════ -->
+<div id="screen-load" class="screen">
+  <div class="topbar">
+    <button class="back-btn" onclick="showScreen('screen-home')">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+      Back
+    </button>
+    <span class="screen-title">Load Wallet</span>
+    <div style="width:60px"></div>
   </div>
-
-  <!-- SCAN VOUCHER -->
-  <div id="screen-scan" class="screen">
-    <div class="topbar">
-      <button class="back-btn" onclick="stopScan()">← Back</button>
-      <div class="screen-title">Scan Voucher</div>
+  <div style="height:12px"></div>
+  <div class="card">
+    <div class="form-group">
+      <label>Amount (₹)</label>
+      <input type="number" id="load-amount" placeholder="500" min="1">
     </div>
-    <div class="card center-card">
-      <p class="info-text">Point camera at the PayMesh voucher QR code</p>
-      <div class="scanner-wrap">
-        <video id="scanner-video" autoplay playsinline muted></video>
-        <div class="scanner-overlay">
-          <div class="scanner-frame">
-            <div class="corner tl"></div>
-            <div class="corner tr"></div>
-            <div class="corner bl"></div>
-            <div class="corner br"></div>
-            <div class="scanner-line"></div>
-          </div>
+    <div class="form-group">
+      <label>Payment Method</label>
+      <input type="text" id="load-method" placeholder="UPI / Bank Transfer / Card">
+    </div>
+    <button class="btn-primary" onclick="submitLoad()">Add Funds</button>
+    <div id="load-msg" class="msg"></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     SCAN SCREEN
+═══════════════════════════════════════ -->
+<div id="screen-scan" class="screen">
+  <div class="topbar">
+    <button class="back-btn" onclick="showScreen('screen-home');stopScan()">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+      Back
+    </button>
+    <span class="screen-title">Scan QR</span>
+    <div style="width:60px"></div>
+  </div>
+  <div style="height:16px"></div>
+  <div class="card center-card">
+    <p class="info-text">Scan a PayMesh Voucher or UPI QR code</p>
+    <div class="scanner-wrap">
+      <video id="scanner-video" autoplay playsinline muted></video>
+      <div class="scanner-overlay">
+        <div class="scanner-frame">
+          <div class="corner tl"></div><div class="corner tr"></div>
+          <div class="corner bl"></div><div class="corner br"></div>
+          <div class="scanner-line"></div>
         </div>
       </div>
-      <p class="hint">Hold steady — scanning automatically</p>
     </div>
-    <div id="scan-result" class="card hidden">
-      <div class="scan-result-title">🎫 Voucher Detected!</div>
-      <div id="scan-voucher-code" class="voucher-code-text" style="margin:12px 0;font-size:13px;letter-spacing:2px;"></div>
-      <div id="scan-voucher-amount" class="scan-amount"></div>
-      <div id="scan-voucher-from" class="scan-from"></div>
-      <button class="btn-primary" onclick="redeemVoucher()">✅ Redeem ₹<span id="scan-amount-btn">0</span></button>
-      <div id="scan-msg" class="msg"></div>
-    </div>
-    <div class="dev-footer">PayMesh · <span>Utkarsh Goyal</span></div>
-  </div>
-
-  <!-- SUCCESS OVERLAY -->
-  <div id="success-overlay" class="overlay hidden">
-    <div class="overlay-card">
-      <div class="success-icon" id="overlay-icon">✅</div>
-      <h2 id="overlay-title">Done!</h2>
-      <p id="overlay-sub">Transaction complete</p>
-      <button class="btn-primary" onclick="closeOverlay()">🎉 Done</button>
+    <p class="hint" id="scan-hint">Point camera at a voucher QR code</p>
+    <div id="scan-result" class="hidden" style="margin-top:16px">
+      <div class="scan-result-label" style="font-size:9px;font-weight:700;color:var(--em);letter-spacing:2px;text-transform:uppercase;margin-bottom:6px">Scanned</div>
+      <div id="scan-amount" style="font-family:var(--mono);font-size:42px;font-weight:700;color:var(--text);letter-spacing:-2px;margin:10px 0">₹0</div>
+      <div id="scan-from" style="font-size:12px;color:var(--text3);margin-bottom:18px;font-weight:600"></div>
+      <button class="btn-primary" onclick="confirmScan()">Confirm & Redeem</button>
     </div>
   </div>
+</div>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <script type="module" src="app.js"></script>
+<!-- ══════════════════════════════════════
+     SUCCESS OVERLAY
+═══════════════════════════════════════ -->
+<div id="overlay-success" class="overlay hidden">
+  <div class="overlay-card">
+    <div class="success-icon">
+      <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="var(--em)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="20 6 9 17 4 12"/>
+      </svg>
+    </div>
+    <h2>Done!</h2>
+    <p id="overlay-msg">Transaction successful</p>
+    <button class="btn-primary" onclick="closeOverlay()">Back to Home</button>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script type="module" src="app.js"></script>
 </body>
 </html>
