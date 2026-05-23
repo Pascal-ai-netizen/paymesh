@@ -490,17 +490,10 @@ window.loginUser = async function() {
       showMsg(msg, 'success', `Account created! Welcome, ${finalName}!`);
     }
 
-    // Reuse token if same device already has valid one (prevents self-kickout on re-login)
-    const existingLocal = getLocalToken();
-    const firestoreToken = userSnap.exists() ? (userSnap.data().deviceToken || null) : null;
-    let deviceToken;
-    if (existingLocal && existingLocal === firestoreToken) {
-      deviceToken = existingLocal;
-    } else {
-      deviceToken = generateDeviceToken();
-      await updateDoc(userRef, { deviceToken });
-      setLocalToken(deviceToken);
-    }
+    // Generate a fingerprint for this device and store it both locally and in Firestore
+    const fingerprint = generateDeviceToken();
+    localStorage.setItem('pm_fingerprint', fingerprint);
+    await updateDoc(userRef, { fingerprint });
 
     addKnownPhone(phone);
 
@@ -508,8 +501,7 @@ window.loginUser = async function() {
     localStorage.setItem('pm_phone', phone);
     localStorage.setItem('pm_upi',   finalUpi);
 
-    // Always remember user on this device
-    localStorage.setItem('pm_logged_in', '1');
+    // Fingerprint stored above -- that's the only session key needed
     sessionStorage.removeItem('pm_session_phone');
 
     CURRENT_USER.name  = finalName;
@@ -538,8 +530,7 @@ window.logoutUser = function() {
   if (!confirm('Log out of PayMesh?')) return;
   const lastPhone = CURRENT_USER.phone; // remember before clearing
   teardownListeners();
-  clearLocalToken();
-  ['pm_name','pm_phone','pm_upi','pm_logged_in','pm_balance'].forEach(k => localStorage.removeItem(k));
+  ['pm_name','pm_phone','pm_upi','pm_logged_in','pm_balance','pm_fingerprint','pm_device_token'].forEach(k => localStorage.removeItem(k));
   sessionStorage.removeItem('pm_session_phone');
   CURRENT_USER.name = ''; CURRENT_USER.phone = ''; CURRENT_USER.upi = '';
   _rememberMe = false;
@@ -571,8 +562,7 @@ function teardownListeners() {
 
 function forceRelogin(reason) {
   teardownListeners();
-  clearLocalToken();
-  ['pm_name','pm_phone','pm_upi','pm_logged_in','pm_balance'].forEach(k => localStorage.removeItem(k));
+  ['pm_name','pm_phone','pm_upi','pm_logged_in','pm_balance','pm_fingerprint','pm_device_token'].forEach(k => localStorage.removeItem(k));
   sessionStorage.removeItem('pm_session_phone');
   CURRENT_USER.name = ''; CURRENT_USER.phone = ''; CURRENT_USER.upi = '';
   if (reason) alert(reason);
@@ -1100,16 +1090,14 @@ window.stopScan = function() {
 
 (function init() {
   const run = async () => {
-    const loggedIn    = localStorage.getItem('pm_logged_in');
-    const sessionPhone = sessionStorage.getItem('pm_session_phone');
-    const phone       = localStorage.getItem('pm_phone') || sessionPhone;
-    const name        = localStorage.getItem('pm_name');
-    const upi         = localStorage.getItem('pm_upi');
-    const localToken  = getLocalToken();
+    // Simple fingerprint check: if this device has a stored phone + fingerprint, go home
+    const phone     = localStorage.getItem('pm_phone');
+    const finger    = localStorage.getItem('pm_fingerprint');
+    const name      = localStorage.getItem('pm_name');
+    const upi       = localStorage.getItem('pm_upi');
 
-    // Gate: must have pm_logged_in='1' and a stored phone number
-    const hasSession = (loggedIn === '1' && phone) || (sessionPhone && phone);
-    if (!hasSession) {
+    if (!phone || !finger) {
+      // No fingerprint stored -- show login
       if (phone) {
         const phoneEl = document.getElementById('login-phone');
         if (phoneEl) { phoneEl.value = phone; detectExistingUser(phone); }
@@ -1118,48 +1106,41 @@ window.stopScan = function() {
       return;
     }
 
+    // Fingerprint exists -- restore session immediately from cache
     CURRENT_USER.phone = phone;
-    CURRENT_USER.name  = name  || '';
-    CURRENT_USER.upi   = upi   || '';
+    CURRENT_USER.name  = name || '';
+    CURRENT_USER.upi   = upi  || '';
+    refreshPinSettingsUI();
+    showScreen('screen-home');
+    const nameEl = document.getElementById('display-name');
+    if (nameEl) nameEl.textContent = 'Hi, ' + (name || phone) + ' 👋';
 
+    // Then verify against Firestore in background (non-blocking)
     try {
-      const snap = await getDocFromServer(doc(db, "users", phone));
+      const snap = await getDocFromServer(doc(db, 'users', phone));
       if (!snap.exists()) { forceRelogin(); return; }
       const data = snap.data();
 
-      // Single-device check: only kick out if BOTH tokens exist AND they differ.
-      // If localToken is missing (e.g. fresh PWA install), skip the check and
-      // just write the Firestore token locally so next launch passes fine.
-      if (localToken && data.deviceToken && data.deviceToken !== localToken) {
+      // If Firestore has a different fingerprint it means user logged in elsewhere
+      if (data.fingerprint && data.fingerprint !== finger) {
         forceRelogin('Your account was signed in on another device.');
         return;
       }
-      // If we have no local token, adopt the Firestore one (covers PWA reinstall)
-      if (!localToken && data.deviceToken) {
-        setLocalToken(data.deviceToken);
-      }
 
-      // Sync all server data into memory
-      CURRENT_USER.name = data.name || name  || '';
-      CURRENT_USER.upi  = data.upi  || upi   || '';
+      // Sync latest data from Firestore into cache
+      CURRENT_USER.name = data.name || name || '';
+      CURRENT_USER.upi  = data.upi  || upi  || '';
       localStorage.setItem('pm_name',    CURRENT_USER.name);
       localStorage.setItem('pm_upi',     CURRENT_USER.upi);
       localStorage.setItem('pm_balance', (data.balance||0).toFixed(2));
       syncPinCache(data);
-
-      refreshPinSettingsUI();
-      showScreen('screen-home');
-
-      const nameEl = document.getElementById('display-name');
-      if (nameEl) nameEl.textContent = `Hi, ${CURRENT_USER.name} 👋`;
-
+      const nameEl2 = document.getElementById('display-name');
+      if (nameEl2) nameEl2.textContent = 'Hi, ' + CURRENT_USER.name + ' 👋';
       replayPendingVouchers().catch(e => console.warn('Offline replay error:', e));
 
     } catch(e) {
-      // Offline — proceed with cached data, onSnapshot will verify on reconnect
-      console.warn('Init server check failed (offline?):', e.message);
-      refreshPinSettingsUI();
-      showScreen('screen-home');
+      // Offline -- already showing home from cache above, nothing to do
+      console.warn('Init Firestore check failed (offline?):', e.message);
     }
   };
 
