@@ -644,10 +644,11 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
     <button type="button" class="action-btn recv-btn" onclick="showScreen('screen-receive')">
       <div class="action-icon recv-icon">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="8 17 12 21 16 17"/><line x1="12" y1="3" x2="12" y2="21"/>
+          <rect x="3" y="3" width="5" height="5"/><rect x="16" y="3" width="5" height="5"/><rect x="3" y="16" width="5" height="5"/>
+          <path d="M21 16h-3a2 2 0 0 0-2 2v3"/><path d="M21 21v-1"/><path d="M15 15h3"/>
         </svg>
       </div>
-      Receive
+      My QR
     </button>
     <button type="button" class="action-btn vouch-btn" onclick="showScreen('screen-voucher')">
       <div class="action-icon vouch-icon">
@@ -713,7 +714,9 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
 </div>
 
 <!-- ══════════════════════════════════════
-     RECEIVE SCREEN
+     RECEIVE / MY QR SCREEN
+     FIX: renamed "My QR". No scanner here — scanner is on Scan screen.
+     This screen just shows your personal QR for others to scan.
 ═══════════════════════════════════════ -->
 <div id="screen-receive" class="screen">
   <div class="topbar">
@@ -721,16 +724,16 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
       Back
     </button>
-    <span class="screen-title">Receive Money</span>
+    <span class="screen-title">My QR Code</span>
     <div style="width:60px"></div>
   </div>
   <div style="height:12px"></div>
   <div class="card center-card">
-    <!-- FIX: clarified label — this QR is scannable with the app's scanner -->
-    <p class="info-text">Your PayMesh QR — ask sender to scan this with PayMesh</p>
+    <p class="info-text">Show this QR to the person paying you</p>
+    <p class="hint" style="margin-bottom:4px">They tap <strong>Scan QR</strong> in PayMesh → scan this → enter amount → send</p>
     <div id="receive-qr" class="qr-wrap"></div>
-    <p class="hint">Sender scans this → amount pre-filled → they confirm send</p>
     <div class="upi-box" id="receive-upi-display"></div>
+    <p class="hint" style="margin-top:12px;color:var(--em)">✓ Balance updates instantly when they send</p>
   </div>
 </div>
 

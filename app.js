@@ -2,9 +2,10 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/fireba
 import {
   getFirestore,
   doc, getDoc, setDoc, updateDoc,
-  collection, addDoc, query, where, getDocs,
+  collection, addDoc, query, where,
   runTransaction,
-  getDocFromServer, getDocsFromServer   // FIX: force server reads, bypass cache
+  onSnapshot,           // FIX: real-time listeners replace one-shot reads
+  getDocFromServer, getDocsFromServer
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -27,7 +28,11 @@ const CURRENT_USER = { phone: "", name: "", upi: "" };
 
 let scannerStream   = null;
 let scannerInterval = null;
-let detectedQR      = null;   // FIX: was detectedVoucher, now handles both voucher + person QR
+let detectedQR      = null;
+
+// FIX: track active real-time listeners so we can unsubscribe when user logs out
+let unsubBalance = null;
+let unsubTxns    = null;
 
 // ═══════════════════════════════════════════
 // HELPERS
@@ -112,12 +117,12 @@ window.showScreen = function(id) {
   target.scrollTop = 0;
 
   if (id === 'screen-home')    loadHomeData();
+  // FIX: Receive screen renamed to "My QR" — just shows static QR, no scanner needed
   if (id === 'screen-receive') generateReceiveQR();
   if (id === 'screen-load') {
     document.getElementById('display-upi').textContent = PAYMESH_UPI;
     buildUPILink();
   }
-  // FIX: voucher screen no longer auto-restores on entry to avoid async crash blocking back btn
 }
 
 function showScreen(id) { window.showScreen(id); }
@@ -177,7 +182,6 @@ window.loginUser = async function() {
   showMsg(msg,'success','Verifying account...');
 
   try {
-    // FIX: use getDocFromServer to always get fresh data on login
     const userRef  = doc(db, "users", phone);
     const userSnap = await getDocFromServer(userRef);
     let finalName, finalUpi;
@@ -216,44 +220,90 @@ window.loginUser = async function() {
 
 window.logoutUser = function() {
   if (!confirm('Log out of PayMesh?')) return;
+  // FIX: unsubscribe real-time listeners before logout to prevent memory leaks and ghost updates
+  teardownListeners();
   ['pm_name','pm_phone','pm_upi','pm_logged_in','pm_balance'].forEach(k => localStorage.removeItem(k));
   CURRENT_USER.name = ''; CURRENT_USER.phone = ''; CURRENT_USER.upi = '';
   showScreen('screen-login');
 }
 
 // ═══════════════════════════════════════════
-// HOME — FIX: always force server read
+// FIX: tear down listeners on logout
+// ═══════════════════════════════════════════
+
+function teardownListeners() {
+  if (unsubBalance) { unsubBalance(); unsubBalance = null; }
+  if (unsubTxns)    { unsubTxns();    unsubTxns    = null; }
+}
+
+// ═══════════════════════════════════════════
+// HOME — FIX: onSnapshot replaces one-shot reads
+// Balance and transactions now update in real-time
 // ═══════════════════════════════════════════
 
 async function loadHomeData() {
   document.getElementById('display-name').textContent = `Hi, ${CURRENT_USER.name} 👋`;
+
+  // Show cached balance immediately while listener connects
   const cached = parseFloat(localStorage.getItem('pm_balance') || '0');
   document.getElementById('wallet-balance').textContent = cached.toFixed(2);
 
-  try {
-    // FIX: getDocFromServer bypasses Firestore local cache entirely
-    const snap = await getDocFromServer(doc(db, "users", CURRENT_USER.phone));
-    if (snap.exists()) {
-      const bal = snap.data().balance || 0;
-      animateBalance(bal);
-      localStorage.setItem('pm_balance', bal.toFixed(2));
-    }
-    loadTransactions();
-  } catch(e) {
-    loadTransactions();
-  }
+  // FIX: tear down any existing listeners first (prevents duplicate listeners on repeated home visits)
+  teardownListeners();
+
+  // FIX: onSnapshot on user doc — balance updates the moment admin credits or any send/receive happens
+  unsubBalance = onSnapshot(
+    doc(db, "users", CURRENT_USER.phone),
+    (snap) => {
+      if (snap.exists()) {
+        const bal = snap.data().balance || 0;
+        animateBalance(bal);
+        localStorage.setItem('pm_balance', bal.toFixed(2));
+      }
+    },
+    (err) => console.warn('Balance listener error:', err.message)
+  );
+
+  // FIX: onSnapshot on transactions — list refreshes automatically when any tx is added/updated
+  const txQuery = query(
+    collection(db, "transactions"),
+    where("phone", "==", CURRENT_USER.phone)
+  );
+  unsubTxns = onSnapshot(
+    txQuery,
+    (snap) => {
+      renderTransactions(snap);
+    },
+    (err) => console.warn('Tx listener error:', err.message)
+  );
 }
 
-async function refreshBalance() {
-  try {
-    // FIX: getDocFromServer — no cache
-    const snap = await getDocFromServer(doc(db, "users", CURRENT_USER.phone));
-    if (snap.exists()) {
-      const bal = snap.data().balance || 0;
-      animateBalance(bal);
-      localStorage.setItem('pm_balance', bal.toFixed(2));
-    }
-  } catch(e) { /* offline, ignore */ }
+function renderTransactions(snap) {
+  const list = document.getElementById('tx-list');
+
+  if (snap.empty) {
+    list.innerHTML = '<div class="tx-empty">No transactions yet</div>';
+    return;
+  }
+
+  const txs = [];
+  snap.forEach(d => txs.push(d.data()));
+  txs.sort((a,b) => new Date(b.time) - new Date(a.time));
+
+  list.innerHTML = txs.slice(0,20).map((tx, i) => {
+    const isDebit   = tx.type === 'debit';
+    const isPending = tx.type === 'pending';
+    const amtClass  = isPending ? 'tx-pending' : isDebit ? 'tx-debit' : 'tx-credit';
+    const prefix    = isPending ? '⏳ ' : isDebit ? '−' : '+';
+    return `<div class="tx-row" style="animation-delay:${i*0.05}s">
+      <div class="tx-avatar">${(tx.label||'?')[0].toUpperCase()}</div>
+      <div class="tx-middle">
+        <div class="tx-name">${tx.label}</div>
+        <div class="tx-time">${tx.time}</div>
+      </div>
+      <div class="tx-amount ${amtClass}">${prefix}₹${tx.amount}</div>
+    </div>`;
+  }).join('');
 }
 
 function animateBalance(target) {
@@ -270,41 +320,6 @@ function animateBalance(target) {
     else el.textContent = target.toFixed(2);
   };
   requestAnimationFrame(tick);
-}
-
-async function loadTransactions() {
-  try {
-    const q    = query(collection(db,"transactions"), where("phone","==",CURRENT_USER.phone));
-    // FIX: getDocsFromServer bypasses cache — transactions always fresh
-    const snap = await getDocsFromServer(q);
-    const list = document.getElementById('tx-list');
-
-    if (snap.empty) {
-      list.innerHTML = '<div class="tx-empty">No transactions yet</div>';
-      return;
-    }
-
-    const txs = [];
-    snap.forEach(d => txs.push(d.data()));
-    txs.sort((a,b) => new Date(b.time) - new Date(a.time));
-
-    list.innerHTML = txs.slice(0,20).map((tx, i) => {
-      const isDebit   = tx.type === 'debit';
-      const isPending = tx.type === 'pending';
-      const amtClass  = isPending ? 'tx-pending' : isDebit ? 'tx-debit' : 'tx-credit';
-      const prefix    = isPending ? '⏳ ' : isDebit ? '−' : '+';
-      return `<div class="tx-row" style="animation-delay:${i*0.05}s">
-        <div class="tx-avatar">${(tx.label||'?')[0].toUpperCase()}</div>
-        <div class="tx-middle">
-          <div class="tx-name">${tx.label}</div>
-          <div class="tx-time">${tx.time}</div>
-        </div>
-        <div class="tx-amount ${amtClass}">${prefix}₹${tx.amount}</div>
-      </div>`;
-    }).join('');
-  } catch(e) {
-    console.log('Tx load failed:', e.message);
-  }
 }
 
 // ═══════════════════════════════════════════
@@ -350,7 +365,7 @@ window.submitLoad = async function() {
 
     document.getElementById('load-amount').value = '';
     document.getElementById('load-utr').value    = '';
-    showMsg(msg,'success','Submitted! Balance updates after admin verifies your UTR.');
+    showMsg(msg,'success','Submitted! Balance updates the moment admin verifies your UTR.');
 
   } catch(e) {
     showMsg(msg,'error','Error submitting. Try again.');
@@ -409,6 +424,8 @@ window.sendMoney = async function() {
       })
     ]);
 
+    // FIX: localStorage balance is now secondary — onSnapshot will update it authoritatively
+    // But update it immediately for instant local feedback
     const newBal = parseFloat(localStorage.getItem('pm_balance')||'0') - amount;
     localStorage.setItem('pm_balance', Math.max(0, newBal).toFixed(2));
 
@@ -417,7 +434,7 @@ window.sendMoney = async function() {
 
     if (navigator.vibrate) navigator.vibrate(200);
     showOverlay('', 'Sent!', `₹${amount} sent to ${receiverName}`);
-    setTimeout(refreshBalance, 1000);
+    // FIX: no need for manual refreshBalance — onSnapshot handles it automatically
 
   } catch(e) {
     showMsg(msg,'error', e.message || 'Error. Try again.');
@@ -427,7 +444,6 @@ window.sendMoney = async function() {
 
 // ═══════════════════════════════════════════
 // GENERATE VOUCHER
-// FIX: prepend to voucher-display instead of replacing
 // ═══════════════════════════════════════════
 
 window.generateVoucher = async function() {
@@ -464,6 +480,7 @@ window.generateVoucher = async function() {
       })
     ]);
 
+    // FIX: localStorage balance updated locally; onSnapshot will confirm authoritatively
     const newBal = parseFloat(localStorage.getItem('pm_balance')||'0') - amount;
     localStorage.setItem('pm_balance', Math.max(0, newBal).toFixed(2));
 
@@ -471,11 +488,9 @@ window.generateVoucher = async function() {
     saved.unshift({ code, amount, createdAt: new Date().toLocaleString(), status: 'UNUSED' });
     localStorage.setItem('my_vouchers', JSON.stringify(saved.slice(0, 20)));
 
-    // FIX: prepend new voucher instead of replacing all display content
     prependVoucher(code, amount);
     showMsg(msg,'success',`Voucher for ₹${amount} is ready!`);
     if (navigator.vibrate) navigator.vibrate([100,50,200]);
-    setTimeout(refreshBalance, 800);
 
   } catch(e) {
     showMsg(msg,'error', e.message || 'Error. Check internet.');
@@ -483,7 +498,6 @@ window.generateVoucher = async function() {
   }
 }
 
-// FIX: builds a single voucher block and prepends it — previous vouchers stay visible
 function prependVoucher(code, amount) {
   const display = document.getElementById('voucher-display');
 
@@ -501,27 +515,37 @@ function prependVoucher(code, amount) {
     <div class="card center-card">
       <p class="info-text">Show this QR to pay offline</p>
       <div id="${qrId}" class="qr-wrap"></div>
-      <p class="hint">Recipient scans with PayMesh → Scan Voucher</p>
+      <p class="hint">Recipient scans with PayMesh → Scan QR</p>
     </div>`;
 
-  // Prepend so newest is always on top
   display.insertBefore(wrapper, display.firstChild);
 
-  new QRCode(document.getElementById(qrId), {
-    text: JSON.stringify({ code, amount, from: CURRENT_USER.name }),
-    width: 200, height: 200,
-    colorDark: "#000000", colorLight: "#ffffff"
-  });
+  // FIX: guard QRCode call — if library not loaded yet, wait for it
+  function makeQR() {
+    if (typeof QRCode === 'undefined') {
+      setTimeout(makeQR, 200);
+      return;
+    }
+    try {
+      new QRCode(document.getElementById(qrId), {
+        text: JSON.stringify({ code, amount, from: CURRENT_USER.name }),
+        width: 200, height: 200,
+        colorDark: "#000000", colorLight: "#ffffff"
+      });
+    } catch(e) {
+      console.warn('QR generation failed:', e);
+    }
+  }
+  makeQR();
 }
 
-// FIX: restoreVoucher is now only called explicitly (not on screen entry)
-// and is wrapped so any async failure can't block the back button
+// FIX: restoreVoucher wrapped so any crash is fully contained and never blocks navigation
 async function restoreVoucher() {
   try {
     const saved = JSON.parse(localStorage.getItem('my_vouchers') || '[]');
     if (!saved.length) return;
     const display = document.getElementById('voucher-display');
-    display.innerHTML = ''; // clear before restoring
+    display.innerHTML = '';
 
     for (const v of saved.slice(0, 5)) {
       if (v.status === 'USED') continue;
@@ -533,36 +557,45 @@ async function restoreVoucher() {
           v.status = 'USED';
         }
       } catch(e) {
-        // offline — show anyway
+        // offline — show from local cache anyway
         prependVoucher(v.code, v.amount);
       }
     }
     localStorage.setItem('my_vouchers', JSON.stringify(saved));
   } catch(e) {
-    // silent — never block navigation
+    // silent — NEVER block navigation
   }
 }
 
+// FIX: expose restoreVoucher to HTML onclick
+window.restoreVoucher = restoreVoucher;
+
 // ═══════════════════════════════════════════
-// RECEIVE QR
-// FIX: QR now encodes person format so scanner can handle it
+// RECEIVE / MY QR SCREEN
+// FIX: renamed conceptually to "My QR" — shows personal QR for others to scan
+// No scanner is needed here. The scanner is on the Scan screen.
 // ═══════════════════════════════════════════
 
 function generateReceiveQR() {
   const c = document.getElementById('receive-qr');
   c.innerHTML = '';
   document.getElementById('receive-upi-display').textContent = CURRENT_USER.upi;
-  // FIX: encode with type:'person' so scanner distinguishes it from voucher QR
-  new QRCode(c, {
-    text: JSON.stringify({ type:'person', phone: CURRENT_USER.phone, name: CURRENT_USER.name, upi: CURRENT_USER.upi }),
-    width: 200, height: 200,
-    colorDark: "#000000", colorLight: "#ffffff"
-  });
+
+  function makeQR() {
+    if (typeof QRCode === 'undefined') { setTimeout(makeQR, 200); return; }
+    try {
+      new QRCode(c, {
+        text: JSON.stringify({ type:'person', phone: CURRENT_USER.phone, name: CURRENT_USER.name, upi: CURRENT_USER.upi }),
+        width: 200, height: 200,
+        colorDark: "#000000", colorLight: "#ffffff"
+      });
+    } catch(e) { console.warn('Receive QR failed:', e); }
+  }
+  makeQR();
 }
 
 // ═══════════════════════════════════════════
-// QR SCANNER
-// FIX: handles both voucher QR and person QR
+// QR SCANNER — handles voucher QR and person QR
 // ═══════════════════════════════════════════
 
 window.startScan = async function() {
@@ -595,7 +628,6 @@ window.startScan = async function() {
           try {
             const data = JSON.parse(code.data);
 
-            // FIX: handle person QR (Receive screen QR)
             if (data.type === 'person' && data.phone && data.name) {
               clearInterval(scannerInterval); scannerInterval = null;
               detectedQR = { kind: 'person', ...data };
@@ -603,7 +635,6 @@ window.startScan = async function() {
               return;
             }
 
-            // existing voucher QR
             if (data.code && data.amount && data.from) {
               clearInterval(scannerInterval); scannerInterval = null;
               detectedQR = { kind: 'voucher', ...data };
@@ -620,14 +651,12 @@ window.startScan = async function() {
   }
 }
 
-// FIX: show panel for person QR — pre-fills Send Money inline
 function showPersonResult(data) {
   const panel = document.getElementById('scan-send-result');
   panel.classList.remove('hidden');
   document.getElementById('scan-person-name').textContent   = data.name;
   document.getElementById('scan-person-phone').textContent  = data.phone;
   document.getElementById('scan-person-upi').textContent    = data.upi || '';
-  // pre-fill send screen fields for when user taps Send
   document.getElementById('send-phone').value  = data.phone;
   document.getElementById('send-amount').value = '';
   if (navigator.vibrate) navigator.vibrate([100,50,100]);
@@ -642,7 +671,6 @@ function showVoucherResult(data) {
   if (navigator.vibrate) navigator.vibrate([100,50,100]);
 }
 
-// FIX: go to send screen with phone pre-filled
 window.proceedToSend = function() {
   stopScan();
   showScreen('screen-send');
@@ -670,10 +698,10 @@ window.redeemVoucher = async function() {
       const vSnap = await tx.get(vRef);
       const rSnap = await tx.get(receiverRef);
 
-      if (!vSnap.exists())                              throw new Error('Voucher not found');
-      if (vSnap.data().status === 'USED')               throw new Error('Already redeemed');
+      if (!vSnap.exists())                               throw new Error('Voucher not found');
+      if (vSnap.data().status === 'USED')                throw new Error('Already redeemed');
       if (vSnap.data().createdBy === CURRENT_USER.phone) throw new Error('Cannot redeem your own voucher');
-      if (!rSnap.exists())                              throw new Error('Your account not found');
+      if (!rSnap.exists())                               throw new Error('Your account not found');
 
       createdBy = vSnap.data().createdBy;
       const rBal = rSnap.data().balance || 0;
@@ -701,6 +729,7 @@ window.redeemVoucher = async function() {
       })
     ]);
 
+    // FIX: onSnapshot handles authoritative balance update — just update local cache optimistically
     const newBal = parseFloat(localStorage.getItem('pm_balance')||'0') + amount;
     localStorage.setItem('pm_balance', newBal.toFixed(2));
 
@@ -708,7 +737,6 @@ window.redeemVoucher = async function() {
     launchConfetti(80);
     if (navigator.vibrate) navigator.vibrate([200,100,200,100,400]);
     showOverlay('', 'Received!', `₹${amount} from ${fromName} added to wallet`);
-    setTimeout(refreshBalance, 1000);
 
   } catch(e) {
     if (e.message === 'Failed to get document because the client is offline.') {
