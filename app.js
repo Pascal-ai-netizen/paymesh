@@ -501,17 +501,9 @@ window.loginUser = async function() {
     localStorage.setItem('pm_phone', phone);
     localStorage.setItem('pm_upi',   finalUpi);
 
-    // Remember-me logic:
-    // - New users: always remember (they just registered, no toggle shown)
-    // - Returning users: remember only if they toggled on
-    if (!isKnownDevice || _rememberMe) {
-      localStorage.setItem('pm_logged_in', '1');
-      sessionStorage.removeItem('pm_session_phone');
-    } else {
-      // Session-only login — won't auto-login on next app open
-      localStorage.setItem('pm_logged_in', '0');
-      sessionStorage.setItem('pm_session_phone', phone);
-    }
+    // Always remember user on this device
+    localStorage.setItem('pm_logged_in', '1');
+    sessionStorage.removeItem('pm_session_phone');
 
     CURRENT_USER.name  = finalName;
     CURRENT_USER.phone = phone;
