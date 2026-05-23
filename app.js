@@ -500,11 +500,17 @@ window.loginUser = async function() {
     localStorage.setItem('pm_name', finalName);
     localStorage.setItem('pm_phone', phone);
     localStorage.setItem('pm_upi',   finalUpi);
+
+    // Remember-me logic:
+    // - New users: always remember (they just registered, no toggle shown)
+    // - Returning users: remember only if they toggled on
     if (!isKnownDevice || _rememberMe) {
       localStorage.setItem('pm_logged_in', '1');
+      sessionStorage.removeItem('pm_session_phone');
     } else {
-      sessionStorage.setItem('pm_session_phone', phone);
+      // Session-only login — won't auto-login on next app open
       localStorage.setItem('pm_logged_in', '0');
+      sessionStorage.setItem('pm_session_phone', phone);
     }
 
     CURRENT_USER.name  = finalName;
@@ -531,6 +537,7 @@ window.loginUser = async function() {
 
 window.logoutUser = function() {
   if (!confirm('Log out of PayMesh?')) return;
+  const lastPhone = CURRENT_USER.phone; // remember before clearing
   teardownListeners();
   clearLocalToken();
   ['pm_name','pm_phone','pm_upi','pm_logged_in','pm_balance'].forEach(k => localStorage.removeItem(k));
@@ -540,7 +547,11 @@ window.logoutUser = function() {
   const track = document.getElementById('remember-track');
   if (track) track.classList.remove('on');
   const phoneEl = document.getElementById('login-phone');
-  if (phoneEl) { phoneEl.value = ''; detectExistingUser(''); }
+  if (phoneEl) {
+    // Pre-fill with last phone number for convenience — user just needs to tap Sign In
+    phoneEl.value = lastPhone || '';
+    detectExistingUser(lastPhone || '');
+  }
   const msg = document.getElementById('login-msg');
   if (msg) { msg.className = 'msg'; msg.textContent = ''; }
   showScreen('screen-login');
@@ -1099,6 +1110,14 @@ window.stopScan = function() {
 
     const hasSession = (loggedIn === '1' && phone) || (sessionPhone && phone);
     if (!hasSession || !localToken) {
+      // No valid session — but check if phone is known so we can pre-fill the login form
+      if (phone) {
+        const phoneEl = document.getElementById('login-phone');
+        if (phoneEl) {
+          phoneEl.value = phone;
+          detectExistingUser(phone);
+        }
+      }
       showScreen('screen-login');
       return;
     }
