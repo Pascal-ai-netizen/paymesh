@@ -1,25 +1,27 @@
-const CACHE_NAME = 'paymesh-v2';
+const CACHE_NAME = 'paymesh-v3';
+const REPO = '/paymesh';
 const SHELL = [
-  '/',
-  '/index.html',
-  '/app.js',
-  '/manifest.json',
-  '/icons/icon-192.png',
-  '/icons/icon-512.png',
+  REPO + '/',
+  REPO + '/index.html',
+  REPO + '/app.js',
+  REPO + '/manifest.json',
+  REPO + '/icon-192-1.png',
+  REPO + '/icon-512-1.png',
   'https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap',
   'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js',
   'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js'
 ];
 
-// Install: cache the app shell
 self.addEventListener('install', (e) => {
   e.waitUntil(
-    caches.open(CACHE_NAME).then(cache => cache.addAll(SHELL))
+    caches.open(CACHE_NAME).then(cache => {
+      // Add shell files one by one so one failure doesn't break all
+      return Promise.allSettled(SHELL.map(url => cache.add(url)));
+    })
   );
   self.skipWaiting();
 });
 
-// Activate: delete old caches
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys().then(keys =>
@@ -29,11 +31,10 @@ self.addEventListener('activate', (e) => {
   self.clients.claim();
 });
 
-// Fetch: network-first for Firebase, cache-first for shell assets
 self.addEventListener('fetch', (e) => {
   const url = e.request.url;
 
-  // Always network-first for Firebase (real-time data must be live)
+  // Always network-first for Firebase
   if (url.includes('firestore.googleapis.com') ||
       url.includes('firebase') ||
       url.includes('gstatic.com/firebasejs')) {
@@ -43,20 +44,18 @@ self.addEventListener('fetch', (e) => {
     return;
   }
 
-  // Cache-first for everything else (fonts, QR lib, app shell)
+  // Cache-first for shell assets
   e.respondWith(
     caches.match(e.request).then(cached => {
       if (cached) return cached;
       return fetch(e.request).then(response => {
-        // Cache successful GET responses
         if (e.request.method === 'GET' && response.status === 200) {
           const clone = response.clone();
           caches.open(CACHE_NAME).then(cache => cache.put(e.request, clone));
         }
         return response;
       }).catch(() => {
-        // Fallback to index.html for navigation requests
-        if (e.request.mode === 'navigate') return caches.match('/index.html');
+        if (e.request.mode === 'navigate') return caches.match(REPO + '/index.html');
       });
     })
   );

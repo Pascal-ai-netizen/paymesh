@@ -2,20 +2,21 @@
   "name": "PayMesh",
   "short_name": "PayMesh",
   "description": "Offline-first QR payments. Send, receive, and create vouchers instantly.",
-  "start_url": "/",
+  "start_url": "/paymesh/",
+  "scope": "/paymesh/",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#03050A",
   "theme_color": "#03050A",
   "icons": [
     {
-      "src": "icons/icon-192.png",
+      "src": "icon-192-1.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "icons/icon-512.png",
+      "src": "icon-512-1.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
@@ -23,7 +24,7 @@
   ],
   "screenshots": [
     {
-      "src": "icons/icon-512.png",
+      "src": "icon-512-1.png",
       "sizes": "512x512",
       "type": "image/png",
       "form_factor": "narrow"
