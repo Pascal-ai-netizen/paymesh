@@ -1107,15 +1107,12 @@ window.stopScan = function() {
     const upi         = localStorage.getItem('pm_upi');
     const localToken  = getLocalToken();
 
+    // Gate: must have pm_logged_in='1' and a stored phone number
     const hasSession = (loggedIn === '1' && phone) || (sessionPhone && phone);
-    if (!hasSession || !localToken) {
-      // No valid session — but check if phone is known so we can pre-fill the login form
+    if (!hasSession) {
       if (phone) {
         const phoneEl = document.getElementById('login-phone');
-        if (phoneEl) {
-          phoneEl.value = phone;
-          detectExistingUser(phone);
-        }
+        if (phoneEl) { phoneEl.value = phone; detectExistingUser(phone); }
       }
       showScreen('screen-login');
       return;
@@ -1125,20 +1122,21 @@ window.stopScan = function() {
     CURRENT_USER.name  = name  || '';
     CURRENT_USER.upi   = upi   || '';
 
-    // Verify device token against Firestore BEFORE showing home
     try {
       const snap = await getDocFromServer(doc(db, "users", phone));
-      if (!snap.exists()) {
-        // Account deleted
-        forceRelogin();
-        return;
-      }
+      if (!snap.exists()) { forceRelogin(); return; }
       const data = snap.data();
 
-      // ── SINGLE-DEVICE CHECK on init ──
-      if (data.deviceToken && data.deviceToken !== localToken) {
-        forceRelogin('Your account has been signed in on another device. Please log in again.');
+      // Single-device check: only kick out if BOTH tokens exist AND they differ.
+      // If localToken is missing (e.g. fresh PWA install), skip the check and
+      // just write the Firestore token locally so next launch passes fine.
+      if (localToken && data.deviceToken && data.deviceToken !== localToken) {
+        forceRelogin('Your account was signed in on another device.');
         return;
+      }
+      // If we have no local token, adopt the Firestore one (covers PWA reinstall)
+      if (!localToken && data.deviceToken) {
+        setLocalToken(data.deviceToken);
       }
 
       // Sync all server data into memory
