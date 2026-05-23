@@ -541,6 +541,118 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
 }
 .restore-btn:hover{color:var(--text2);border-color:var(--border2);background:var(--surface2)}
 
+/* ── REMEMBER ME TOGGLE ── */
+.remember-row{
+  display:flex;align-items:center;gap:12px;
+  padding:12px 0 4px;cursor:pointer;
+}
+.toggle-track{
+  width:42px;height:24px;border-radius:12px;
+  background:var(--surface3);border:1px solid var(--border2);
+  position:relative;transition:background .2s,border-color .2s;flex-shrink:0;
+}
+.toggle-track.on{background:rgba(0,232,122,.25);border-color:rgba(0,232,122,.4)}
+.toggle-knob{
+  position:absolute;top:3px;left:3px;
+  width:16px;height:16px;border-radius:50%;
+  background:var(--text3);
+  transition:transform .25s var(--spring),background .2s;
+  box-shadow:0 1px 4px rgba(0,0,0,.5);
+}
+.toggle-track.on .toggle-knob{transform:translateX(18px);background:var(--em)}
+.remember-label{font-size:13px;color:var(--text2);font-weight:600;user-select:none}
+
+/* ── PIN BUTTON (topbar) ── */
+.pin-btn{
+  width:36px;height:36px;
+  background:var(--surface);border:1px solid var(--border);
+  color:var(--text3);border-radius:var(--r);
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+  transition:all .2s;position:relative;overflow:hidden;
+  font-size:10px;font-weight:800;letter-spacing:1px;font-family:var(--mono);
+}
+.pin-btn:hover{background:var(--surface2);border-color:rgba(0,232,122,.3);color:var(--em)}
+.pin-btn:active{transform:scale(.88)}
+.pin-btn.pin-set{border-color:rgba(0,232,122,.25);color:rgba(0,232,122,.7)}
+
+/* ── PIN SCREEN ── */
+.pin-wrap{
+  min-height:100svh;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;padding:48px 18px;
+  position:relative;
+}
+.pin-icon{
+  width:64px;height:64px;
+  background:linear-gradient(145deg,rgba(0,232,122,.15),rgba(0,232,122,.05));
+  border:1px solid rgba(0,232,122,.22);border-radius:20px;
+  display:flex;align-items:center;justify-content:center;
+  margin:0 auto 20px;
+  box-shadow:0 0 40px rgba(0,232,122,.15),0 1px 0 rgba(255,255,255,.08) inset;
+  animation:logoIn .5s var(--spring) both;
+}
+.pin-title{
+  font-size:24px;font-weight:700;color:var(--text);
+  margin-bottom:6px;letter-spacing:-.6px;text-align:center;
+  animation:fadeUp .4s var(--ease) .06s both;
+}
+.pin-sub{
+  font-size:13px;color:var(--text3);margin-bottom:32px;
+  text-align:center;font-weight:500;line-height:1.6;
+  animation:fadeUp .4s var(--ease) .1s both;
+}
+.pin-dots{
+  display:flex;gap:14px;justify-content:center;margin-bottom:28px;
+  animation:fadeUp .4s var(--ease) .12s both;
+}
+.pin-dot{
+  width:16px;height:16px;border-radius:50%;
+  border:2px solid var(--border2);background:transparent;
+  transition:all .2s var(--spring);
+}
+.pin-dot.filled{background:var(--em);border-color:var(--em);box-shadow:0 0 12px rgba(0,232,122,.5)}
+.pin-dot.error{background:var(--red);border-color:var(--red);animation:shake .4s ease both}
+@keyframes shake{0%,100%{transform:none}20%{transform:translateX(-5px)}40%{transform:translateX(5px)}60%{transform:translateX(-3px)}80%{transform:translateX(3px)}}
+.pin-keypad{
+  display:grid;grid-template-columns:repeat(3,1fr);
+  gap:10px;width:100%;max-width:260px;
+  animation:fadeUp .4s var(--ease) .14s both;
+}
+.pin-key{
+  aspect-ratio:1;border-radius:var(--r2);
+  background:var(--surface);border:1px solid var(--border);
+  color:var(--text);font-family:var(--mono);font-size:20px;font-weight:700;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+  transition:all .15s var(--spring);position:relative;overflow:hidden;
+  -webkit-tap-highlight-color:transparent;
+}
+.pin-key:hover{background:var(--surface2);border-color:var(--border2)}
+.pin-key:active{transform:scale(.88);background:rgba(0,232,122,.08);border-color:rgba(0,232,122,.25)}
+.pin-key.del{color:var(--red);font-size:14px}
+.pin-key.empty{pointer-events:none;background:transparent;border:none}
+.pin-confirm-btn{
+  width:100%;max-width:260px;
+  padding:14px;border:none;border-radius:var(--r);
+  font:800 15px/1 var(--sans);letter-spacing:.3px;cursor:pointer;
+  color:#011A0A;margin-top:14px;
+  background:linear-gradient(135deg,var(--em) 0%,#00F5A8 55%,var(--em2) 100%);
+  box-shadow:0 6px 24px rgba(0,232,122,.3);
+  transition:all .15s var(--spring);display:none;
+  animation:fadeUp .3s var(--ease) both;
+}
+.pin-confirm-btn:hover{box-shadow:0 10px 36px rgba(0,232,122,.42);transform:translateY(-1px)}
+.pin-confirm-btn:active{transform:scale(.96)}
+.pin-confirm-btn.show{display:block}
+.pin-forgot{
+  margin-top:18px;font-size:12px;color:var(--text3);cursor:pointer;
+  text-decoration:underline;text-underline-offset:3px;transition:color .15s;
+  animation:fadeUp .4s var(--ease) .18s both;
+}
+.pin-forgot:hover{color:var(--text2)}
+#pin-msg{margin-top:12px;width:100%;max-width:260px;text-align:center}
+
+/* ── PIN SETUP SCREEN (settings) ── */
+#screen-pin .card{animation:slideUp .35s var(--ease) both}
+
 ::selection{background:rgba(0,232,122,.22);color:var(--em2)}
 </style>
 </head>
@@ -567,20 +679,28 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
     <p class="login-sub">Payments, simplified.</p>
     <p class="login-dev">Offline-first · QR Voucher System · <span>v2.0</span></p>
     <div class="form-card card" style="max-width:400px">
-      <div class="form-group">
-        <label>Full Name</label>
-        <input type="text" id="login-name" placeholder="Your full name" autocomplete="off">
+      <!-- New user fields (shown on new devices) -->
+      <div id="login-new-fields">
+        <div class="form-group">
+          <label>Full Name</label>
+          <input type="text" id="login-name" placeholder="Your full name" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label>Your UPI ID</label>
+          <input type="text" id="login-upi" placeholder="name@ybl" autocomplete="off">
+        </div>
       </div>
       <div class="form-group">
         <label>Phone Number</label>
         <input type="tel" id="login-phone" placeholder="10 digit number" maxlength="10">
       </div>
-      <div class="form-group">
-        <label>Your UPI ID</label>
-        <input type="text" id="login-upi" placeholder="name@ybl" autocomplete="off">
+      <!-- Remember me toggle (shown for existing users) -->
+      <div id="login-remember-row" class="remember-row hidden" onclick="toggleRemember()">
+        <div class="toggle-track" id="remember-track"><div class="toggle-knob"></div></div>
+        <span class="remember-label">Remember me on this device</span>
       </div>
       <!-- FIX: type=button prevents accidental form submit -->
-      <button type="button" class="btn-primary" onclick="loginUser()">
+      <button type="button" class="btn-primary" id="login-btn" onclick="loginUser()">
         <span>Get Started</span>
       </button>
       <div id="login-msg" class="msg"></div>
@@ -611,13 +731,20 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
         <div class="greeting" id="display-name">Hi there 👋</div>
       </div>
     </div>
-    <button type="button" class="icon-btn" onclick="logoutUser()" title="Logout">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-        <polyline points="16 17 21 12 16 7"/>
-        <line x1="21" y1="12" x2="9" y2="12"/>
-      </svg>
-    </button>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <button type="button" class="pin-btn" id="home-pin-btn" onclick="showScreen('screen-pin')" title="Manage PIN">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+        </svg>
+      </button>
+      <button type="button" class="icon-btn" onclick="logoutUser()" title="Logout">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+          <polyline points="16 17 21 12 16 7"/>
+          <line x1="21" y1="12" x2="9" y2="12"/>
+        </svg>
+      </button>
+    </div>
   </div>
 
   <div class="wallet-card">
@@ -848,6 +975,70 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
     <button type="button" class="btn-primary" onclick="proceedToSend()" style="background:linear-gradient(135deg,#4D9FFF,#6ab4ff);box-shadow:0 6px 24px rgba(77,159,255,.3);">
       Send Money to this person →
     </button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     PIN SETUP / MANAGE SCREEN
+═══════════════════════════════════════ -->
+<div id="screen-pin" class="screen">
+  <div class="topbar">
+    <button type="button" class="back-btn" onclick="showScreen('screen-home')">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+      Back
+    </button>
+    <span class="screen-title">Security PIN</span>
+    <div style="width:60px"></div>
+  </div>
+  <div style="height:12px"></div>
+  <div class="card">
+    <div style="font-size:9px;font-weight:700;color:var(--text3);letter-spacing:2.5px;text-transform:uppercase;margin-bottom:16px">PIN STATUS</div>
+    <div id="pin-status-row" style="display:flex;align-items:center;gap:12px;margin-bottom:18px">
+      <div id="pin-status-dot" style="width:8px;height:8px;border-radius:50%;background:var(--text3)"></div>
+      <span id="pin-status-text" style="font-size:13px;font-weight:600;color:var(--text2)">No PIN set</span>
+    </div>
+    <p class="info-text" style="margin-bottom:18px">Your 6-digit PIN is required to send money, create vouchers, and redeem them. It is stored securely as a one-way hash — not even the app can read it.</p>
+    <button type="button" class="btn-primary" id="pin-action-btn" onclick="startPinSetup()">Set PIN</button>
+    <button type="button" id="pin-remove-btn" style="display:none;width:100%;padding:13px;border-radius:var(--r);margin-top:10px;background:rgba(255,77,106,.08);border:1px solid rgba(255,77,106,.2);color:var(--red);font:700 13px/1 var(--sans);cursor:pointer;transition:all .2s;" onclick="removePin()">Remove PIN</button>
+    <div id="pin-settings-msg" class="msg"></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     PIN ENTRY OVERLAY (for transactions)
+═══════════════════════════════════════ -->
+<div id="pin-overlay" class="overlay hidden">
+  <div class="pin-wrap" style="min-height:auto;padding:36px 24px;">
+    <div class="pin-icon">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--em)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+      </svg>
+    </div>
+    <div class="pin-title" id="pin-overlay-title">Enter PIN</div>
+    <div class="pin-sub" id="pin-overlay-sub">Required to complete this action</div>
+    <div class="pin-dots" id="pin-overlay-dots">
+      <div class="pin-dot" id="pd0"></div><div class="pin-dot" id="pd1"></div>
+      <div class="pin-dot" id="pd2"></div><div class="pin-dot" id="pd3"></div>
+      <div class="pin-dot" id="pd4"></div><div class="pin-dot" id="pd5"></div>
+    </div>
+    <div class="pin-keypad">
+      <button type="button" class="pin-key" onclick="pinKey('1')">1</button>
+      <button type="button" class="pin-key" onclick="pinKey('2')">2</button>
+      <button type="button" class="pin-key" onclick="pinKey('3')">3</button>
+      <button type="button" class="pin-key" onclick="pinKey('4')">4</button>
+      <button type="button" class="pin-key" onclick="pinKey('5')">5</button>
+      <button type="button" class="pin-key" onclick="pinKey('6')">6</button>
+      <button type="button" class="pin-key" onclick="pinKey('7')">7</button>
+      <button type="button" class="pin-key" onclick="pinKey('8')">8</button>
+      <button type="button" class="pin-key" onclick="pinKey('9')">9</button>
+      <button type="button" class="pin-key empty"></button>
+      <button type="button" class="pin-key" onclick="pinKey('0')">0</button>
+      <button type="button" class="pin-key del" onclick="pinBackspace()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/><line x1="18" y1="9" x2="12" y2="15"/><line x1="12" y1="9" x2="18" y2="15"/></svg>
+      </button>
+    </div>
+    <div id="pin-msg" class="msg"></div>
+    <div id="pin-overlay-cancel" class="pin-forgot" onclick="cancelPinOverlay()">Cancel</div>
   </div>
 </div>
 

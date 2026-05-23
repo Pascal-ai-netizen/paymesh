@@ -26,6 +26,254 @@ const UPI_REGEX = /^[a-zA-Z0-9.\-_+]+@(ybl|oksbi|okaxis|okicici|okhdfcbank|paytm
 
 const CURRENT_USER = { phone: "", name: "", upi: "" };
 
+// PIN state
+let _pinBuffer     = '';
+let _pinMode       = null;   // 'verify' | 'setup-new' | 'setup-confirm'
+let _pinTemp       = '';     // first entry during setup
+let _pinCallback   = null;   // resolve fn for PIN promise
+let _pinReject     = null;   // reject fn for PIN promise
+
+// Remember-me toggle state
+let _rememberMe = false;
+
+// ═══════════════════════════════════════════
+// CRYPTO HELPERS — SHA-256 hash (one-way, secure)
+// ═══════════════════════════════════════════
+
+async function hashPin(pin) {
+  const buf  = new TextEncoder().encode(pin + ':paymesh:' + CURRENT_USER.phone);
+  const hash = await crypto.subtle.digest('SHA-256', buf);
+  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+
+function getPinHash() {
+  return localStorage.getItem('pm_pin_' + CURRENT_USER.phone) || null;
+}
+function setPinHash(hash) {
+  localStorage.setItem('pm_pin_' + CURRENT_USER.phone, hash);
+}
+function clearPinHash() {
+  if (CURRENT_USER.phone) localStorage.removeItem('pm_pin_' + CURRENT_USER.phone);
+}
+function hasPinSet() {
+  return !!getPinHash();
+}
+
+// ═══════════════════════════════════════════
+// PIN OVERLAY — promise-based API
+// requirePin() resolves when correct PIN entered, rejects on cancel
+// ═══════════════════════════════════════════
+
+function requirePin(title = 'Enter PIN', sub = 'Required to complete this action') {
+  return new Promise((resolve, reject) => {
+    if (!hasPinSet()) { resolve(); return; }   // No PIN set → skip
+    _pinMode     = 'verify';
+    _pinBuffer   = '';
+    _pinCallback = resolve;
+    _pinReject   = reject;
+    document.getElementById('pin-overlay-title').textContent  = title;
+    document.getElementById('pin-overlay-sub').textContent    = sub;
+    document.getElementById('pin-overlay-cancel').textContent = 'Cancel';
+    const msg = document.getElementById('pin-msg');
+    msg.className = 'msg'; msg.textContent = '';
+    updatePinDots();
+    document.getElementById('pin-overlay').classList.remove('hidden');
+  });
+}
+
+window.cancelPinOverlay = function() {
+  document.getElementById('pin-overlay').classList.add('hidden');
+  _pinBuffer = ''; _pinMode = null; _pinTemp = '';
+  const reject  = _pinReject;
+  const callback = _pinCallback;
+  _pinReject   = null;
+  _pinCallback = null;
+  // Only reject if we were in verify mode (transaction); setup cancel just closes silently
+  if (reject) reject(new Error('PIN cancelled'));
+  // suppress unused callback
+  void callback;
+}
+
+window.pinKey = function(digit) {
+  if (_pinBuffer.length >= 6) return;
+  _pinBuffer += digit;
+  updatePinDots();
+  if (_pinBuffer.length === 6) {
+    setTimeout(() => handlePinComplete(), 120);
+  }
+}
+
+window.pinBackspace = function() {
+  if (_pinBuffer.length > 0) {
+    _pinBuffer = _pinBuffer.slice(0, -1);
+    updatePinDots();
+  }
+}
+
+function updatePinDots() {
+  for (let i = 0; i < 6; i++) {
+    const d = document.getElementById('pd' + i);
+    if (!d) return;
+    d.classList.toggle('filled', i < _pinBuffer.length);
+    d.classList.remove('error');
+  }
+}
+
+function flashPinError() {
+  for (let i = 0; i < 6; i++) {
+    const d = document.getElementById('pd' + i);
+    if (d) { d.classList.add('filled','error'); }
+  }
+  if (navigator.vibrate) navigator.vibrate([80,40,80]);
+  setTimeout(() => { _pinBuffer = ''; updatePinDots(); }, 700);
+}
+
+async function handlePinComplete() {
+  if (_pinMode === 'verify') {
+    const stored = getPinHash();
+    const entered = await hashPin(_pinBuffer);
+    if (entered === stored) {
+      document.getElementById('pin-overlay').classList.add('hidden');
+      _pinBuffer = ''; _pinMode = null;
+      if (_pinCallback) { _pinCallback(); _pinCallback = null; }
+    } else {
+      const msg = document.getElementById('pin-msg');
+      showMsg(msg, 'error', 'Incorrect PIN. Try again.');
+      flashPinError();
+    }
+  } else if (_pinMode === 'setup-new') {
+    _pinTemp   = _pinBuffer;
+    _pinBuffer = '';
+    _pinMode   = 'setup-confirm';
+    document.getElementById('pin-overlay-title').textContent = 'Confirm PIN';
+    document.getElementById('pin-overlay-sub').textContent   = 'Enter your PIN again to confirm';
+    updatePinDots();
+  } else if (_pinMode === 'setup-confirm') {
+    if (_pinBuffer === _pinTemp) {
+      const hash = await hashPin(_pinBuffer);
+      setPinHash(hash);
+      _pinBuffer = ''; _pinMode = null; _pinTemp = '';
+      document.getElementById('pin-overlay').classList.add('hidden');
+      refreshPinSettingsUI();
+      if (_pinCallback) { _pinCallback(); _pinCallback = null; }
+    } else {
+      const msg = document.getElementById('pin-msg');
+      showMsg(msg, 'error', 'PINs don\'t match. Try again from the start.');
+      flashPinError();
+      setTimeout(() => {
+        _pinMode   = 'setup-new';
+        _pinTemp   = '';
+        _pinBuffer = '';
+        document.getElementById('pin-overlay-title').textContent = 'Set a 6-Digit PIN';
+        document.getElementById('pin-overlay-sub').textContent   = 'Choose a PIN for transactions';
+        msg.className = 'msg'; msg.textContent = '';
+        updatePinDots();
+      }, 900);
+    }
+  }
+}
+
+// ═══════════════════════════════════════════
+// PIN SETTINGS SCREEN
+// ═══════════════════════════════════════════
+
+function refreshPinSettingsUI() {
+  const set   = hasPinSet();
+  const dot   = document.getElementById('pin-status-dot');
+  const text  = document.getElementById('pin-status-text');
+  const btn   = document.getElementById('pin-action-btn');
+  const rmBtn = document.getElementById('pin-remove-btn');
+  const homePinBtn = document.getElementById('home-pin-btn');
+
+  if (dot)  dot.style.background  = set ? 'var(--em)'  : 'var(--text3)';
+  if (text) text.textContent       = set ? 'PIN is set ✓' : 'No PIN set';
+  if (btn)  btn.textContent        = set ? 'Change PIN' : 'Set PIN';
+  if (rmBtn) rmBtn.style.display   = set ? 'block' : 'none';
+  if (homePinBtn) homePinBtn.classList.toggle('pin-set', set);
+}
+
+window.startPinSetup = async function() {
+  const msg = document.getElementById('pin-settings-msg');
+  msg.className = 'msg'; msg.textContent = '';
+  const isChanging = hasPinSet();
+
+  if (isChanging) {
+    // Verify current PIN using the promise API — wait for it to resolve before opening setup
+    try { await requirePin('Verify Current PIN', 'Enter your existing PIN to change it'); }
+    catch(e) { return; } // User cancelled — abort
+  }
+
+  // At this point, either no PIN existed or the old one was verified successfully.
+  // Open setup overlay directly — do NOT go through requirePin (avoids callback stomping).
+  _pinMode     = 'setup-new';
+  _pinBuffer   = '';
+  _pinTemp     = '';
+  const successMsg = isChanging ? 'PIN updated!' : 'PIN set successfully!';
+  _pinCallback = () => {
+    refreshPinSettingsUI();
+    showMsg(document.getElementById('pin-settings-msg'), 'success', successMsg);
+  };
+  _pinReject   = null;
+  document.getElementById('pin-overlay-title').textContent = isChanging ? 'Set New PIN' : 'Set a 6-Digit PIN';
+  document.getElementById('pin-overlay-sub').textContent   = 'Choose a PIN for transactions';
+  document.getElementById('pin-overlay-cancel').textContent = 'Cancel';
+  const omsg = document.getElementById('pin-msg');
+  omsg.className = 'msg'; omsg.textContent = '';
+  updatePinDots();
+  document.getElementById('pin-overlay').classList.remove('hidden');
+}
+
+window.removePin = async function() {
+  try { await requirePin('Verify PIN', 'Enter your PIN to remove it'); }
+  catch(e) { return; }
+  clearPinHash();
+  refreshPinSettingsUI();
+  showMsg(document.getElementById('pin-settings-msg'),'success','PIN removed.');
+}
+
+// ═══════════════════════════════════════════
+// REMEMBER ME TOGGLE (login screen)
+// ═══════════════════════════════════════════
+
+window.toggleRemember = function() {
+  _rememberMe = !_rememberMe;
+  const track = document.getElementById('remember-track');
+  if (track) track.classList.toggle('on', _rememberMe);
+}
+
+// Detect if this phone is an existing user based on localStorage key
+// Called when phone field changes
+function detectExistingUser(phone) {
+  const knownPhones = JSON.parse(localStorage.getItem('pm_known_phones') || '[]');
+  const isKnown = knownPhones.includes(phone);
+  const newFields  = document.getElementById('login-new-fields');
+  const remRow     = document.getElementById('login-remember-row');
+  const btn        = document.getElementById('login-btn');
+
+  if (isKnown) {
+    // Existing user on this device — hide name/UPI fields, show remember me
+    if (newFields) newFields.style.display = 'none';
+    if (remRow)    remRow.classList.remove('hidden');
+    if (btn)       btn.querySelector('span').textContent = 'Sign In';
+  } else {
+    // New device — show all fields
+    if (newFields) newFields.style.display = '';
+    if (remRow)    remRow.classList.add('hidden');
+    if (btn)       btn.querySelector('span').textContent = 'Get Started';
+    _rememberMe = false;
+    const track = document.getElementById('remember-track');
+    if (track) track.classList.remove('on');
+  }
+}
+
+function addKnownPhone(phone) {
+  const known = JSON.parse(localStorage.getItem('pm_known_phones') || '[]');
+  if (!known.includes(phone)) {
+    known.push(phone);
+    localStorage.setItem('pm_known_phones', JSON.stringify(known));
+  }
+}
+
 let scannerStream   = null;
 let scannerInterval = null;
 let detectedQR      = null;
@@ -119,6 +367,7 @@ window.showScreen = function(id) {
   if (id === 'screen-home')    loadHomeData();
   // FIX: Receive screen renamed to "My QR" — just shows static QR, no scanner needed
   if (id === 'screen-receive') generateReceiveQR();
+  if (id === 'screen-pin')     refreshPinSettingsUI();
   if (id === 'screen-load') {
     document.getElementById('display-upi').textContent = PAYMESH_UPI;
     buildUPILink();
@@ -185,19 +434,29 @@ function buildUPILink() {
 // ═══════════════════════════════════════════
 
 window.loginUser = async function() {
-  const nameInput = document.getElementById('login-name').value.trim();
   const phone     = document.getElementById('login-phone').value.trim();
-  const upiInput  = document.getElementById('login-upi').value.trim();
   const msg       = document.getElementById('login-msg');
   const btn       = document.querySelector('#screen-login .btn-primary');
 
-  if (!nameInput)                         { showMsg(msg,'error','Enter your name'); return; }
-  if (phone.length !== 10 || isNaN(phone)){ showMsg(msg,'error','Enter a valid 10-digit phone number'); return; }
-  if (!upiInput)                          { showMsg(msg,'error','Enter your UPI ID'); return; }
-  if (!UPI_REGEX.test(upiInput))          { showMsg(msg,'error','Invalid UPI ID. Use format like name@ybl'); return; }
+  if (!/^\d{10}$/.test(phone)){ showMsg(msg,'error','Enter a valid 10-digit phone number'); return; }
+
+  // Determine if this is a known device for this phone
+  const knownPhones = JSON.parse(localStorage.getItem('pm_known_phones') || '[]');
+  const isKnownDevice = knownPhones.includes(phone);
+
+  let nameInput, upiInput;
+
+  if (!isKnownDevice) {
+    // New device — require name and UPI
+    nameInput = document.getElementById('login-name').value.trim();
+    upiInput  = document.getElementById('login-upi').value.trim();
+    if (!nameInput)                         { showMsg(msg,'error','Enter your name'); return; }
+    if (!upiInput)                          { showMsg(msg,'error','Enter your UPI ID'); return; }
+    if (!UPI_REGEX.test(upiInput))          { showMsg(msg,'error','Invalid UPI ID. Use format like name@ybl'); return; }
+  }
 
   // FIX-H: lock button to prevent double-tap creating duplicate accounts or double Firestore calls
-  if (btn) { btn.disabled = true; btn.textContent = 'Please wait…'; }
+  if (btn) { btn.disabled = true; btn.querySelector('span').textContent = 'Please wait…'; }
   showMsg(msg,'success','Verifying account...');
 
   try {
@@ -220,19 +479,36 @@ window.loginUser = async function() {
       showMsg(msg, 'success', `Account created! Welcome, ${finalName}!`);
     }
 
+    // Track this phone as known on this device
+    addKnownPhone(phone);
+
+    // Persist session — respect remember me for existing users
     localStorage.setItem('pm_name',      finalName);
     localStorage.setItem('pm_phone',     phone);
     localStorage.setItem('pm_upi',       finalUpi);
-    localStorage.setItem('pm_logged_in', '1');
+    // For new devices, always persist session. For existing users, only persist if remember me is on.
+    if (!isKnownDevice || _rememberMe) {
+      localStorage.setItem('pm_logged_in', '1');
+    } else {
+      // Remember me not ticked — session flag stored only for this browser session (use sessionStorage)
+      sessionStorage.setItem('pm_session_phone', phone);
+      localStorage.setItem('pm_logged_in', '0');
+    }
 
     CURRENT_USER.name  = finalName;
     CURRENT_USER.phone = phone;   // FIX: must be set before showScreen → loadHomeData runs
     CURRENT_USER.upi   = finalUpi;
 
-    setTimeout(() => showScreen('screen-home'), 800);
+    // Re-enable button before navigating away (fix: button stays disabled after success)
+    if (btn) { btn.disabled = false; btn.querySelector('span').textContent = isKnownDevice ? 'Sign In' : 'Get Started'; }
+
+    setTimeout(() => {
+      refreshPinSettingsUI();
+      showScreen('screen-home');
+    }, 800);
 
   } catch(e) {
-    if (btn) { btn.disabled = false; btn.textContent = 'Get Started'; }
+    if (btn) { btn.disabled = false; btn.querySelector('span').textContent = isKnownDevice ? 'Sign In' : 'Get Started'; }
     showMsg(msg, 'error', 'Error. Check internet and try again.');
     console.error(e);
   }
@@ -240,10 +516,19 @@ window.loginUser = async function() {
 
 window.logoutUser = function() {
   if (!confirm('Log out of PayMesh?')) return;
-  // FIX: unsubscribe real-time listeners before logout to prevent memory leaks and ghost updates
   teardownListeners();
   ['pm_name','pm_phone','pm_upi','pm_logged_in','pm_balance'].forEach(k => localStorage.removeItem(k));
+  sessionStorage.removeItem('pm_session_phone');
   CURRENT_USER.name = ''; CURRENT_USER.phone = ''; CURRENT_USER.upi = '';
+  // Reset remember-me toggle state
+  _rememberMe = false;
+  const track = document.getElementById('remember-track');
+  if (track) track.classList.remove('on');
+  // Reset login form fields and UI
+  const phoneEl = document.getElementById('login-phone');
+  if (phoneEl) { phoneEl.value = ''; detectExistingUser(''); }
+  const msg = document.getElementById('login-msg');
+  if (msg) { msg.className = 'msg'; msg.textContent = ''; }
   showScreen('screen-login');
 }
 
@@ -268,8 +553,9 @@ async function loadHomeData() {
     return;
   }
 
-  // FIX: always show whatever name we have immediately, then confirm from server
-  document.getElementById('display-name').textContent = `Hi, ${CURRENT_USER.name || '...'} 👋`;
+  // Show name immediately; onSnapshot will update it authoritatively
+  const displayName = CURRENT_USER.name ? `Hi, ${CURRENT_USER.name} 👋` : 'Welcome 👋';
+  document.getElementById('display-name').textContent = displayName;
 
   // Show cached balance immediately while listener connects
   const cached = parseFloat(localStorage.getItem('pm_balance') || '0');
@@ -329,6 +615,7 @@ async function loadHomeData() {
 function forceRelogin() {
   teardownListeners();
   ['pm_name','pm_phone','pm_upi','pm_logged_in','pm_balance'].forEach(k => localStorage.removeItem(k));
+  sessionStorage.removeItem('pm_session_phone');
   CURRENT_USER.name = ''; CURRENT_USER.phone = ''; CURRENT_USER.upi = '';
   showScreen('screen-login');
 }
@@ -370,7 +657,9 @@ function renderTransactions(snap) {
 
 function animateBalance(target) {
   const el  = document.getElementById('wallet-balance');
-  const cur = parseFloat(el.textContent.replace(/,/g,'')) || 0;
+  // Use data attribute to track actual numeric value — avoids locale parse issues
+  const cur = parseFloat(el.dataset.value || el.textContent.replace(/[^0-9.]/g,'')) || 0;
+  el.dataset.value = target;
   if (cur === target) { el.textContent = target.toFixed(2); return; }
   const dur = 700;
   const st  = Date.now();
@@ -395,7 +684,7 @@ window.submitLoad = async function() {
 
   if (!amount || amount <= 0)          { showMsg(msg,'error','Enter a valid amount'); return; }
   if (amount > 50000)                  { showMsg(msg,'error','Maximum load is ₹50,000'); return; }
-  if (utr.length !== 12 || isNaN(utr)) { showMsg(msg,'error','UTR must be exactly 12 digits'); return; }
+  if (!/^\d{12}$/.test(utr)) { showMsg(msg,'error','UTR must be exactly 12 digits'); return; }
 
   // FIX-C: guard against empty session (same class of bug as voucher/send)
   if (!CURRENT_USER.phone) {
@@ -453,7 +742,7 @@ window.sendMoney = async function() {
   const amount = parseFloat(document.getElementById('send-amount').value);
   const msg    = document.getElementById('send-msg');
 
-  if (phone.length !== 10 || isNaN(phone)) { showMsg(msg,'error','Valid 10-digit phone needed'); return; }
+  if (!/^\d{10}$/.test(phone)) { showMsg(msg,'error','Valid 10-digit phone needed'); return; }
   if (!amount || amount <= 0)              { showMsg(msg,'error','Enter a valid amount'); return; }
 
   // FIX: CURRENT_USER.phone empty = "Invalid document reference" Firestore error
@@ -463,6 +752,10 @@ window.sendMoney = async function() {
   }
 
   if (phone === CURRENT_USER.phone)        { showMsg(msg,'error','Cannot send to yourself'); return; }
+
+  // Require PIN before proceeding
+  try { await requirePin('Confirm Send', `Enter PIN to send ₹${amount.toFixed(2)}`); }
+  catch(e) { return; }  // Silent cancel
 
   showMsg(msg,'success','Processing...');
 
@@ -511,7 +804,7 @@ window.sendMoney = async function() {
     document.getElementById('send-amount').value = '';
 
     if (navigator.vibrate) navigator.vibrate(200);
-    showOverlay('', 'Sent!', `₹${amount} sent to ${receiverName}`);
+    showOverlay('', 'Sent!', `₹${amount.toFixed(2)} sent to ${receiverName}`);
     // FIX: no need for manual refreshBalance — onSnapshot handles it automatically
 
   } catch(e) {
@@ -535,6 +828,10 @@ window.generateVoucher = async function() {
     showMsg(msg,'error','Session error — please log out and log in again.');
     return;
   }
+
+  // Require PIN before voucher creation
+  try { await requirePin('Confirm Voucher', `Enter PIN to create ₹${amount.toFixed(2)} voucher`); }
+  catch(e) { return; }  // Silent cancel
 
   try {
     const userRef = doc(db,"users",CURRENT_USER.phone);
@@ -831,6 +1128,15 @@ window.redeemVoucher = async function() {
   if (!amount || amount <= 0) { showMsg(msg,'error','Invalid voucher amount'); return; }
 
   const fromName = voucher.from;
+
+  // Require PIN before redemption
+  try { await requirePin('Confirm Redeem', `Enter PIN to redeem ₹${amount.toFixed(2)} voucher`); }
+  catch(e) {
+    // Silent cancel — clear any stale message
+    msg.className = 'msg'; msg.textContent = '';
+    return;
+  }
+
   showMsg(msg,'success','Verifying...');
 
   try {
@@ -879,7 +1185,7 @@ window.redeemVoucher = async function() {
     stopScan();
     launchConfetti(80);
     if (navigator.vibrate) navigator.vibrate([200,100,200,100,400]);
-    showOverlay('', 'Received!', `₹${amount} from ${fromName} added to wallet`);
+    showOverlay('', 'Received!', `₹${amount.toFixed(2)} from ${fromName} added to wallet`);
 
   } catch(e) {
     if (e.message === 'Failed to get document because the client is offline.') {
@@ -911,55 +1217,51 @@ window.stopScan = function() {
 
 (function init() {
   const run = async () => {
-    const loggedIn = localStorage.getItem('pm_logged_in');
-    const phone    = localStorage.getItem('pm_phone');
-    const name     = localStorage.getItem('pm_name');
-    const upi      = localStorage.getItem('pm_upi');
+    const loggedIn    = localStorage.getItem('pm_logged_in');
+    const sessionPhone = sessionStorage.getItem('pm_session_phone');
+    const phone       = localStorage.getItem('pm_phone') || sessionPhone;
+    const name        = localStorage.getItem('pm_name');
+    const upi         = localStorage.getItem('pm_upi');
 
     // FIX: No session at all — go to login immediately. Do NOT attempt Firestore call.
-    if (loggedIn !== '1' || !phone) {
+    // loggedIn '1' = persistent (remember me ON). sessionPhone = remember me OFF but same tab.
+    const hasSession = (loggedIn === '1' && phone) || (sessionPhone && phone);
+    if (!hasSession) {
       showScreen('screen-login');
       return;
     }
 
     // FIX: We have a session — set CURRENT_USER BEFORE any Firestore call
-    // so that onSnapshot and other guards always find a non-empty phone.
     CURRENT_USER.phone = phone;
     CURRENT_USER.name  = name  || '';
     CURRENT_USER.upi   = upi   || '';
 
     // FIX: Show home immediately from localStorage so the user isn't stuck on
-    // a blank screen while we verify against the server. The onSnapshot in
-    // loadHomeData() will correct any stale values the moment it connects.
+    // a blank screen while we verify against the server.
+    refreshPinSettingsUI();
     showScreen('screen-home');
 
     // FIX: Then verify against Firestore server in the background.
-    // This self-heals name/upi if localStorage was stale, partial, or cleared.
     try {
       const snap = await getDocFromServer(doc(db, "users", phone));
       if (snap.exists()) {
         const data = snap.data();
-        // Always trust server over localStorage
         CURRENT_USER.name = data.name  || name  || '';
         CURRENT_USER.upi  = data.upi   || upi   || '';
-        // Re-sync localStorage from server
         localStorage.setItem('pm_name',  CURRENT_USER.name);
         localStorage.setItem('pm_upi',   CURRENT_USER.upi);
         localStorage.setItem('pm_balance', (data.balance || 0).toFixed(2));
-        // Update greeting immediately if it loaded before the server replied
         const nameEl = document.getElementById('display-name');
         if (nameEl) nameEl.textContent = `Hi, ${CURRENT_USER.name} 👋`;
-        // FIX-I: we have connectivity — replay any vouchers saved while offline
         replayPendingVouchers().catch(e => console.warn('Offline replay error:', e));
       } else {
-        // Account deleted from Firestore — clear and re-login
         ['pm_name','pm_phone','pm_upi','pm_logged_in','pm_balance'].forEach(k => localStorage.removeItem(k));
+        sessionStorage.removeItem('pm_session_phone');
         CURRENT_USER.name = ''; CURRENT_USER.phone = ''; CURRENT_USER.upi = '';
         showScreen('screen-login');
         return;
       }
     } catch(e) {
-      // Offline — proceed with whatever localStorage has, onSnapshot will heal on reconnect
       console.warn('Init server check failed (offline?):', e.message);
     }
   };
@@ -979,4 +1281,13 @@ document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('.btn-primary,.action-btn,.back-btn').forEach(btn => {
     btn.addEventListener('click', addRipple);
   });
+
+  // Wire phone field for existing-device detection on all relevant events
+  const phoneEl = document.getElementById('login-phone');
+  if (phoneEl) {
+    const handler = () => detectExistingUser(phoneEl.value.trim());
+    phoneEl.addEventListener('input',  handler);
+    phoneEl.addEventListener('change', handler);
+    phoneEl.addEventListener('paste',  () => setTimeout(handler, 0)); // setTimeout lets paste content settle
+  }
 });
