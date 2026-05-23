@@ -1,11 +1,11 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import {
   getFirestore,
-  doc, getDoc, setDoc, updateDoc,
+  doc, setDoc,
   collection, addDoc, query, where,
   runTransaction,
-  onSnapshot,           // FIX: real-time listeners replace one-shot reads
-  getDocFromServer, getDocsFromServer
+  onSnapshot,
+  getDocFromServer
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -123,6 +123,15 @@ window.showScreen = function(id) {
     document.getElementById('display-upi').textContent = PAYMESH_UPI;
     buildUPILink();
   }
+  // FIX: clear stale msg boxes when navigating to action screens
+  if (id === 'screen-voucher') {
+    const m = document.getElementById('voucher-msg');
+    if (m) { m.className = 'msg'; m.textContent = ''; }
+  }
+  if (id === 'screen-send') {
+    const m = document.getElementById('send-msg');
+    if (m) { m.className = 'msg'; m.textContent = ''; }
+  }
 }
 
 function showScreen(id) { window.showScreen(id); }
@@ -135,6 +144,12 @@ function buildUPILink() {
   const amtInput = document.getElementById('load-amount');
   const existing = document.getElementById('upi-pay-btn');
   if (existing) existing.remove();
+
+  // FIX-B: remove any previously attached input listener to prevent accumulation across visits
+  if (amtInput._upiLinkListener) {
+    amtInput.removeEventListener('input', amtInput._upiLinkListener);
+    amtInput._upiLinkListener = null;
+  }
 
   const btn = document.createElement('a');
   btn.id = 'upi-pay-btn';
@@ -157,6 +172,7 @@ function buildUPILink() {
     const amt = parseFloat(amtInput.value) || '';
     btn.href = `upi://pay?pa=${PAYMESH_UPI}&pn=PayMesh&am=${amt}&cu=INR&tn=PayMeshLoad`;
   }
+  amtInput._upiLinkListener = updateLink;
   amtInput.addEventListener('input', updateLink);
   updateLink();
 
@@ -173,12 +189,15 @@ window.loginUser = async function() {
   const phone     = document.getElementById('login-phone').value.trim();
   const upiInput  = document.getElementById('login-upi').value.trim();
   const msg       = document.getElementById('login-msg');
+  const btn       = document.querySelector('#screen-login .btn-primary');
 
   if (!nameInput)                         { showMsg(msg,'error','Enter your name'); return; }
   if (phone.length !== 10 || isNaN(phone)){ showMsg(msg,'error','Enter a valid 10-digit phone number'); return; }
   if (!upiInput)                          { showMsg(msg,'error','Enter your UPI ID'); return; }
   if (!UPI_REGEX.test(upiInput))          { showMsg(msg,'error','Invalid UPI ID. Use format like name@ybl'); return; }
 
+  // FIX-H: lock button to prevent double-tap creating duplicate accounts or double Firestore calls
+  if (btn) { btn.disabled = true; btn.textContent = 'Please wait…'; }
   showMsg(msg,'success','Verifying account...');
 
   try {
@@ -196,7 +215,7 @@ window.loginUser = async function() {
       await setDoc(userRef, {
         name: finalName, phone,
         upi: finalUpi, balance: 0,
-        createdAt: new Date().toLocaleString()
+        createdAt: new Date().toISOString()  // FIX-F: ISO for consistent cross-device storage
       });
       showMsg(msg, 'success', `Account created! Welcome, ${finalName}!`);
     }
@@ -207,12 +226,13 @@ window.loginUser = async function() {
     localStorage.setItem('pm_logged_in', '1');
 
     CURRENT_USER.name  = finalName;
-    CURRENT_USER.phone = phone;
+    CURRENT_USER.phone = phone;   // FIX: must be set before showScreen → loadHomeData runs
     CURRENT_USER.upi   = finalUpi;
 
     setTimeout(() => showScreen('screen-home'), 800);
 
   } catch(e) {
+    if (btn) { btn.disabled = false; btn.textContent = 'Get Started'; }
     showMsg(msg, 'error', 'Error. Check internet and try again.');
     console.error(e);
   }
@@ -242,6 +262,12 @@ function teardownListeners() {
 // ═══════════════════════════════════════════
 
 async function loadHomeData() {
+  // FIX: if phone not set yet (race between init and showScreen), bail to login
+  if (!CURRENT_USER.phone) {
+    showScreen('screen-login');
+    return;
+  }
+
   // FIX: always show whatever name we have immediately, then confirm from server
   document.getElementById('display-name').textContent = `Hi, ${CURRENT_USER.name || '...'} 👋`;
 
@@ -317,18 +343,25 @@ function renderTransactions(snap) {
 
   const txs = [];
   snap.forEach(d => txs.push(d.data()));
-  txs.sort((a,b) => new Date(b.time) - new Date(a.time));
+  // FIX-F: sort by ISO time string — ISO sorts lexicographically correctly, no locale issues
+  txs.sort((a,b) => (b.time || '').localeCompare(a.time || ''));
 
   list.innerHTML = txs.slice(0,20).map((tx, i) => {
     const isDebit   = tx.type === 'debit';
     const isPending = tx.type === 'pending';
     const amtClass  = isPending ? 'tx-pending' : isDebit ? 'tx-debit' : 'tx-credit';
     const prefix    = isPending ? '⏳ ' : isDebit ? '−' : '+';
+    // FIX-F: format ISO time for display — fallback gracefully for old toLocaleString records
+    let displayTime = tx.time || '';
+    try {
+      const d = new Date(tx.time);
+      if (!isNaN(d)) displayTime = d.toLocaleString();
+    } catch(e) { /* keep raw */ }
     return `<div class="tx-row" style="animation-delay:${i*0.05}s">
       <div class="tx-avatar">${(tx.label||'?')[0].toUpperCase()}</div>
       <div class="tx-middle">
         <div class="tx-name">${tx.label}</div>
-        <div class="tx-time">${tx.time}</div>
+        <div class="tx-time">${displayTime}</div>
       </div>
       <div class="tx-amount ${amtClass}">${prefix}₹${tx.amount}</div>
     </div>`;
@@ -364,6 +397,12 @@ window.submitLoad = async function() {
   if (amount > 50000)                  { showMsg(msg,'error','Maximum load is ₹50,000'); return; }
   if (utr.length !== 12 || isNaN(utr)) { showMsg(msg,'error','UTR must be exactly 12 digits'); return; }
 
+  // FIX-C: guard against empty session (same class of bug as voucher/send)
+  if (!CURRENT_USER.phone) {
+    showMsg(msg,'error','Session error — please log out and log in again.');
+    return;
+  }
+
   showMsg(msg,'success','Submitting request...');
 
   try {
@@ -373,13 +412,16 @@ window.submitLoad = async function() {
       return;
     }
 
+    // FIX-F: use ISO timestamp so cross-device date sorting is reliable
+    const time = new Date().toISOString();
+
     await setDoc(doc(db,"utrs",utr), {
       utr, amount,
       phone:    CURRENT_USER.phone,
       name:     CURRENT_USER.name,
       upi:      CURRENT_USER.upi,
       paidTo:   PAYMESH_UPI,
-      time:     new Date().toLocaleString(),
+      time,
       status:   "pending",
       reviewed: false
     });
@@ -388,7 +430,7 @@ window.submitLoad = async function() {
       phone:  CURRENT_USER.phone,
       label:  "Load Request — Under Review",
       amount, type: "pending",
-      time:   new Date().toLocaleString(),
+      time,
       utr, status: "pending"
     });
 
@@ -413,6 +455,13 @@ window.sendMoney = async function() {
 
   if (phone.length !== 10 || isNaN(phone)) { showMsg(msg,'error','Valid 10-digit phone needed'); return; }
   if (!amount || amount <= 0)              { showMsg(msg,'error','Enter a valid amount'); return; }
+
+  // FIX: CURRENT_USER.phone empty = "Invalid document reference" Firestore error
+  if (!CURRENT_USER.phone) {
+    showMsg(msg,'error','Session error — please log out and log in again.');
+    return;
+  }
+
   if (phone === CURRENT_USER.phone)        { showMsg(msg,'error','Cannot send to yourself'); return; }
 
   showMsg(msg,'success','Processing...');
@@ -439,7 +488,7 @@ window.sendMoney = async function() {
       tx.update(receiverRef, { balance: receiverBal + amount });
     });
 
-    const time = new Date().toLocaleString();
+    const time = new Date().toISOString();
     await Promise.all([
       addDoc(collection(db,"transactions"), {
         phone: CURRENT_USER.phone,
@@ -481,6 +530,12 @@ window.generateVoucher = async function() {
 
   if (!amount || amount <= 0) { showMsg(msg,'error','Enter a valid amount'); return; }
 
+  // FIX: CURRENT_USER.phone empty = "Invalid document reference" Firestore error
+  if (!CURRENT_USER.phone) {
+    showMsg(msg,'error','Session error — please log out and log in again.');
+    return;
+  }
+
   try {
     const userRef = doc(db,"users",CURRENT_USER.phone);
     const code    = 'PM' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).substring(2,6).toUpperCase();
@@ -495,17 +550,19 @@ window.generateVoucher = async function() {
 
     await Promise.all([
       setDoc(doc(db,"vouchers",code), {
-        code, amount,
+        code,
+        amount: Number(amount),   // FIX-E: always store as number, never string
         createdBy:     CURRENT_USER.phone,
         createdByName: CURRENT_USER.name,
         status:        "UNUSED",
-        createdAt:     new Date().toLocaleString()
+        createdAt:     new Date().toISOString()  // FIX-F: ISO for reliable sorting
       }),
       addDoc(collection(db,"transactions"), {
         phone: CURRENT_USER.phone,
         label: `Voucher Created · ₹${amount}`,
-        amount, type: "debit",
-        time: new Date().toLocaleString()
+        amount: Number(amount),
+        type: "debit",
+        time: new Date().toISOString()  // FIX-F
       })
     ]);
 
@@ -514,7 +571,7 @@ window.generateVoucher = async function() {
     localStorage.setItem('pm_balance', Math.max(0, newBal).toFixed(2));
 
     const saved = JSON.parse(localStorage.getItem('my_vouchers') || '[]');
-    saved.unshift({ code, amount, createdAt: new Date().toLocaleString(), status: 'UNUSED' });
+    saved.unshift({ code, amount, createdAt: new Date().toISOString(), status: 'UNUSED' });
     localStorage.setItem('my_vouchers', JSON.stringify(saved.slice(0, 20)));
 
     prependVoucher(code, amount);
@@ -557,7 +614,7 @@ function prependVoucher(code, amount) {
     }
     try {
       new QRCode(document.getElementById(qrId), {
-        text: JSON.stringify({ code, amount, from: CURRENT_USER.name }),
+        text: JSON.stringify({ code, amount: Number(amount), from: CURRENT_USER.name }),  // FIX-E: Number()
         width: 200, height: 200,
         colorDark: "#000000", colorLight: "#ffffff"
       });
@@ -594,6 +651,51 @@ async function restoreVoucher() {
   } catch(e) {
     // silent — NEVER block navigation
   }
+}
+
+// ═══════════════════════════════════════════
+// FIX-I: OFFLINE VOUCHER SYNC
+// Replay any pending_vouchers saved while offline
+// Called once on init when we know we have connectivity (server check passed)
+// ═══════════════════════════════════════════
+
+async function replayPendingVouchers() {
+  const pending = JSON.parse(localStorage.getItem('pending_vouchers') || '[]');
+  if (!pending.length) return;
+
+  const stillPending = [];
+  for (const v of pending) {
+    const amount = Number(v.amount);
+    try {
+      const vRef        = doc(db, "vouchers", v.code);
+      const receiverRef = doc(db, "users", CURRENT_USER.phone);
+      let createdBy = '';
+
+      await runTransaction(db, async (tx) => {
+        const vSnap = await tx.get(vRef);
+        const rSnap = await tx.get(receiverRef);
+        if (!vSnap.exists() || vSnap.data().status === 'USED') return; // already done or gone
+        if (!rSnap.exists()) throw new Error('Account not found');
+        createdBy = vSnap.data().createdBy;
+        tx.update(vRef, { status:'USED', redeemedBy: CURRENT_USER.phone, redeemedByName: CURRENT_USER.name, redeemedAt: new Date().toISOString() });
+        tx.update(receiverRef, { balance: (rSnap.data().balance || 0) + amount });
+      });
+
+      if (createdBy) {
+        const time = new Date().toISOString();
+        await Promise.all([
+          addDoc(collection(db,"transactions"), { phone: CURRENT_USER.phone, label:`Voucher from ${v.from}`, amount, type:"credit", time }),
+          addDoc(collection(db,"transactions"), { phone: createdBy, label:`Voucher redeemed by ${CURRENT_USER.name}`, amount, type:"debit", time })
+        ]);
+      }
+      console.log('Replayed offline voucher:', v.code);
+    } catch(e) {
+      // If it genuinely failed (not just "already done"), keep it for next attempt
+      if (e.message !== 'Account not found') stillPending.push(v);
+      console.warn('Voucher replay failed:', v.code, e.message);
+    }
+  }
+  localStorage.setItem('pending_vouchers', JSON.stringify(stillPending));
 }
 
 // FIX: expose restoreVoucher to HTML onclick
@@ -701,7 +803,12 @@ function showVoucherResult(data) {
 }
 
 window.proceedToSend = function() {
-  stopScan();
+  // FIX-A: don't call stopScan() here — it navigates to screen-home first (firing loadHomeData)
+  // and then showScreen('screen-send') fires, causing a double transition and unnecessary home data load.
+  // Instead, tear down the camera directly without changing screens.
+  if (scannerInterval) { clearInterval(scannerInterval); scannerInterval = null; }
+  if (scannerStream)   { scannerStream.getTracks().forEach(t => t.stop()); scannerStream = null; }
+  detectedQR = null;
   showScreen('screen-send');
 }
 
@@ -713,14 +820,22 @@ window.redeemVoucher = async function() {
   const msg = document.getElementById('scan-msg');
   if (!detectedQR || detectedQR.kind !== 'voucher') { showMsg(msg,'error','No voucher detected'); return; }
 
-  const voucher = detectedQR;
+  // FIX-D: guard against empty session
+  if (!CURRENT_USER.phone) {
+    showMsg(msg,'error','Session error — please log out and log in again.');
+    return;
+  }
+
+  const voucher  = detectedQR;
+  const amount   = Number(voucher.amount);  // FIX-E: coerce to number — QR JSON may deliver string
+  if (!amount || amount <= 0) { showMsg(msg,'error','Invalid voucher amount'); return; }
+
+  const fromName = voucher.from;
   showMsg(msg,'success','Verifying...');
 
   try {
     const vRef        = doc(db,"vouchers",voucher.code);
     const receiverRef = doc(db,"users",CURRENT_USER.phone);
-    const amount      = voucher.amount;
-    const fromName    = voucher.from;
     let createdBy     = '';
 
     await runTransaction(db, async (tx) => {
@@ -739,12 +854,12 @@ window.redeemVoucher = async function() {
         status:         'USED',
         redeemedBy:     CURRENT_USER.phone,
         redeemedByName: CURRENT_USER.name,
-        redeemedAt:     new Date().toLocaleString()
+        redeemedAt:     new Date().toISOString()  // FIX-F
       });
       tx.update(receiverRef, { balance: rBal + amount });
     });
 
-    const time = new Date().toLocaleString();
+    const time = new Date().toISOString();  // FIX-F
     await Promise.all([
       addDoc(collection(db,"transactions"), {
         phone: CURRENT_USER.phone,
@@ -758,7 +873,6 @@ window.redeemVoucher = async function() {
       })
     ]);
 
-    // FIX: onSnapshot handles authoritative balance update — just update local cache optimistically
     const newBal = parseFloat(localStorage.getItem('pm_balance')||'0') + amount;
     localStorage.setItem('pm_balance', newBal.toFixed(2));
 
@@ -769,13 +883,14 @@ window.redeemVoucher = async function() {
 
   } catch(e) {
     if (e.message === 'Failed to get document because the client is offline.') {
+      // FIX-I: offline queue — store with ISO time for later replay
       const pending = JSON.parse(localStorage.getItem('pending_vouchers') || '[]');
-      pending.push({ ...voucher, redeemedBy: CURRENT_USER.phone, time: new Date().toLocaleString() });
+      pending.push({ ...voucher, amount, redeemedBy: CURRENT_USER.phone, time: new Date().toISOString() });
       localStorage.setItem('pending_vouchers', JSON.stringify(pending));
       const lb = parseFloat(localStorage.getItem('pm_balance') || '0');
-      localStorage.setItem('pm_balance', (lb + voucher.amount).toFixed(2));
+      localStorage.setItem('pm_balance', (lb + amount).toFixed(2));
       stopScan();
-      showOverlay('', 'Saved Offline!', `₹${voucher.amount} saved — syncs when internet returns`);
+      showOverlay('', 'Saved Offline!', `₹${amount} saved — syncs when internet returns`);
     } else {
       showMsg(msg,'error', e.message || 'Error. Try again.');
     }
@@ -801,19 +916,25 @@ window.stopScan = function() {
     const name     = localStorage.getItem('pm_name');
     const upi      = localStorage.getItem('pm_upi');
 
-    // No session at all — go to login
+    // FIX: No session at all — go to login immediately. Do NOT attempt Firestore call.
     if (loggedIn !== '1' || !phone) {
       showScreen('screen-login');
       return;
     }
 
-    // Phone exists — set what we have immediately so UI isn't blank
+    // FIX: We have a session — set CURRENT_USER BEFORE any Firestore call
+    // so that onSnapshot and other guards always find a non-empty phone.
     CURRENT_USER.phone = phone;
     CURRENT_USER.name  = name  || '';
     CURRENT_USER.upi   = upi   || '';
 
-    // FIX: always verify against Firestore server on app start
-    // This self-heals name/upi if localStorage was stale, partial, or cleared
+    // FIX: Show home immediately from localStorage so the user isn't stuck on
+    // a blank screen while we verify against the server. The onSnapshot in
+    // loadHomeData() will correct any stale values the moment it connects.
+    showScreen('screen-home');
+
+    // FIX: Then verify against Firestore server in the background.
+    // This self-heals name/upi if localStorage was stale, partial, or cleared.
     try {
       const snap = await getDocFromServer(doc(db, "users", phone));
       if (snap.exists()) {
@@ -825,9 +946,15 @@ window.stopScan = function() {
         localStorage.setItem('pm_name',  CURRENT_USER.name);
         localStorage.setItem('pm_upi',   CURRENT_USER.upi);
         localStorage.setItem('pm_balance', (data.balance || 0).toFixed(2));
+        // Update greeting immediately if it loaded before the server replied
+        const nameEl = document.getElementById('display-name');
+        if (nameEl) nameEl.textContent = `Hi, ${CURRENT_USER.name} 👋`;
+        // FIX-I: we have connectivity — replay any vouchers saved while offline
+        replayPendingVouchers().catch(e => console.warn('Offline replay error:', e));
       } else {
         // Account deleted from Firestore — clear and re-login
         ['pm_name','pm_phone','pm_upi','pm_logged_in','pm_balance'].forEach(k => localStorage.removeItem(k));
+        CURRENT_USER.name = ''; CURRENT_USER.phone = ''; CURRENT_USER.upi = '';
         showScreen('screen-login');
         return;
       }
@@ -835,8 +962,6 @@ window.stopScan = function() {
       // Offline — proceed with whatever localStorage has, onSnapshot will heal on reconnect
       console.warn('Init server check failed (offline?):', e.message);
     }
-
-    showScreen('screen-home');
   };
 
   if (document.readyState === 'loading') {
