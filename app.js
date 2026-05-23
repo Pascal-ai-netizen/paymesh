@@ -242,7 +242,8 @@ function teardownListeners() {
 // ═══════════════════════════════════════════
 
 async function loadHomeData() {
-  document.getElementById('display-name').textContent = `Hi, ${CURRENT_USER.name} 👋`;
+  // FIX: always show whatever name we have immediately, then confirm from server
+  document.getElementById('display-name').textContent = `Hi, ${CURRENT_USER.name || '...'} 👋`;
 
   // Show cached balance immediately while listener connects
   const cached = parseFloat(localStorage.getItem('pm_balance') || '0');
@@ -251,14 +252,33 @@ async function loadHomeData() {
   // FIX: tear down any existing listeners first (prevents duplicate listeners on repeated home visits)
   teardownListeners();
 
-  // FIX: onSnapshot on user doc — balance updates the moment admin credits or any send/receive happens
+  // FIX: onSnapshot on user doc — handles balance AND self-heals name/upi from server
+  // This means even if localStorage was stale/missing, the first snapshot corrects everything
   unsubBalance = onSnapshot(
     doc(db, "users", CURRENT_USER.phone),
     (snap) => {
       if (snap.exists()) {
-        const bal = snap.data().balance || 0;
+        const data = snap.data();
+        const bal  = data.balance || 0;
+
+        // Self-heal: sync name and upi from server into memory and localStorage
+        if (data.name && data.name !== CURRENT_USER.name) {
+          CURRENT_USER.name = data.name;
+          localStorage.setItem('pm_name', data.name);
+        }
+        if (data.upi && data.upi !== CURRENT_USER.upi) {
+          CURRENT_USER.upi = data.upi;
+          localStorage.setItem('pm_upi', data.upi);
+        }
+
+        // Always update the greeting from authoritative server data
+        document.getElementById('display-name').textContent = `Hi, ${CURRENT_USER.name} 👋`;
+
         animateBalance(bal);
         localStorage.setItem('pm_balance', bal.toFixed(2));
+      } else {
+        // User doc deleted from Firestore (e.g. data cleared) — force clean re-login
+        forceRelogin();
       }
     },
     (err) => console.warn('Balance listener error:', err.message)
@@ -276,6 +296,15 @@ async function loadHomeData() {
     },
     (err) => console.warn('Tx listener error:', err.message)
   );
+}
+
+// FIX: called when Firestore confirms user doc no longer exists
+// Clears stale localStorage and sends user to login cleanly
+function forceRelogin() {
+  teardownListeners();
+  ['pm_name','pm_phone','pm_upi','pm_logged_in','pm_balance'].forEach(k => localStorage.removeItem(k));
+  CURRENT_USER.name = ''; CURRENT_USER.phone = ''; CURRENT_USER.upi = '';
+  showScreen('screen-login');
 }
 
 function renderTransactions(snap) {
@@ -762,24 +791,52 @@ window.stopScan = function() {
 }
 
 // ═══════════════════════════════════════════
-// INIT — Persistent Login
+// INIT — Persistent Login with server self-heal
 // ═══════════════════════════════════════════
 
 (function init() {
-  const run = () => {
+  const run = async () => {
     const loggedIn = localStorage.getItem('pm_logged_in');
-    const name     = localStorage.getItem('pm_name');
     const phone    = localStorage.getItem('pm_phone');
+    const name     = localStorage.getItem('pm_name');
     const upi      = localStorage.getItem('pm_upi');
 
-    if (loggedIn === '1' && name && phone && upi) {
-      CURRENT_USER.name  = name;
-      CURRENT_USER.phone = phone;
-      CURRENT_USER.upi   = upi;
-      showScreen('screen-home');
-    } else {
+    // No session at all — go to login
+    if (loggedIn !== '1' || !phone) {
       showScreen('screen-login');
+      return;
     }
+
+    // Phone exists — set what we have immediately so UI isn't blank
+    CURRENT_USER.phone = phone;
+    CURRENT_USER.name  = name  || '';
+    CURRENT_USER.upi   = upi   || '';
+
+    // FIX: always verify against Firestore server on app start
+    // This self-heals name/upi if localStorage was stale, partial, or cleared
+    try {
+      const snap = await getDocFromServer(doc(db, "users", phone));
+      if (snap.exists()) {
+        const data = snap.data();
+        // Always trust server over localStorage
+        CURRENT_USER.name = data.name  || name  || '';
+        CURRENT_USER.upi  = data.upi   || upi   || '';
+        // Re-sync localStorage from server
+        localStorage.setItem('pm_name',  CURRENT_USER.name);
+        localStorage.setItem('pm_upi',   CURRENT_USER.upi);
+        localStorage.setItem('pm_balance', (data.balance || 0).toFixed(2));
+      } else {
+        // Account deleted from Firestore — clear and re-login
+        ['pm_name','pm_phone','pm_upi','pm_logged_in','pm_balance'].forEach(k => localStorage.removeItem(k));
+        showScreen('screen-login');
+        return;
+      }
+    } catch(e) {
+      // Offline — proceed with whatever localStorage has, onSnapshot will heal on reconnect
+      console.warn('Init server check failed (offline?):', e.message);
+    }
+
+    showScreen('screen-home');
   };
 
   if (document.readyState === 'loading') {
