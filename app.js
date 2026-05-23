@@ -490,10 +490,17 @@ window.loginUser = async function() {
       showMsg(msg, 'success', `Account created! Welcome, ${finalName}!`);
     }
 
-    // Generate fresh device token and write it to Firestore — kicks any other logged-in device
-    const deviceToken = generateDeviceToken();
-    await updateDoc(userRef, { deviceToken });
-    setLocalToken(deviceToken);
+    // Reuse token if same device already has valid one (prevents self-kickout on re-login)
+    const existingLocal = getLocalToken();
+    const firestoreToken = userSnap.exists() ? (userSnap.data().deviceToken || null) : null;
+    let deviceToken;
+    if (existingLocal && existingLocal === firestoreToken) {
+      deviceToken = existingLocal;
+    } else {
+      deviceToken = generateDeviceToken();
+      await updateDoc(userRef, { deviceToken });
+      setLocalToken(deviceToken);
+    }
 
     addKnownPhone(phone);
 
