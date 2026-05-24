@@ -1087,76 +1087,22 @@ window.stopScan = function() {
 // ═══════════════════════════════════════════
 
 (function init() {
-  const run = async () => {
-    // Try pm_phone first. If missing, fall back to pm_known_phones (never cleared).
-    // This covers every migration path from every previous version.
-    let phone = localStorage.getItem('pm_phone');
-    let name  = localStorage.getItem('pm_name');
-    let upi   = localStorage.getItem('pm_upi');
+  function run() {
+    const phone = localStorage.getItem('pm_phone');
+    const name  = localStorage.getItem('pm_name')  || '';
+    const upi   = localStorage.getItem('pm_upi')   || '';
 
     if (!phone) {
-      // pm_phone missing -- try recovering from pm_known_phones
-      const known = JSON.parse(localStorage.getItem('pm_known_phones') || '[]');
-      if (known.length > 0) {
-        // Last known phone -- restore it so next time pm_phone is set
-        phone = known[known.length - 1];
-        // Fetch name/upi from Firestore since we lost the local cache
-        try {
-          const snap = await getDocFromServer(doc(db, 'users', phone));
-          if (snap.exists()) {
-            const d = snap.data();
-            name = d.name || '';
-            upi  = d.upi  || '';
-            localStorage.setItem('pm_phone',   phone);
-            localStorage.setItem('pm_name',    name);
-            localStorage.setItem('pm_upi',     upi);
-            localStorage.setItem('pm_fp',      'restored');
-            localStorage.setItem('pm_balance', (d.balance||0).toFixed(2));
-            syncPinCache(d);
-          } else {
-            showScreen('screen-login'); return;
-          }
-        } catch(e) {
-          // Offline and no cache -- must login
-          showScreen('screen-login'); return;
-        }
-      } else {
-        showScreen('screen-login');
-        return;
-      }
+      showScreen('screen-login');
+      return;
     }
 
-    // Phone exists on device -- go straight to home immediately
     CURRENT_USER.phone = phone;
-    CURRENT_USER.name  = name || '';
-    CURRENT_USER.upi   = upi  || '';
+    CURRENT_USER.name  = name;
+    CURRENT_USER.upi   = upi;
     refreshPinSettingsUI();
     showScreen('screen-home');
-    const nameEl = document.getElementById('display-name');
-    if (nameEl) nameEl.textContent = 'Hi, ' + (name || phone) + ' 👋';
-
-    // Background Firestore sync (non-blocking -- user is already on home)
-    try {
-      const snap = await getDocFromServer(doc(db, 'users', phone));
-      if (!snap.exists()) { console.warn('[PM] User doc missing -- may be deleted'); return; }
-      const data = snap.data();
-
-      // Sync latest data from Firestore into cache
-      CURRENT_USER.name = data.name || name || '';
-      CURRENT_USER.upi  = data.upi  || upi  || '';
-      localStorage.setItem('pm_name',    CURRENT_USER.name);
-      localStorage.setItem('pm_upi',     CURRENT_USER.upi);
-      localStorage.setItem('pm_balance', (data.balance||0).toFixed(2));
-      syncPinCache(data);
-      const nameEl2 = document.getElementById('display-name');
-      if (nameEl2) nameEl2.textContent = 'Hi, ' + CURRENT_USER.name + ' 👋';
-      replayPendingVouchers().catch(e => console.warn('Offline replay error:', e));
-
-    } catch(e) {
-      // Offline -- already showing home from cache above, nothing to do
-      console.warn('Init Firestore check failed (offline?):', e.message);
-    }
-  };
+  }
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', run);
