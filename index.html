@@ -672,15 +672,12 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
 
 <!-- SPLASH: shown while JS decides login vs home -->
 <script>
-// DEBUG: show localStorage on screen so we can see what is stored
-document.addEventListener("DOMContentLoaded", function() {
-  var keys = ["pm_phone","pm_name","pm_fp","pm_known_phones","pm_logged_in","pm_device_token"];
-  var info = keys.map(function(k) { return k + ": " + (localStorage.getItem(k) || "NULL"); }).join("\n");
-  var d = document.createElement("div");
-  d.style = "position:fixed;top:0;left:0;right:0;z-index:999999;background:red;color:white;font-size:12px;padding:8px;white-space:pre;word-break:break-all;";
-  d.textContent = "LOCALSTORAGE DEBUG:\n" + info;
-  document.body.appendChild(d);
-});
+// Force SW update on every load so new app.js is always served
+if (navigator.serviceWorker) {
+  navigator.serviceWorker.getRegistrations().then(function(regs) {
+    regs.forEach(function(reg) { reg.update(); });
+  });
+}
 window.__PM_SPLASH_TIMEOUT = setTimeout(function() {
   var sp = document.getElementById("splash-screen");
   if (sp) sp.style.display = "none";
