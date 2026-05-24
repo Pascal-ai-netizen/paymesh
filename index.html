@@ -1167,13 +1167,13 @@ if ('serviceWorker' in navigator) {
           <input type="number" id="bt-send-amount" placeholder="0.00" min="1" inputmode="decimal" />
         </div>
         <div class="form-group" style="margin-top:8px;">
-          <label>Receiver's BT Code</label>
+          <label>Receiver’s Code</label>
           <input type="text" id="bt-code-input" placeholder="e.g. BT4X9KR" maxlength="8" style="font-family:var(--mono);font-size:20px;font-weight:700;letter-spacing:4px;text-transform:uppercase;text-align:center;" oninput="this.value=this.value.toUpperCase()" />
           <div style="font-size:12px;color:var(--text3);margin-top:6px;">Ask the receiver to tap Receive and share their code with you</div>
         </div>
         <button type="button" onclick="window.btRedeemCode()" class="btn-primary" id="bt-scan-btn" style="background:linear-gradient(135deg,#4D9FFF,#2d7fff);box-shadow:0 4px 20px rgba(77,159,255,0.3);color:#fff;">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:8px;vertical-align:middle;"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-          <span>Send via Bluetooth</span>
+          <span>Send via Quick Transfer</span>
         </button>
       </div>
       <div id="bt-send-status" class="card" style="display:none;text-align:center;padding:24px;">
@@ -1188,10 +1188,10 @@ if ('serviceWorker' in navigator) {
     <div id="bt-receive-panel" style="display:none;">
       <div class="card" style="text-align:center;padding:28px 20px;margin-bottom:14px;">
         <div id="bt-receive-anim" style="width:80px;height:80px;border-radius:50%;background:rgba(77,159,255,0.1);border:2px solid rgba(77,159,255,0.3);display:flex;align-items:center;justify-content:center;margin:0 auto 16px;animation:btPulse 2s ease-in-out infinite;">
-          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#4D9FFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6.5 6.5 17.5 17.5 12 23 12 1 17.5 6.5 6.5 17.5"/></svg>
+          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#4D9FFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 17 12 21 16 17"/><line x1="12" y1="3" x2="12" y2="21"/></svg>
         </div>
         <div id="bt-receive-title" style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:8px;">Waiting for sender...</div>
-        <div id="bt-receive-sub" style="font-size:13px;color:var(--text2);margin-bottom:16px;">Keep this screen open. Ask the sender to scan for your device.</div>
+        <div id="bt-receive-sub" style="font-size:13px;color:var(--text2);margin-bottom:16px;">Generating your receive code...</div>
         <div id="bt-receive-msg" class="msg"></div>
       </div>
     </div>
@@ -1296,9 +1296,19 @@ window.btStartSend = function() {
 
 window.btStartReceive = function() {
   _qtShowPanel(false, true, false, false);
-  // btAdvertise is defined in app.js module -- call when ready
-  if (window._btAdvertise) window._btAdvertise();
-  else document.addEventListener('pm-bt-ready', function() { window._btAdvertise && window._btAdvertise(); }, { once: true });
+  var ra = 0, ri = setInterval(function() {
+    ra++;
+    if (window._btAdvertise) { clearInterval(ri); window._btAdvertise(); }
+    else if (ra > 50) { clearInterval(ri); var s = document.getElementById('bt-receive-sub'); if(s) s.textContent='App not ready. Please refresh.'; }
+  }, 100);
+};
+
+window.btRedeemCode = function() {
+  var ra = 0, ri = setInterval(function() {
+    ra++;
+    if (window._btRedeemCode) { clearInterval(ri); window._btRedeemCode(); }
+    else if (ra > 50) { clearInterval(ri); var m = document.getElementById('bt-send-msg'); if(m){m.className='msg error';m.textContent='App not ready. Please refresh.';} }
+  }, 100);
 };
 
 window.btBack = function() {
