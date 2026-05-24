@@ -379,9 +379,10 @@ window.closeOverlay = function() {
 window.showScreen = function(id) {
   const target = document.getElementById(id);
   if (!target) { console.warn('Screen not found:', id); return; }
-  // Hide splash screen on first call
+  // Hide splash and cancel safety timeout
   const splash = document.getElementById('splash-screen');
   if (splash) splash.style.display = 'none';
+  if (window.__PM_SPLASH_TIMEOUT) { clearTimeout(window.__PM_SPLASH_TIMEOUT); window.__PM_SPLASH_TIMEOUT = null; }
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   target.classList.add('active');
   target.scrollTop = 0;
@@ -1087,14 +1088,42 @@ window.stopScan = function() {
 
 (function init() {
   const run = async () => {
-    const phone = localStorage.getItem('pm_phone');
-    const name  = localStorage.getItem('pm_name');
-    const upi   = localStorage.getItem('pm_upi');
+    // Try pm_phone first. If missing, fall back to pm_known_phones (never cleared).
+    // This covers every migration path from every previous version.
+    let phone = localStorage.getItem('pm_phone');
+    let name  = localStorage.getItem('pm_name');
+    let upi   = localStorage.getItem('pm_upi');
 
-    const fp = localStorage.getItem('pm_fp');
-    if (!phone || !fp) {
-      showScreen('screen-login');
-      return;
+    if (!phone) {
+      // pm_phone missing -- try recovering from pm_known_phones
+      const known = JSON.parse(localStorage.getItem('pm_known_phones') || '[]');
+      if (known.length > 0) {
+        // Last known phone -- restore it so next time pm_phone is set
+        phone = known[known.length - 1];
+        // Fetch name/upi from Firestore since we lost the local cache
+        try {
+          const snap = await getDocFromServer(doc(db, 'users', phone));
+          if (snap.exists()) {
+            const d = snap.data();
+            name = d.name || '';
+            upi  = d.upi  || '';
+            localStorage.setItem('pm_phone',   phone);
+            localStorage.setItem('pm_name',    name);
+            localStorage.setItem('pm_upi',     upi);
+            localStorage.setItem('pm_fp',      'restored');
+            localStorage.setItem('pm_balance', (d.balance||0).toFixed(2));
+            syncPinCache(d);
+          } else {
+            showScreen('screen-login'); return;
+          }
+        } catch(e) {
+          // Offline and no cache -- must login
+          showScreen('screen-login'); return;
+        }
+      } else {
+        showScreen('screen-login');
+        return;
+      }
     }
 
     // Phone exists on device -- go straight to home immediately
@@ -1109,7 +1138,7 @@ window.stopScan = function() {
     // Background Firestore sync (non-blocking -- user is already on home)
     try {
       const snap = await getDocFromServer(doc(db, 'users', phone));
-      if (!snap.exists()) { forceRelogin(); return; }
+      if (!snap.exists()) { console.warn('[PM] User doc missing -- may be deleted'); return; }
       const data = snap.data();
 
       // Sync latest data from Firestore into cache
