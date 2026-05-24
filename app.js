@@ -1149,9 +1149,141 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 
-// Expose QT Firebase functions to inline script
+
+
+async function btAdvertise() {
+  const titleEl = document.getElementById('bt-receive-title');
+  const subEl   = document.getElementById('bt-receive-sub');
+  const msgEl   = document.getElementById('bt-receive-msg');
+
+  if (!CURRENT_USER.phone) {
+    if (subEl) subEl.textContent = 'Session error — please log out and back in.';
+    return;
+  }
+
+  if (titleEl) titleEl.textContent = 'Generating your code...';
+  if (subEl)   subEl.textContent   = 'Please wait...';
+
+  try {
+    const shortCode = 'BT' + Math.random().toString(36).substring(2, 7).toUpperCase();
+
+    await setDoc(doc(db, 'bt_requests', shortCode), {
+      code:         shortCode,
+      receiver:     CURRENT_USER.phone,
+      receiverName: CURRENT_USER.name,
+      status:       'waiting',
+      createdAt:    new Date().toISOString(),
+      expiresAt:    new Date(Date.now() + 5 * 60 * 1000).toISOString()
+    });
+
+    if (titleEl) titleEl.textContent = 'Your Receive Code';
+    if (subEl)   subEl.innerHTML = `
+      <div style="font-family:var(--mono);font-size:40px;font-weight:700;color:#4D9FFF;letter-spacing:6px;margin:16px 0;">${shortCode}</div>
+      <div style="font-size:13px;color:var(--text2);">Share this code with the sender.<br>They enter it in Send mode.<br><br><span style="color:var(--text3);">Expires in 5 minutes.</span></div>
+    `;
+
+    const unsubBT = onSnapshot(doc(db, 'bt_requests', shortCode), async (snap) => {
+      if (!snap.exists()) return;
+      const data = snap.data();
+      if (data.status === 'completed') {
+        unsubBT();
+        if (navigator.vibrate) navigator.vibrate([100, 50, 200]);
+        if (titleEl) titleEl.textContent = '✅ Money Received!';
+        if (subEl)   subEl.innerHTML = `
+          <div style="font-size:32px;font-weight:800;color:var(--em);margin:12px 0;">+₹${data.amount.toFixed(2)}</div>
+          <div style="color:var(--text2);font-size:14px;">From ${data.senderName}</div>
+        `;
+        const newBal = parseFloat(localStorage.getItem('pm_balance') || '0') + data.amount;
+        localStorage.setItem('pm_balance', newBal.toFixed(2));
+        setTimeout(() => showScreen('screen-home'), 2500);
+      }
+    });
+
+    setTimeout(() => {
+      unsubBT();
+      updateDoc(doc(db, 'bt_requests', shortCode), { status: 'expired' }).catch(() => {});
+    }, 5 * 60 * 1000);
+
+  } catch(e) {
+    if (subEl) subEl.textContent = 'Failed to generate code. Check internet and try again.';
+    console.error(e);
+  }
+}
+
+window.btRedeemCode = async function() {
+  const codeEl   = document.getElementById('bt-code-input');
+  const amountEl = document.getElementById('bt-send-amount');
+  const msg      = document.getElementById('bt-send-msg');
+
+  const code   = (codeEl?.value   || '').trim().toUpperCase();
+  const amount = parseFloat(amountEl?.value || '0');
+
+  if (!code || code.length < 4) { showMsg(msg, 'error', 'Enter the receiver\'s code'); return; }
+  if (!amount || amount <= 0)   { showMsg(msg, 'error', 'Enter a valid amount'); return; }
+  if (!CURRENT_USER.phone)      { showMsg(msg, 'error', 'Session error — please refresh'); return; }
+
+  try { await requirePin('Confirm Transfer', `Send ₹${amount.toFixed(2)} via Quick Transfer`); }
+  catch(e) { return; }
+
+  showMsg(msg, 'success', 'Processing...');
+
+  try {
+    const btRef  = doc(db, 'bt_requests', code);
+    const btSnap = await getDocFromServer(btRef);
+
+    if (!btSnap.exists())                        throw new Error('Code not found. Ask receiver to generate a new one.');
+    const btData = btSnap.data();
+    if (btData.status !== 'waiting')             throw new Error('This code has already been used or expired.');
+    if (new Date(btData.expiresAt) < new Date()) throw new Error('Code expired. Ask receiver for a new one.');
+    if (btData.receiver === CURRENT_USER.phone)  throw new Error('You cannot send to yourself.');
+
+    const receiverPhone = btData.receiver;
+    const receiverName  = btData.receiverName;
+    const sRef = doc(db, 'users', CURRENT_USER.phone);
+    const rRef = doc(db, 'users', receiverPhone);
+
+    await runTransaction(db, async (tx) => {
+      const sSnap = await tx.get(sRef);
+      const rSnap = await tx.get(rRef);
+      if (!sSnap.exists()) throw new Error('Your account not found.');
+      if (!rSnap.exists()) throw new Error('Receiver not found on PayMesh.');
+      const sBal = sSnap.data().balance || 0;
+      const rBal = rSnap.data().balance || 0;
+      if (sBal < amount) throw new Error(`Insufficient balance. You have ₹${sBal.toFixed(2)}`);
+      tx.update(sRef, { balance: sBal - amount });
+      tx.update(rRef, { balance: rBal + amount });
+      tx.update(btRef, {
+        status: 'completed', amount,
+        sender: CURRENT_USER.phone, senderName: CURRENT_USER.name,
+        completedAt: new Date().toISOString()
+      });
+    });
+
+    const time = new Date().toISOString();
+    await Promise.all([
+      addDoc(collection(db, 'transactions'), {
+        phone: CURRENT_USER.phone, label: `Quick Transfer to ${receiverName}`,
+        amount, type: 'debit', time
+      }),
+      addDoc(collection(db, 'transactions'), {
+        phone: receiverPhone, label: `Quick Transfer from ${CURRENT_USER.name}`,
+        amount, type: 'credit', time
+      })
+    ]);
+
+    const newBal = parseFloat(localStorage.getItem('pm_balance') || '0') - amount;
+    localStorage.setItem('pm_balance', Math.max(0, newBal).toFixed(2));
+    if (navigator.vibrate) navigator.vibrate([100, 50, 200]);
+    showOverlay('', '✅ Sent!', `₹${amount.toFixed(2)} sent to ${receiverName}`);
+    if (codeEl)   codeEl.value   = '';
+    if (amountEl) amountEl.value = '';
+
+  } catch(e) {
+    showMsg(msg, 'error', e.message || 'Transfer failed. Try again.');
+    console.error(e);
+  }
+};
+
+// Expose AFTER functions are defined
 window._btAdvertise  = btAdvertise;
-window._btRedeemCode = btRedeemCode;
-document.dispatchEvent(new Event('pm-bt-ready'));
-
-
+window._btRedeemCode = window.btRedeemCode;
