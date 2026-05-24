@@ -573,7 +573,18 @@ function forceRelogin(reason) {
 
 let _homeListenersActive = false;
 async function loadHomeData() {
-  if (!CURRENT_USER.phone) { showScreen('screen-login'); return; }
+  // Fallback: read from localStorage if CURRENT_USER not set yet
+  if (!CURRENT_USER.phone) {
+    const savedPhone = localStorage.getItem('pm_phone');
+    if (savedPhone) {
+      CURRENT_USER.phone = savedPhone;
+      CURRENT_USER.name  = localStorage.getItem('pm_name')  || '';
+      CURRENT_USER.upi   = localStorage.getItem('pm_upi')   || '';
+    } else {
+      showScreen('screen-login');
+      return;
+    }
+  }
 
   const displayName = CURRENT_USER.name ? `Hi, ${CURRENT_USER.name} 👋` : 'Welcome 👋';
   document.getElementById('display-name').textContent = displayName;
