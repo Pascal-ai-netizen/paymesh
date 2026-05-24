@@ -1,6 +1,5 @@
-const CACHE_NAME = 'paymesh-v99';
+const CACHE_NAME = 'paymesh-v100';
 
-// On install — cache only static assets, NOT app.js
 self.addEventListener('install', (e) => {
   e.waitUntil(
     caches.open(CACHE_NAME).then(cache => cache.addAll([
@@ -12,7 +11,6 @@ self.addEventListener('install', (e) => {
   self.skipWaiting();
 });
 
-// On activate — delete ALL old caches
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys().then(keys =>
@@ -22,24 +20,27 @@ self.addEventListener('activate', (e) => {
   self.clients.claim();
 });
 
-// Fetch strategy:
-// - index.html and app.js → ALWAYS network first, never serve from cache
-// - Firebase → always network
-// - Everything else → cache first
 self.addEventListener('fetch', (e) => {
   const url = e.request.url;
 
-  // Never cache app logic files — always get fresh from network
-  if (url.includes('app.js') || url.includes('index.html') ||
-      url.includes('firebase') || url.includes('firestore') ||
-      url.includes('gstatic.com/firebasejs')) {
+  // NEVER cache these — always fetch fresh from network
+  const neverCache =
+    url.includes('app.js') ||
+    url.includes('index.html') ||
+    url.includes('sw.js') ||
+    url.includes('firebase') ||
+    url.includes('firestore') ||
+    url.includes('gstatic.com/firebasejs') ||
+    e.request.mode === 'navigate'; // THIS covers /paymesh/ navigation requests
+
+  if (neverCache) {
     e.respondWith(
-      fetch(e.request).catch(() => caches.match(e.request))
+      fetch(e.request).catch(() => caches.match('/paymesh/index.html'))
     );
     return;
   }
 
-  // Cache first for icons, fonts, etc.
+  // Cache first for icons, fonts only
   e.respondWith(
     caches.match(e.request).then(cached => {
       if (cached) return cached;
