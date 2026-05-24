@@ -11,9 +11,6 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="PayMesh">
 <meta name="description" content="PayMesh — QR payments. Send, receive, and create vouchers instantly.">
-<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-<meta http-equiv="Pragma" content="no-cache">
-<meta http-equiv="Expires" content="0">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192-1.png">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192-1.png">
@@ -674,6 +671,18 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
 <div class="ambient"></div>
 
 <!-- SPLASH: shown while JS decides login vs home -->
+<script>
+// Runs immediately before anything else -- check if user is logged in
+// If pm_phone exists in localStorage, user is logged in on this device
+window.__PM_PHONE = localStorage.getItem("pm_phone") || null;
+// Safety net: if app.js fails to run within 5s, hide splash and show login
+window.__PM_SPLASH_TIMEOUT = setTimeout(function() {
+  var sp = document.getElementById("splash-screen");
+  if (sp) sp.style.display = "none";
+  var login = document.getElementById("screen-login");
+  if (login) login.classList.add("active");
+}, 5000);
+</script>
 <div id="splash-screen" style="position:fixed;inset:0;z-index:99999;background:#03050A;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;">
   <svg width="48" height="48" viewBox="0 0 32 32" fill="none"><path d="M18 4L8 18H16L14 28L24 14H16L18 4Z" fill="url(#spGrad)"/><defs><linearGradient id="spGrad" x1="8" y1="4" x2="24" y2="28" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#00E87A"/><stop offset="100%" stop-color="#00FFA3"/></linearGradient></defs></svg>
   <div style="font-family:'Space Grotesk',sans-serif;font-size:22px;font-weight:700;color:#EEF2FF;">Pay<span style="color:#00E87A">Mesh</span></div>
