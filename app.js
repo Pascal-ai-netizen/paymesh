@@ -379,6 +379,9 @@ window.closeOverlay = function() {
 window.showScreen = function(id) {
   const target = document.getElementById(id);
   if (!target) { console.warn('Screen not found:', id); return; }
+  // Hide splash screen on first call
+  const splash = document.getElementById('splash-screen');
+  if (splash) splash.style.display = 'none';
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   target.classList.add('active');
   target.scrollTop = 0;
@@ -490,21 +493,12 @@ window.loginUser = async function() {
       showMsg(msg, 'success', `Account created! Welcome, ${finalName}!`);
     }
 
-    // Store session keys FIRST so even if fingerprint write fails, user is logged in
     addKnownPhone(phone);
     localStorage.setItem('pm_name',  finalName);
     localStorage.setItem('pm_phone', phone);
     localStorage.setItem('pm_upi',   finalUpi);
+    localStorage.setItem('pm_fp',    generateDeviceToken());
 
-    // Fingerprint write in background -- non-blocking
-    try {
-      const fingerprint = generateDeviceToken();
-      localStorage.setItem('pm_fingerprint', fingerprint);
-      updateDoc(userRef, { fingerprint }).catch(() => {});
-    } catch(e) {}
-
-    // Fingerprint stored above -- that's the only session key needed
-    sessionStorage.removeItem('pm_session_phone');
 
     CURRENT_USER.name  = finalName;
     CURRENT_USER.phone = phone;
@@ -532,7 +526,7 @@ window.logoutUser = function() {
   if (!confirm('Log out of PayMesh?')) return;
   const lastPhone = CURRENT_USER.phone; // remember before clearing
   teardownListeners();
-  ['pm_name','pm_phone','pm_upi','pm_logged_in','pm_balance','pm_fingerprint','pm_device_token'].forEach(k => localStorage.removeItem(k));
+  ['pm_name','pm_phone','pm_upi','pm_logged_in','pm_balance','pm_fingerprint','pm_device_token','pm_fp'].forEach(k => localStorage.removeItem(k));
   sessionStorage.removeItem('pm_session_phone');
   CURRENT_USER.name = ''; CURRENT_USER.phone = ''; CURRENT_USER.upi = '';
   _rememberMe = false;
@@ -565,7 +559,7 @@ function teardownListeners() {
 
 function forceRelogin(reason) {
   teardownListeners();
-  ['pm_name','pm_phone','pm_upi','pm_logged_in','pm_balance','pm_fingerprint','pm_device_token'].forEach(k => localStorage.removeItem(k));
+  ['pm_name','pm_phone','pm_upi','pm_logged_in','pm_balance','pm_fingerprint','pm_device_token','pm_fp'].forEach(k => localStorage.removeItem(k));
   sessionStorage.removeItem('pm_session_phone');
   CURRENT_USER.name = ''; CURRENT_USER.phone = ''; CURRENT_USER.upi = '';
   if (reason) alert(reason);
@@ -1097,9 +1091,8 @@ window.stopScan = function() {
     const name  = localStorage.getItem('pm_name');
     const upi   = localStorage.getItem('pm_upi');
 
-    // ONLY gate: if no phone stored on this device, show login.
-    // Phone number is written on first login and never removed unless user logs out.
-    if (!phone) {
+    const fp = localStorage.getItem('pm_fp');
+    if (!phone || !fp) {
       showScreen('screen-login');
       return;
     }
