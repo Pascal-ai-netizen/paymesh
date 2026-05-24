@@ -1,4 +1,4 @@
-const CACHE_NAME = 'paymesh-v10';
+const CACHE_NAME = 'paymesh-v99';
 
 // On install — cache only static assets, NOT app.js
 self.addEventListener('install', (e) => {

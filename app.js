@@ -1104,10 +1104,11 @@ window.stopScan = function() {
     showScreen('screen-home');
   }
 
+  // Small delay ensures localStorage is fully readable in PWA standalone mode
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', run);
+    document.addEventListener('DOMContentLoaded', function() { setTimeout(run, 100); });
   } else {
-    run();
+    setTimeout(run, 100);
   }
 })();
 
