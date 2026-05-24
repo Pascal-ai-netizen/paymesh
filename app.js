@@ -1090,23 +1090,18 @@ window.stopScan = function() {
 
 (function init() {
   const run = async () => {
-    // Simple fingerprint check: if this device has a stored phone + fingerprint, go home
-    const phone     = localStorage.getItem('pm_phone');
-    const finger    = localStorage.getItem('pm_fingerprint');
-    const name      = localStorage.getItem('pm_name');
-    const upi       = localStorage.getItem('pm_upi');
+    const phone = localStorage.getItem('pm_phone');
+    const name  = localStorage.getItem('pm_name');
+    const upi   = localStorage.getItem('pm_upi');
 
-    if (!phone || !finger) {
-      // No fingerprint stored -- show login
-      if (phone) {
-        const phoneEl = document.getElementById('login-phone');
-        if (phoneEl) { phoneEl.value = phone; detectExistingUser(phone); }
-      }
+    // ONLY gate: if no phone stored on this device, show login.
+    // Phone number is written on first login and never removed unless user logs out.
+    if (!phone) {
       showScreen('screen-login');
       return;
     }
 
-    // Fingerprint exists -- restore session immediately from cache
+    // Phone exists on device -- go straight to home immediately
     CURRENT_USER.phone = phone;
     CURRENT_USER.name  = name || '';
     CURRENT_USER.upi   = upi  || '';
@@ -1115,14 +1110,23 @@ window.stopScan = function() {
     const nameEl = document.getElementById('display-name');
     if (nameEl) nameEl.textContent = 'Hi, ' + (name || phone) + ' 👋';
 
-    // Then verify against Firestore in background (non-blocking)
+    // Background Firestore sync (non-blocking -- user is already on home)
     try {
       const snap = await getDocFromServer(doc(db, 'users', phone));
       if (!snap.exists()) { forceRelogin(); return; }
       const data = snap.data();
 
-      // If Firestore has a different fingerprint it means user logged in elsewhere
-      if (data.fingerprint && data.fingerprint !== finger) {
+      // Write fingerprint if not already stored (migration for existing users)
+      const finger = localStorage.getItem('pm_fingerprint');
+      if (!finger) {
+        const fp = generateDeviceToken();
+        localStorage.setItem('pm_fingerprint', fp);
+        await updateDoc(doc(db, 'users', phone), { fingerprint: fp });
+      }
+
+      // Kick out only if another device has a different fingerprint
+      const myFinger = localStorage.getItem('pm_fingerprint');
+      if (data.fingerprint && myFinger && data.fingerprint !== myFinger) {
         forceRelogin('Your account was signed in on another device.');
         return;
       }
