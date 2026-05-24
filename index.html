@@ -11,6 +11,9 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="PayMesh">
 <meta name="description" content="PayMesh — QR payments. Send, receive, and create vouchers instantly.">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192-1.png">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192-1.png">
@@ -670,10 +673,19 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
 <body>
 <div class="ambient"></div>
 
+<!-- SPLASH: shown while JS decides login vs home -->
+<div id="splash-screen" style="position:fixed;inset:0;z-index:99999;background:#03050A;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;">
+  <svg width="48" height="48" viewBox="0 0 32 32" fill="none"><path d="M18 4L8 18H16L14 28L24 14H16L18 4Z" fill="url(#spGrad)"/><defs><linearGradient id="spGrad" x1="8" y1="4" x2="24" y2="28" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#00E87A"/><stop offset="100%" stop-color="#00FFA3"/></linearGradient></defs></svg>
+  <div style="font-family:'Space Grotesk',sans-serif;font-size:22px;font-weight:700;color:#EEF2FF;">Pay<span style="color:#00E87A">Mesh</span></div>
+  <div style="width:36px;height:3px;background:rgba(0,232,122,0.2);border-radius:99px;overflow:hidden;"><div style="height:100%;width:40%;background:#00E87A;border-radius:99px;animation:splashBar 1s ease-in-out infinite alternate;"></div></div>
+</div>
+<style>@keyframes splashBar{from{transform:translateX(0)}to{transform:translateX(150%)}}</style>
+
+
 <!-- ══════════════════════════════════════
      LOGIN SCREEN
 ═══════════════════════════════════════ -->
-<div id="screen-login" class="screen active">
+<div id="screen-login" class="screen">
   <div class="login-wrap">
     <div class="login-logo">
       <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
@@ -704,11 +716,6 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
       <div class="form-group">
         <label>Phone Number</label>
         <input type="tel" id="login-phone" placeholder="10 digit number" maxlength="10">
-      </div>
-      <!-- Remember me toggle (shown for existing users) -->
-      <div id="login-remember-row" class="remember-row hidden" onclick="toggleRemember()">
-        <div class="toggle-track" id="remember-track"><div class="toggle-knob"></div></div>
-        <span class="remember-label">Remember me on this device</span>
       </div>
       <!-- FIX: type=button prevents accidental form submit -->
       <button type="button" class="btn-primary" id="login-btn" onclick="loginUser()">
@@ -1069,8 +1076,22 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
   </div>
 </div>
 
+<script>
+// Register SW FIRST before anything else loads
+// This ensures the NEW sw.js (v4) is picked up and old cache is cleared
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/paymesh/sw.js', { scope: '/paymesh/' })
+    .then(function(r) {
+      console.log('[PWA] SW registered:', r.scope);
+      // Force update check every page load
+      r.update();
+    })
+    .catch(function(e) { console.warn('[PWA] SW fail:', e); });
+}
+</script>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script type="module" src="app.js"></script>
+<script type="module" src="app.js?v=10"></script>
 
 <!-- PWA INSTALL BANNER -->
 <div id="pwa-install-banner" style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:9999;padding:14px 16px max(20px,env(safe-area-inset-bottom));background:rgba(7,11,20,0.98);backdrop-filter:blur(40px);-webkit-backdrop-filter:blur(40px);border-top:1px solid rgba(0,232,122,0.2);box-shadow:0 -16px 48px rgba(0,0,0,0.7);">
@@ -1086,13 +1107,6 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
 </div>
 
 <script>
-// SW must register before beforeinstallprompt fires
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/paymesh/sw.js', { scope: '/paymesh/' })
-    .then(function(r) { console.log('[PWA] SW ok:', r.scope); })
-    .catch(function(e) { console.warn('[PWA] SW fail:', e); });
-}
-
 // Capture install prompt as early as possible
 var _pwaDeferred = null;
 window.addEventListener('beforeinstallprompt', function(e) {
