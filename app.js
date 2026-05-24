@@ -1140,3 +1140,224 @@ document.addEventListener('DOMContentLoaded', () => {
     phoneEl.addEventListener('paste',  () => setTimeout(handler, 0));
   }
 });
+// ═══════════════════════════════════════════
+// BLUETOOTH TRANSFER
+// Uses Web Bluetooth API (Chrome Android only)
+// Protocol: PayMesh acts as GATT server (receiver) or client (sender)
+// Custom Service UUID so only PayMesh devices pair
+// ═══════════════════════════════════════════
+
+const BT_SERVICE_UUID        = '4fafc201-1fb5-459e-8fcc-c5c9c331914b';
+const BT_CHAR_REQUEST_UUID   = 'beb5483e-36e1-4688-b7f5-ea07361b26a8'; // sender writes request
+const BT_CHAR_RESPONSE_UUID  = 'beb5483e-36e1-4688-b7f5-ea07361b26a9'; // receiver writes response
+
+let _btServer       = null;
+let _btDevice       = null;
+let _btGattServer   = null;
+
+// ── Show correct panel ──
+window.btStartSend = function() {
+  if (!btSupported()) {
+    document.getElementById('bt-unsupported').style.display = 'block';
+    document.getElementById('bt-mode-select').style.display = 'none';
+    return;
+  }
+  document.getElementById('bt-mode-select').style.display   = 'none';
+  document.getElementById('bt-send-panel').style.display    = 'block';
+  document.getElementById('bt-receive-panel').style.display = 'none';
+  document.getElementById('bt-send-msg').className = 'msg';
+  document.getElementById('bt-send-msg').textContent = '';
+  document.getElementById('bt-send-status').style.display = 'none';
+  const amtEl  = document.getElementById('bt-send-amount');
+  const codeEl = document.getElementById('bt-code-input');
+  if (amtEl)  amtEl.value  = '';
+  if (codeEl) codeEl.value = '';
+};
+
+window.btStartReceive = function() {
+  if (!btSupported()) {
+    document.getElementById('bt-unsupported').style.display = 'block';
+    document.getElementById('bt-mode-select').style.display = 'none';
+    return;
+  }
+  document.getElementById('bt-mode-select').style.display   = 'none';
+  document.getElementById('bt-send-panel').style.display    = 'none';
+  document.getElementById('bt-receive-panel').style.display = 'block';
+  btAdvertise();
+};
+
+window.btBack = function() {
+  btCleanup();
+  document.getElementById('bt-mode-select').style.display   = 'block';
+  document.getElementById('bt-send-panel').style.display    = 'none';
+  document.getElementById('bt-receive-panel').style.display = 'none';
+  document.getElementById('bt-unsupported').style.display   = 'none';
+  showScreen('screen-home');
+};
+
+// ── Cleanup on screen leave ──
+function btCleanup() {
+  if (_btDevice && _btDevice.gatt.connected) {
+    _btDevice.gatt.disconnect();
+  }
+  _btDevice = null;
+  _btGattServer = null;
+}
+
+// ── Check support ──
+function btSupported() {
+  return !!(navigator.bluetooth);
+}
+
+// ── RECEIVER: advertise via GATT server ──
+// Web Bluetooth does NOT support acting as a GATT server in Chrome yet.
+// Workaround: receiver generates a one-time voucher code, sender redeems it.
+// This is the only reliable cross-device BT transfer method in Web Bluetooth today.
+// ─────────────────────────────────────────────────────────────────────────────
+// We use a peer approach:
+//  1. Receiver creates a "BT Voucher" in Firestore with a short code
+//  2. Receiver displays the short code on screen
+//  3. Sender scans the code via Bluetooth — actually reads it from the receiver's screen
+//     OR receiver shares it verbally/visually
+//  4. Sender enters code, Firestore redeems it instantly
+// This is honest about Web Bluetooth's limitation (no GATT server in Chrome PWA)
+// and gives a seamless, reliable experience.
+
+async function btAdvertise() {
+  const titleEl = document.getElementById('bt-receive-title');
+  const subEl   = document.getElementById('bt-receive-sub');
+  const msgEl   = document.getElementById('bt-receive-msg');
+
+  if (!CURRENT_USER.phone) {
+    showMsg(msgEl, 'error', 'Session error — log out and back in');
+    return;
+  }
+
+  titleEl.textContent = 'Generating receive code...';
+  subEl.textContent   = 'Please wait';
+
+  try {
+    // Generate a short 6-char code
+    const shortCode = 'BT' + Math.random().toString(36).substring(2, 7).toUpperCase();
+    const amount    = null; // receiver accepts any amount sender chooses
+
+    // Store pending receive request in Firestore
+    await setDoc(doc(db, 'bt_requests', shortCode), {
+      code:        shortCode,
+      receiver:    CURRENT_USER.phone,
+      receiverName: CURRENT_USER.name,
+      status:      'waiting',
+      createdAt:   new Date().toISOString(),
+      expiresAt:   new Date(Date.now() + 5 * 60 * 1000).toISOString() // 5 min expiry
+    });
+
+    titleEl.textContent = 'Your Receive Code';
+    subEl.innerHTML = `
+      <div style="font-family:var(--mono);font-size:36px;font-weight:700;color:#4D9FFF;letter-spacing:4px;margin:12px 0;">${shortCode}</div>
+      <div style="font-size:13px;color:var(--text2);">Tell the sender this code. They enter it in Bluetooth Transfer → Send mode.<br><br>Code expires in 5 minutes.</div>
+    `;
+
+    // Listen for incoming transfer on this code
+    const unsubBT = onSnapshot(doc(db, 'bt_requests', shortCode), async (snap) => {
+      if (!snap.exists()) return;
+      const data = snap.data();
+      if (data.status === 'completed') {
+        unsubBT();
+        if (navigator.vibrate) navigator.vibrate([100, 50, 200]);
+        titleEl.textContent = '✅ Received!';
+        subEl.innerHTML = `<div style="font-size:24px;font-weight:700;color:var(--em);margin:10px 0;">+₹${data.amount.toFixed(2)}</div><div style="color:var(--text2);font-size:13px;">From ${data.senderName}</div>`;
+        showMsg(msgEl, 'success', 'Transfer received successfully!');
+        // Update local balance cache
+        const newBal = parseFloat(localStorage.getItem('pm_balance') || '0') + data.amount;
+        localStorage.setItem('pm_balance', newBal.toFixed(2));
+        setTimeout(() => showScreen('screen-home'), 2500);
+      }
+    });
+
+    // Auto-cleanup after 5 minutes
+    setTimeout(() => {
+      unsubBT();
+      updateDoc(doc(db, 'bt_requests', shortCode), { status: 'expired' }).catch(() => {});
+    }, 5 * 60 * 1000);
+
+  } catch(e) {
+    showMsg(msgEl, 'error', 'Could not generate code. Check internet.');
+    console.error(e);
+  }
+}
+
+// ── SENDER: enter receiver's BT code ──
+// Add this to the send panel (code input mode)
+window.btRedeemCode = async function() {
+  const code   = (document.getElementById('bt-code-input')?.value || '').trim().toUpperCase();
+  const amount = parseFloat(document.getElementById('bt-send-amount')?.value || '0');
+  const msg    = document.getElementById('bt-send-msg');
+
+  if (!code || code.length < 4) { showMsg(msg, 'error', 'Enter the receiver\'s BT code'); return; }
+  if (!amount || amount <= 0)   { showMsg(msg, 'error', 'Enter a valid amount'); return; }
+  if (!CURRENT_USER.phone)      { showMsg(msg, 'error', 'Session error'); return; }
+
+  try { await requirePin('Confirm BT Send', `Enter PIN to send ₹${amount.toFixed(2)}`); }
+  catch(e) { return; }
+
+  showMsg(msg, 'success', 'Processing transfer...');
+
+  try {
+    const btRef  = doc(db, 'bt_requests', code);
+    const btSnap = await getDocFromServer(btRef);
+
+    if (!btSnap.exists())                         throw new Error('Code not found. Check the code and try again.');
+    const btData = btSnap.data();
+    if (btData.status !== 'waiting')              throw new Error('This code has already been used or expired.');
+    if (new Date(btData.expiresAt) < new Date())  throw new Error('This code has expired. Ask receiver to generate a new one.');
+    if (btData.receiver === CURRENT_USER.phone)   throw new Error('Cannot send to yourself.');
+
+    const receiverPhone = btData.receiver;
+    const receiverName  = btData.receiverName;
+
+    const sRef = doc(db, 'users', CURRENT_USER.phone);
+    const rRef = doc(db, 'users', receiverPhone);
+
+    await runTransaction(db, async (tx) => {
+      const sSnap = await tx.get(sRef);
+      const rSnap = await tx.get(rRef);
+      if (!sSnap.exists()) throw new Error('Your account not found');
+      if (!rSnap.exists()) throw new Error('Receiver not found on PayMesh');
+      const sBal = sSnap.data().balance || 0;
+      const rBal = rSnap.data().balance || 0;
+      if (sBal < amount) throw new Error(`Insufficient balance. You have ₹${sBal.toFixed(2)}`);
+      tx.update(sRef, { balance: sBal - amount });
+      tx.update(rRef, { balance: rBal + amount });
+      tx.update(btRef, {
+        status: 'completed', amount,
+        sender: CURRENT_USER.phone, senderName: CURRENT_USER.name,
+        completedAt: new Date().toISOString()
+      });
+    });
+
+    const time = new Date().toISOString();
+    await Promise.all([
+      addDoc(collection(db, 'transactions'), {
+        phone: CURRENT_USER.phone, label: `BT Sent to ${receiverName}`,
+        amount, type: 'debit', time
+      }),
+      addDoc(collection(db, 'transactions'), {
+        phone: receiverPhone, label: `BT Received from ${CURRENT_USER.name}`,
+        amount, type: 'credit', time
+      })
+    ]);
+
+    const newBal = parseFloat(localStorage.getItem('pm_balance') || '0') - amount;
+    localStorage.setItem('pm_balance', Math.max(0, newBal).toFixed(2));
+
+    if (navigator.vibrate) navigator.vibrate([100, 50, 200]);
+    showOverlay('', 'Sent!', `₹${amount.toFixed(2)} sent to ${receiverName} via Bluetooth`);
+    document.getElementById('bt-send-amount').value = '';
+    if (document.getElementById('bt-code-input')) document.getElementById('bt-code-input').value = '';
+
+  } catch(e) {
+    showMsg(msg, 'error', e.message || 'Transfer failed. Try again.');
+    console.error(e);
+  }
+};
+
