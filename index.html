@@ -1114,7 +1114,7 @@ if ('serviceWorker' in navigator) {
 <!-- ══ BLUETOOTH SCREEN ══ -->
 <div id="screen-bluetooth" class="screen">
   <div class="topbar">
-    <button type="button" class="back-btn" onclick="window.btBack && window.btBack()">
+    <button type="button" class="back-btn" onclick="window.btBack()">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
       Back
     </button>
@@ -1134,17 +1134,17 @@ if ('serviceWorker' in navigator) {
     <div id="bt-mode-select">
       <div class="card" style="text-align:center;padding:24px 20px 20px;margin-bottom:14px;">
         <div style="width:56px;height:56px;border-radius:16px;background:rgba(77,159,255,0.12);border:1px solid rgba(77,159,255,0.25);display:flex;align-items:center;justify-content:center;margin:0 auto 14px;">
-          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#4D9FFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6.5 6.5 17.5 17.5 12 23 12 1 17.5 6.5 6.5 17.5"/></svg>
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#4D9FFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
         </div>
         <div style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:6px;">Send or Receive?</div>
         <div style="font-size:13px;color:var(--text2);margin-bottom:20px;">Transfer PayMesh balance to any user instantly using a short code.</div>
         <div style="display:flex;gap:10px;">
-          <button type="button" onclick="window.btStartSend && window.btStartSend()" class="btn-primary" style="flex:1;background:linear-gradient(135deg,#4D9FFF,#2d7fff);box-shadow:0 4px 20px rgba(77,159,255,0.3);color:#fff;">
+          <button type="button" onclick="window.btStartSend()" class="btn-primary" style="flex:1;background:linear-gradient(135deg,#4D9FFF,#2d7fff);box-shadow:0 4px 20px rgba(77,159,255,0.3);color:#fff;">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;vertical-align:middle;"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
             <span>Send</span>
           </button>
-          <button type="button" onclick="window.btStartReceive && window.btStartReceive()" class="btn-primary" style="flex:1;">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;vertical-align:middle;"><polyline points="6.5 6.5 17.5 17.5 12 23 12 1 17.5 6.5 6.5 17.5"/></svg>
+          <button type="button" onclick="window.btStartReceive()" class="btn-primary" style="flex:1;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;vertical-align:middle;"><polyline points="8 17 12 21 16 17"/><line x1="12" y1="3" x2="12" y2="21"/></svg>
             <span>Receive</span>
           </button>
         </div>
@@ -1171,7 +1171,7 @@ if ('serviceWorker' in navigator) {
           <input type="text" id="bt-code-input" placeholder="e.g. BT4X9KR" maxlength="8" style="font-family:var(--mono);font-size:20px;font-weight:700;letter-spacing:4px;text-transform:uppercase;text-align:center;" oninput="this.value=this.value.toUpperCase()" />
           <div style="font-size:12px;color:var(--text3);margin-top:6px;">Ask the receiver to tap Receive and share their code with you</div>
         </div>
-        <button type="button" onclick="window.btRedeemCode && window.btRedeemCode()" class="btn-primary" id="bt-scan-btn" style="background:linear-gradient(135deg,#4D9FFF,#2d7fff);box-shadow:0 4px 20px rgba(77,159,255,0.3);color:#fff;">
+        <button type="button" onclick="window.btRedeemCode()" class="btn-primary" id="bt-scan-btn" style="background:linear-gradient(135deg,#4D9FFF,#2d7fff);box-shadow:0 4px 20px rgba(77,159,255,0.3);color:#fff;">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:8px;vertical-align:middle;"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
           <span>Send via Bluetooth</span>
         </button>
@@ -1207,31 +1207,7 @@ if ('serviceWorker' in navigator) {
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script type="module" src="app.js?v=12"></script>
-<script>
-// Safety wrapper: queue BT calls until module is ready
-(function() {
-  var queue = [];
-  function wrap(name) {
-    window[name] = function() {
-      var args = arguments;
-      if (window["_bt_ready"]) {
-        window["_bt_" + name] && window["_bt_" + name].apply(this, args);
-      } else {
-        queue.push({name: name, args: args});
-      }
-    };
-  }
-  // These will be overwritten by app.js module once loaded
-  // But if clicked before module loads, they queue and fire after
-  document.addEventListener("pm-ready", function() {
-    window["_bt_ready"] = true;
-    queue.forEach(function(q) {
-      window[q.name] && window[q.name].apply(window, q.args);
-    });
-    queue = [];
-  });
-})();
-</script>
+
 
 <!-- PWA INSTALL BANNER -->
 <div id="pwa-install-banner" style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:9999;padding:14px 16px max(20px,env(safe-area-inset-bottom));background:rgba(7,11,20,0.98);backdrop-filter:blur(40px);-webkit-backdrop-filter:blur(40px);border-top:1px solid rgba(0,232,122,0.2);box-shadow:0 -16px 48px rgba(0,0,0,0.7);">
@@ -1291,6 +1267,59 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 });
+</script>
+<script>
+// Quick Transfer panel navigation -- these run immediately, no Firebase needed
+// Panel switching works without waiting for module to load
+function _qtShowPanel(send, receive, mode, unsup) {
+  var s = document.getElementById('bt-send-panel');
+  var r = document.getElementById('bt-receive-panel');
+  var m = document.getElementById('bt-mode-select');
+  var u = document.getElementById('bt-unsupported');
+  if (s) s.style.display    = send    ? 'block' : 'none';
+  if (r) r.style.display    = receive ? 'block' : 'none';
+  if (m) m.style.display    = mode    ? 'block' : 'none';
+  if (u) u.style.display    = unsup   ? 'block' : 'none';
+}
+
+window.btStartSend = function() {
+  _qtShowPanel(true, false, false, false);
+  var msg = document.getElementById('bt-send-msg');
+  if (msg) { msg.className = 'msg'; msg.textContent = ''; }
+  var st = document.getElementById('bt-send-status');
+  if (st) st.style.display = 'none';
+  var a = document.getElementById('bt-send-amount');
+  var c = document.getElementById('bt-code-input');
+  if (a) a.value = '';
+  if (c) c.value = '';
+};
+
+window.btStartReceive = function() {
+  _qtShowPanel(false, true, false, false);
+  // btAdvertise is defined in app.js module -- call when ready
+  if (window._btAdvertise) window._btAdvertise();
+  else document.addEventListener('pm-bt-ready', function() { window._btAdvertise && window._btAdvertise(); }, { once: true });
+};
+
+window.btBack = function() {
+  var s = document.getElementById('bt-send-panel');
+  var r = document.getElementById('bt-receive-panel');
+  var u = document.getElementById('bt-unsupported');
+  var inSub = (s && s.style.display === 'block') ||
+              (r && r.style.display === 'block') ||
+              (u && u.style.display === 'block');
+  if (inSub) {
+    _qtShowPanel(false, false, true, false);
+  } else {
+    if (window.showScreen) window.showScreen('screen-home');
+  }
+};
+
+window.btRedeemCode = function() {
+  // Delegate to module function when ready
+  if (window._btRedeemCode) window._btRedeemCode();
+  else document.addEventListener('pm-bt-ready', function() { window._btRedeemCode && window._btRedeemCode(); }, { once: true });
+};
 </script>
 </body>
 </html>
