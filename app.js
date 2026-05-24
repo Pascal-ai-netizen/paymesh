@@ -1116,10 +1116,16 @@ window.stopScan = function() {
   }
 
   // Small delay ensures localStorage is fully readable in PWA standalone mode
+  function runAndSignal() {
+    run();
+    // Signal that app.js module is fully loaded and all window.* functions are ready
+    document.dispatchEvent(new Event('pm-ready'));
+  }
+
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', function() { setTimeout(run, 100); });
+    document.addEventListener('DOMContentLoaded', function() { setTimeout(runAndSignal, 100); });
   } else {
-    setTimeout(run, 100);
+    setTimeout(runAndSignal, 100);
   }
 })();
 
@@ -1147,13 +1153,8 @@ document.addEventListener('DOMContentLoaded', () => {
 // Custom Service UUID so only PayMesh devices pair
 // ═══════════════════════════════════════════
 
-const BT_SERVICE_UUID        = '4fafc201-1fb5-459e-8fcc-c5c9c331914b';
-const BT_CHAR_REQUEST_UUID   = 'beb5483e-36e1-4688-b7f5-ea07361b26a8'; // sender writes request
-const BT_CHAR_RESPONSE_UUID  = 'beb5483e-36e1-4688-b7f5-ea07361b26a9'; // receiver writes response
-
-let _btServer       = null;
-let _btDevice       = null;
-let _btGattServer   = null;
+// PayMesh Quick Transfer — short-code based instant transfer
+// Receiver gets a 6-char code, sender enters it to transfer funds via Firestore
 
 // ── Show correct panel ──
 window.btStartSend = function() {
@@ -1188,20 +1189,30 @@ window.btStartReceive = function() {
 
 window.btBack = function() {
   btCleanup();
-  document.getElementById('bt-mode-select').style.display   = 'block';
-  document.getElementById('bt-send-panel').style.display    = 'none';
-  document.getElementById('bt-receive-panel').style.display = 'none';
-  document.getElementById('bt-unsupported').style.display   = 'none';
-  showScreen('screen-home');
+  // If we're in a sub-panel, go back to mode select first
+  const sendPanel    = document.getElementById('bt-send-panel');
+  const receivePanel = document.getElementById('bt-receive-panel');
+  const unsupported  = document.getElementById('bt-unsupported');
+  const modeSelect   = document.getElementById('bt-mode-select');
+
+  const inSubPanel = (sendPanel    && sendPanel.style.display    === 'block') ||
+                     (receivePanel && receivePanel.style.display  === 'block') ||
+                     (unsupported  && unsupported.style.display   === 'block');
+
+  if (inSubPanel) {
+    if (modeSelect)   modeSelect.style.display   = 'block';
+    if (sendPanel)    sendPanel.style.display     = 'none';
+    if (receivePanel) receivePanel.style.display  = 'none';
+    if (unsupported)  unsupported.style.display   = 'none';
+  } else {
+    // Already at mode select — go home
+    showScreen('screen-home');
+  }
 };
 
 // ── Cleanup on screen leave ──
 function btCleanup() {
-  if (_btDevice && _btDevice.gatt.connected) {
-    _btDevice.gatt.disconnect();
-  }
-  _btDevice = null;
-  _btGattServer = null;
+  // Nothing to clean up — no active BT connection
 }
 
 // ── Check support ──
@@ -1338,11 +1349,11 @@ window.btRedeemCode = async function() {
     const time = new Date().toISOString();
     await Promise.all([
       addDoc(collection(db, 'transactions'), {
-        phone: CURRENT_USER.phone, label: `BT Sent to ${receiverName}`,
+        phone: CURRENT_USER.phone, label: `Quick Transfer to ${receiverName}`,
         amount, type: 'debit', time
       }),
       addDoc(collection(db, 'transactions'), {
-        phone: receiverPhone, label: `BT Received from ${CURRENT_USER.name}`,
+        phone: receiverPhone, label: `Quick Transfer from ${CURRENT_USER.name}`,
         amount, type: 'credit', time
       })
     ]);
@@ -1351,7 +1362,7 @@ window.btRedeemCode = async function() {
     localStorage.setItem('pm_balance', Math.max(0, newBal).toFixed(2));
 
     if (navigator.vibrate) navigator.vibrate([100, 50, 200]);
-    showOverlay('', 'Sent!', `₹${amount.toFixed(2)} sent to ${receiverName} via Bluetooth`);
+    showOverlay('', 'Sent!', `₹${amount.toFixed(2)} sent to ${receiverName} via Quick Transfer`);
     document.getElementById('bt-send-amount').value = '';
     if (document.getElementById('bt-code-input')) document.getElementById('bt-code-input').value = '';
 

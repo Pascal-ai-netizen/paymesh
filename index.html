@@ -842,7 +842,7 @@ window.__PM_SPLASH_TIMEOUT = setTimeout(function() {
           <polyline points="6.5 6.5 17.5 17.5 12 23 12 1 17.5 6.5 6.5 17.5"/>
         </svg>
       </div>
-      <span style="color:#4D9FFF">Bluetooth Transfer</span>
+      <span style="color:#4D9FFF">Quick Transfer</span>
     </button>
   </div>
 
@@ -1114,11 +1114,11 @@ if ('serviceWorker' in navigator) {
 <!-- ══ BLUETOOTH SCREEN ══ -->
 <div id="screen-bluetooth" class="screen">
   <div class="topbar">
-    <button type="button" class="back-btn" onclick="btBack()">
+    <button type="button" class="back-btn" onclick="window.btBack && window.btBack()">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
       Back
     </button>
-    <span class="screen-title">Bluetooth Transfer</span>
+    <span class="screen-title">Quick Transfer</span>
     <div style="width:60px"></div>
   </div>
   <div style="padding:16px 0 20px;">
@@ -1137,13 +1137,13 @@ if ('serviceWorker' in navigator) {
           <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#4D9FFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6.5 6.5 17.5 17.5 12 23 12 1 17.5 6.5 6.5 17.5"/></svg>
         </div>
         <div style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:6px;">Send or Receive?</div>
-        <div style="font-size:13px;color:var(--text2);margin-bottom:20px;">Transfer PayMesh balance directly between two phones via Bluetooth — no internet needed.</div>
+        <div style="font-size:13px;color:var(--text2);margin-bottom:20px;">Transfer PayMesh balance to any user instantly using a short code.</div>
         <div style="display:flex;gap:10px;">
-          <button type="button" onclick="btStartSend()" class="btn-primary" style="flex:1;background:linear-gradient(135deg,#4D9FFF,#2d7fff);box-shadow:0 4px 20px rgba(77,159,255,0.3);color:#fff;">
+          <button type="button" onclick="window.btStartSend && window.btStartSend()" class="btn-primary" style="flex:1;background:linear-gradient(135deg,#4D9FFF,#2d7fff);box-shadow:0 4px 20px rgba(77,159,255,0.3);color:#fff;">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;vertical-align:middle;"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
             <span>Send</span>
           </button>
-          <button type="button" onclick="btStartReceive()" class="btn-primary" style="flex:1;">
+          <button type="button" onclick="window.btStartReceive && window.btStartReceive()" class="btn-primary" style="flex:1;">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;vertical-align:middle;"><polyline points="6.5 6.5 17.5 17.5 12 23 12 1 17.5 6.5 6.5 17.5"/></svg>
             <span>Receive</span>
           </button>
@@ -1171,7 +1171,7 @@ if ('serviceWorker' in navigator) {
           <input type="text" id="bt-code-input" placeholder="e.g. BT4X9KR" maxlength="8" style="font-family:var(--mono);font-size:20px;font-weight:700;letter-spacing:4px;text-transform:uppercase;text-align:center;" oninput="this.value=this.value.toUpperCase()" />
           <div style="font-size:12px;color:var(--text3);margin-top:6px;">Ask the receiver to tap Receive and share their code with you</div>
         </div>
-        <button type="button" onclick="btRedeemCode()" class="btn-primary" id="bt-scan-btn" style="background:linear-gradient(135deg,#4D9FFF,#2d7fff);box-shadow:0 4px 20px rgba(77,159,255,0.3);color:#fff;">
+        <button type="button" onclick="window.btRedeemCode && window.btRedeemCode()" class="btn-primary" id="bt-scan-btn" style="background:linear-gradient(135deg,#4D9FFF,#2d7fff);box-shadow:0 4px 20px rgba(77,159,255,0.3);color:#fff;">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:8px;vertical-align:middle;"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
           <span>Send via Bluetooth</span>
         </button>
@@ -1206,7 +1206,32 @@ if ('serviceWorker' in navigator) {
 </style>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script type="module" src="app.js?v=11"></script>
+<script type="module" src="app.js?v=12"></script>
+<script>
+// Safety wrapper: queue BT calls until module is ready
+(function() {
+  var queue = [];
+  function wrap(name) {
+    window[name] = function() {
+      var args = arguments;
+      if (window["_bt_ready"]) {
+        window["_bt_" + name] && window["_bt_" + name].apply(this, args);
+      } else {
+        queue.push({name: name, args: args});
+      }
+    };
+  }
+  // These will be overwritten by app.js module once loaded
+  // But if clicked before module loads, they queue and fire after
+  document.addEventListener("pm-ready", function() {
+    window["_bt_ready"] = true;
+    queue.forEach(function(q) {
+      window[q.name] && window[q.name].apply(window, q.args);
+    });
+    queue = [];
+  });
+})();
+</script>
 
 <!-- PWA INSTALL BANNER -->
 <div id="pwa-install-banner" style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:9999;padding:14px 16px max(20px,env(safe-area-inset-bottom));background:rgba(7,11,20,0.98);backdrop-filter:blur(40px);-webkit-backdrop-filter:blur(40px);border-top:1px solid rgba(0,232,122,0.2);box-shadow:0 -16px 48px rgba(0,0,0,0.7);">
