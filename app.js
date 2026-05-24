@@ -490,16 +490,18 @@ window.loginUser = async function() {
       showMsg(msg, 'success', `Account created! Welcome, ${finalName}!`);
     }
 
-    // Generate a fingerprint for this device and store it both locally and in Firestore
-    const fingerprint = generateDeviceToken();
-    localStorage.setItem('pm_fingerprint', fingerprint);
-    await updateDoc(userRef, { fingerprint });
-
+    // Store session keys FIRST so even if fingerprint write fails, user is logged in
     addKnownPhone(phone);
-
-    localStorage.setItem('pm_name', finalName);
+    localStorage.setItem('pm_name',  finalName);
     localStorage.setItem('pm_phone', phone);
     localStorage.setItem('pm_upi',   finalUpi);
+
+    // Fingerprint write in background -- non-blocking
+    try {
+      const fingerprint = generateDeviceToken();
+      localStorage.setItem('pm_fingerprint', fingerprint);
+      updateDoc(userRef, { fingerprint }).catch(() => {});
+    } catch(e) {}
 
     // Fingerprint stored above -- that's the only session key needed
     sessionStorage.removeItem('pm_session_phone');
@@ -554,6 +556,7 @@ window.logoutUser = function() {
 function teardownListeners() {
   if (unsubBalance) { unsubBalance(); unsubBalance = null; }
   if (unsubTxns)    { unsubTxns();    unsubTxns    = null; }
+  _homeListenersActive = false;
 }
 
 // ═══════════════════════════════════════════
@@ -573,6 +576,7 @@ function forceRelogin(reason) {
 // HOME DATA — real-time listeners
 // ═══════════════════════════════════════════
 
+let _homeListenersActive = false;
 async function loadHomeData() {
   if (!CURRENT_USER.phone) { showScreen('screen-login'); return; }
 
@@ -581,20 +585,21 @@ async function loadHomeData() {
   const cached = parseFloat(localStorage.getItem('pm_balance') || '0');
   document.getElementById('wallet-balance').textContent = cached.toFixed(2);
 
+  // Only attach listeners once per session -- prevent stacking
+  if (_homeListenersActive) return;
+  _homeListenersActive = true;
   teardownListeners();
 
   unsubBalance = onSnapshot(
     doc(db, "users", CURRENT_USER.phone),
     (snap) => {
-      if (!snap.exists()) { forceRelogin(); return; }
-      const data = snap.data();
-
-      // ── SINGLE-DEVICE CHECK: if server token differs, this device was kicked ──
-      const localToken = getLocalToken();
-      if (localToken && data.deviceToken && data.deviceToken !== localToken) {
-        forceRelogin('Your account was logged in on another device. You have been signed out.');
+      if (!snap.exists()) {
+        // Don't forceRelogin on a single missing snapshot -- could be a network glitch.
+        // Only logout if account is confirmed deleted via a direct server fetch.
+        console.warn('[PM] Snapshot returned no document -- ignoring, may be transient');
         return;
       }
+      const data = snap.data();
 
       const bal = data.balance || 0;
       if (data.name && data.name !== CURRENT_USER.name) {
@@ -817,8 +822,6 @@ async function loadVouchersFromFirestore() {
   display.innerHTML = '<div style="text-align:center;color:var(--text3);padding:20px;font-size:13px">Loading vouchers…</div>';
   try {
     const q    = query(collection(db,"vouchers"), where("createdBy","==",CURRENT_USER.phone), where("status","==","UNUSED"));
-    const snap = await getDoc(doc(db,"_dummy_","_dummy_")).then(() => null).catch(() => null);
-    // Use getDocs for one-shot read
     const { getDocs } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
     const vSnap = await getDocs(q);
     display.innerHTML = '';
@@ -1115,21 +1118,6 @@ window.stopScan = function() {
       const snap = await getDocFromServer(doc(db, 'users', phone));
       if (!snap.exists()) { forceRelogin(); return; }
       const data = snap.data();
-
-      // Write fingerprint if not already stored (migration for existing users)
-      const finger = localStorage.getItem('pm_fingerprint');
-      if (!finger) {
-        const fp = generateDeviceToken();
-        localStorage.setItem('pm_fingerprint', fp);
-        await updateDoc(doc(db, 'users', phone), { fingerprint: fp });
-      }
-
-      // Kick out only if another device has a different fingerprint
-      const myFinger = localStorage.getItem('pm_fingerprint');
-      if (data.fingerprint && myFinger && data.fingerprint !== myFinger) {
-        forceRelogin('Your account was signed in on another device.');
-        return;
-      }
 
       // Sync latest data from Firestore into cache
       CURRENT_USER.name = data.name || name || '';
