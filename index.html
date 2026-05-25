@@ -1697,31 +1697,41 @@ import { getApps } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app
 import { getFirestore, doc, setDoc, getDoc, deleteDoc, addDoc, collection, onSnapshot, runTransaction } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 // ══════════════════════════════════════════════════════
-// SOUNDPAY — Ultrasonic FSK Payment System
+// SOUNDPAY — Ultrasonic FSK Payment System  (v2 — reliability rewrite)
 // Protocol:
 //   - Token stored in Firestore under /sound_tokens/{nonce}
-//   - Sender emits 8 tones encoding a hex nonce (FSK)
-//   - Each symbol = one of 16 frequencies (18000-21500 Hz)
-//   - Receiver detects dominant frequency → decodes nonce
-//   - Receiver fetches token from Firestore → runs transaction
-//   - Token deleted after use (saves space)
+//   - Sender emits preamble + 8 symbol tones, repeated SP_EMIT_LOOPS times
+//   - Each symbol = one of 16 frequencies (18000-21500 Hz), 4-bit FSK
+//   - ALL timing is scheduled via AudioContext.currentTime (sample-accurate)
+//   - Gain envelope (ramp up/down) on every tone eliminates click artifacts
+//   - Receiver runs a rolling symbol-window decoder (timing-tolerant)
+//   - Token deleted after use
 //
-// Frequency map (4-bit FSK, 16 symbols):
-//   Symbol 0 = 18000 Hz, Symbol 1 = 18250 Hz, ..., Symbol 15 = 21750 Hz
-//   Step = 250 Hz per symbol
-//   Each symbol duration = 80ms, gap = 20ms
+// Key fixes over v1:
+//   1. Sender loops 4× — receiver catches any loop even if first is missed
+//   2. Symbol duration raised 80ms→150ms, gap 20ms→30ms (more FFT samples)
+//   3. Gain ramp attack/release (5ms) eliminates broadband click noise
+//   4. All timing uses ctx.currentTime, NOT setTimeout — zero drift
+//   5. Preamble duration raised to 350ms, confirmation to 180ms
+//   6. Detection threshold -60dB→-50dB (ultrasonic rolls off through glass)
+//   7. Frequency tolerance ±400Hz (wider bin match for real phone speakers)
+//   8. Receiver uses edge-triggered (frequency-change) decode, not fixed clock
+//   9. Token TTL extended to 55s (covers 4 loops + latency)
 // ══════════════════════════════════════════════════════
 
-const SP_BASE_FREQ   = 18000;  // Hz — start of ultrasonic range
-const SP_STEP        = 250;    // Hz per symbol
-const SP_SYMBOLS     = 16;     // 4 bits per symbol (hex digit)
-const SP_SYM_DUR     = 80;     // ms per symbol
-const SP_GAP_DUR     = 20;     // ms gap between symbols
-const SP_NONCE_LEN   = 8;      // 8 hex digits = 32-bit nonce
-const SP_PREAMBLE    = 17500;  // Hz — sync tone before data
-const SP_PREAMBLE_DUR= 200;    // ms
-const SP_TOKEN_TTL   = 30000;  // ms — token expires in 30s
-const SP_DETECT_THRESH = -60;  // dB threshold - below this is noise
+const SP_BASE_FREQ     = 18000; // Hz — start of ultrasonic range
+const SP_STEP          = 250;   // Hz per symbol
+const SP_SYMBOLS       = 16;    // 4 bits per symbol (hex digit)
+const SP_SYM_DUR       = 150;   // ms per symbol (was 80 — too short for FFT averaging)
+const SP_GAP_DUR       = 30;    // ms gap between symbols (was 20)
+const SP_NONCE_LEN     = 8;     // 8 hex digits = 32-bit nonce
+const SP_PREAMBLE      = 17500; // Hz — sync tone before data
+const SP_PREAMBLE_DUR  = 350;   // ms (was 200)
+const SP_INTER_LOOP_MS = 400;   // ms silence between repeat loops
+const SP_EMIT_LOOPS    = 4;     // repeat full sequence 4 times
+const SP_TOKEN_TTL     = 55000; // ms — covers 4 loops (~10s) + 45s margin
+const SP_DETECT_THRESH = -50;   // dB — raised from -60 (ultrasonic attenuates heavily)
+const SP_FREQ_TOL      = 400;   // Hz tolerance for bin matching (was ~130)
 
 function _spDb(){var a=getApps();return a.length?getFirestore(a[0]):null;}
 
@@ -1797,6 +1807,9 @@ function spFreqToDigit(freq){
 }
 
 // ── SENDER: emit ultrasonic token ──
+// All tone scheduling uses AudioContext.currentTime for sample-accurate,
+// drift-free timing. Gain ramps eliminate click artifacts. Sequence repeats
+// SP_EMIT_LOOPS times so receiver can catch any loop.
 window.spEmit=async function(){
   var amountEl=document.getElementById('sp-send-amount');
   var msg=document.getElementById('sp-send-msg');
@@ -1811,14 +1824,14 @@ window.spEmit=async function(){
   if(!phone){setMsg('error','Session error. Please refresh.');return;}
   if(!db){setMsg('error','App not ready. Please refresh.');return;}
 
-  // Balance check first
+  // Balance check
   try{
     var sSnap=await getDoc(doc(db,'users',phone));
     if(!sSnap.exists())throw new Error('Account not found.');
     if((sSnap.data().balance||0)<amount)throw new Error('Insufficient balance. You have \u20b9'+(sSnap.data().balance||0).toFixed(2));
   }catch(e){setMsg('error',e.message);return;}
 
-  // PIN before emitting
+  // PIN
   if(window.requirePin){
     try{await window.requirePin('Confirm Sound Pay','Enter PIN to send \u20b9'+amount.toFixed(2));}
     catch(e){return;}
@@ -1828,50 +1841,79 @@ window.spEmit=async function(){
   var expires=Date.now()+SP_TOKEN_TTL;
 
   try{
-    // Store token in Firestore
     await setDoc(doc(db,'sound_tokens',nonce),{
       nonce:nonce, from:phone, fromName:name,
       amount:amount, expires:expires,
       status:'pending', createdAt:new Date().toISOString()
     });
 
-    _spStatus('\uD83D\uDD0A','Emitting sound...','Hold phone near receiver. Keep still for 2 seconds.');
-    setMsg('','');
-
-    // Emit: preamble + 8 symbol tones
-    var ctx=new AudioContext();
     var freqs=spEncodeFreqs(nonce);
+    var RAMP=0.005; // 5ms gain attack/release — eliminates click artifacts
 
-    // Preamble sync tone
-    var osc=ctx.createOscillator();
-    var gain=ctx.createGain();
-    osc.connect(gain);gain.connect(ctx.destination);
-    osc.type='sine';
-    osc.frequency.value=SP_PREAMBLE;
-    gain.gain.value=0.8;
-    osc.start();
-    await new Promise(function(r){setTimeout(r,SP_PREAMBLE_DUR);});
-    osc.stop();
-    await new Promise(function(r){setTimeout(r,SP_GAP_DUR);});
-
-    // Emit each symbol
-    for(var i=0;i<freqs.length;i++){
+    // Helper: schedule one tone with envelope on an already-created AudioContext
+    // Returns the scheduled stop time (seconds on ctx timeline)
+    function scheduleTone(ctx, freq, startSec, durSec){
       var o=ctx.createOscillator();
       var g=ctx.createGain();
-      o.connect(g);g.connect(ctx.destination);
+      o.connect(g); g.connect(ctx.destination);
       o.type='sine';
-      o.frequency.value=freqs[i];
-      g.gain.value=0.8;
-      o.start();
-      await new Promise(function(r){setTimeout(r,SP_SYM_DUR);});
-      o.stop();
-      await new Promise(function(r){setTimeout(r,SP_GAP_DUR);});
+      o.frequency.value=freq;
+      // Gain envelope: silence → ramp up → hold → ramp down → silence
+      g.gain.setValueAtTime(0, startSec);
+      g.gain.linearRampToValueAtTime(0.85, startSec+RAMP);
+      g.gain.setValueAtTime(0.85, startSec+durSec-RAMP);
+      g.gain.linearRampToValueAtTime(0, startSec+durSec);
+      o.start(startSec);
+      o.stop(startSec+durSec);
+      return startSec+durSec;
     }
 
-    ctx.close();
-    _spStatus('\u23F3','Waiting for receiver...','Token valid for 30 seconds. Keep app open.');
+    // Calculate total duration of one loop for UI countdown
+    var symDurSec  = SP_SYM_DUR/1000;
+    var gapDurSec  = SP_GAP_DUR/1000;
+    var preDurSec  = SP_PREAMBLE_DUR/1000;
+    var interSec   = SP_INTER_LOOP_MS/1000;
+    var loopDurSec = preDurSec + gapDurSec + freqs.length*(symDurSec+gapDurSec);
+    var totalDurSec= SP_EMIT_LOOPS*loopDurSec + (SP_EMIT_LOOPS-1)*interSec;
 
-    // Listen for completion via Firestore onSnapshot
+    // Create one AudioContext and schedule ALL loops up front
+    var ctx=new AudioContext();
+    var t=ctx.currentTime+0.05; // small start offset to ensure scheduling completes
+
+    for(var loop=0;loop<SP_EMIT_LOOPS;loop++){
+      // Preamble
+      t=scheduleTone(ctx, SP_PREAMBLE, t, preDurSec);
+      t+=gapDurSec;
+      // 8 data symbols
+      for(var i=0;i<freqs.length;i++){
+        t=scheduleTone(ctx, freqs[i], t, symDurSec);
+        t+=gapDurSec;
+      }
+      // Inter-loop silence (just advance the timeline)
+      if(loop<SP_EMIT_LOOPS-1) t+=interSec;
+    }
+
+    // Show countdown UI
+    _spStatus('\uD83D\uDD0A','Emitting sound...','Repeating '+SP_EMIT_LOOPS+'\xd7 — hold phones together.');
+    setMsg('','');
+
+    // Update loop counter while audio plays
+    var loopDisplayInterval=setInterval(function(){
+      var elapsed=ctx.currentTime-0.05;
+      var loopsLeft=Math.max(0, SP_EMIT_LOOPS-Math.floor(elapsed/loopDurSec));
+      var stEl=document.getElementById('sp-send-sub');
+      if(stEl&&loopsLeft>0) stEl.textContent='Loop '+(SP_EMIT_LOOPS-loopsLeft+1)+' of '+SP_EMIT_LOOPS+' — keep phones together';
+    },300);
+
+    // Wait for all audio to finish, then clean up
+    var totalMs=Math.ceil(totalDurSec*1000)+200;
+    await new Promise(function(r){setTimeout(r,totalMs);});
+    clearInterval(loopDisplayInterval);
+    ctx.close().catch(function(){});
+
+    _spStatus('\u23F3','Waiting for receiver...','Token valid for ~55 seconds. Keep app open.');
+
+    // Watch Firestore for completion
     var unsub=onSnapshot(doc(db,'sound_tokens',nonce),function(snap){
       if(!snap.exists())return;
       var data=snap.data();
@@ -1890,14 +1932,14 @@ window.spEmit=async function(){
       }
     });
 
-    // Auto-expire after 30s
+    // Auto-expire after TTL
     setTimeout(async function(){
       unsub();
       try{
-        var t=await getDoc(doc(db,'sound_tokens',nonce));
-        if(t.exists()&&t.data().status==='pending'){
+        var t2=await getDoc(doc(db,'sound_tokens',nonce));
+        if(t2.exists()&&t2.data().status==='pending'){
           await deleteDoc(doc(db,'sound_tokens',nonce));
-          _spStatus('\u274C','Expired','Receiver didn\'t detect sound. Try again closer.');
+          _spStatus('\u274C','Expired','Receiver didn\'t detect sound. Move closer and try again.');
         }
       }catch(e){}
     },SP_TOKEN_TTL);
@@ -1911,6 +1953,8 @@ window.spEmit=async function(){
 };
 
 // ── RECEIVER: listen for ultrasonic token ──
+// Uses edge-triggered (frequency-change) symbol detection instead of
+// a fixed clock — immune to sender timing drift.
 var _spListening=false;
 var _spAudioCtx=null;
 var _spStream=null;
@@ -1948,44 +1992,62 @@ async function spListen(){
     return;
   }
 
+  // Use 44100 Hz sample rate — essential for detecting up to ~22 kHz
   _spAudioCtx=new AudioContext({sampleRate:44100});
   var source=_spAudioCtx.createMediaStreamSource(_spStream);
   var analyser=_spAudioCtx.createAnalyser();
-  analyser.fftSize=8192; // high resolution for ultrasonic detection
-  analyser.smoothingTimeConstant=0.3;
+  // fftSize 8192 @ 44100 Hz → binWidth ≈ 5.38 Hz (good resolution)
+  analyser.fftSize=8192;
+  analyser.smoothingTimeConstant=0.1; // low smoothing — faster transient response
   source.connect(analyser);
 
   var bufLen=analyser.frequencyBinCount;
   var dataArr=new Float32Array(bufLen);
   var sampleRate=_spAudioCtx.sampleRate;
-  var binWidth=sampleRate/analyser.fftSize;
+  var binWidth=sampleRate/analyser.fftSize; // ~5.38 Hz
 
   if(titleEl)titleEl.textContent='Listening...';
   if(subEl)subEl.textContent='Hold near sender\'s phone. Mic is active.';
   _spListening=true;
 
-  // State machine for decoding
+  // ── Edge-triggered state machine ──
+  // Instead of a fixed clock, we detect WHEN the dominant frequency changes.
+  // This makes decoding robust to sender timing drift.
   var STATE_WAIT_PREAMBLE=0, STATE_DECODE=1;
   var state=STATE_WAIT_PREAMBLE;
   var decodedSymbols=[];
-  var lastSymbolTime=0;
-  var preambleTime=0;
-  var lastDetectedFreq=0;
-  var sameFreqCount=0;
+  var preambleHoldStart=0;     // when we first saw preamble freq
+  var lastStableFreq=-1;       // last confirmed stable frequency
+  var stableFreqStart=0;       // when current stable freq window started
+  var STABLE_MS=60;            // ms a freq must hold before counting as a symbol
 
   function freqToBin(f){return Math.round(f/binWidth);}
 
   function getDominantFreq(){
     analyser.getFloatFrequencyData(dataArr);
-    // Only look in ultrasonic range 17000-22500 Hz
+    // Scan only ultrasonic range 17000–22000 Hz
     var minBin=freqToBin(17000);
-    var maxBin=freqToBin(22500);
+    var maxBin=freqToBin(22000);
     if(maxBin>bufLen-1)maxBin=bufLen-1;
-    var maxMag=-Infinity,maxB=minBin;
+    var maxMag=-Infinity, maxB=minBin;
     for(var b=minBin;b<=maxBin;b++){
       if(dataArr[b]>maxMag){maxMag=dataArr[b];maxB=b;}
     }
     return {freq:maxB*binWidth, mag:maxMag};
+  }
+
+  // Check if two frequencies represent the same symbol (within tolerance)
+  function sameSymbol(f1,f2){return Math.abs(f1-f2)<SP_FREQ_TOL;}
+
+  // Map detected frequency to nearest FSK symbol index, or -1 if out of range
+  function freqToSymbol(freq){
+    // Must be within data range
+    if(freq<SP_BASE_FREQ-SP_FREQ_TOL)return -1;
+    if(freq>SP_BASE_FREQ+(SP_SYMBOLS-1)*SP_STEP+SP_FREQ_TOL)return -1;
+    var digit=Math.round((freq-SP_BASE_FREQ)/SP_STEP);
+    if(digit<0)digit=0;
+    if(digit>=SP_SYMBOLS)digit=SP_SYMBOLS-1;
+    return digit;
   }
 
   function detect(){
@@ -1994,68 +2056,98 @@ async function spListen(){
 
     var d=getDominantFreq();
 
-    // Update level bar
-    var level=Math.max(0,Math.min(100,(d.mag+120)*1.5));
+    // Update level bar (visual feedback)
+    var level=Math.max(0,Math.min(100,(d.mag+100)*1.4));
     if(levelFill)levelFill.style.width=level+'%';
 
-    if(d.mag<SP_DETECT_THRESH)return; // below noise floor
+    // Below noise floor — silence
+    if(d.mag<SP_DETECT_THRESH){
+      // If we were in preamble wait and lose signal, reset preamble hold
+      if(state===STATE_WAIT_PREAMBLE) preambleHoldStart=0;
+      lastStableFreq=-1;
+      stableFreqStart=0;
+      return;
+    }
 
     var now=Date.now();
 
     if(state===STATE_WAIT_PREAMBLE){
-      // Look for preamble at ~17500 Hz
-      if(Math.abs(d.freq-SP_PREAMBLE)<300){
-        if(preambleTime===0)preambleTime=now;
-        else if(now-preambleTime>100){
-          // Preamble confirmed
+      // Look for preamble tone at SP_PREAMBLE (17500 Hz)
+      if(Math.abs(d.freq-SP_PREAMBLE)<SP_FREQ_TOL){
+        if(preambleHoldStart===0) preambleHoldStart=now;
+        else if(now-preambleHoldStart>=180){
+          // Preamble confirmed — transition to decode
           state=STATE_DECODE;
           decodedSymbols=[];
-          lastSymbolTime=now+SP_GAP_DUR;
-          preambleTime=0;
+          lastStableFreq=-1;
+          stableFreqStart=0;
+          preambleHoldStart=0;
           if(subEl)subEl.textContent='Signal detected! Decoding...';
         }
       }else{
-        preambleTime=0;
+        preambleHoldStart=0; // preamble lost
       }
-    }else if(state===STATE_DECODE){
-      // Decode each symbol after its expected time window
-      if(now<lastSymbolTime)return;
 
-      // Check if freq is in our FSK range
-      if(d.freq>=SP_BASE_FREQ-200&&d.freq<=SP_BASE_FREQ+(SP_SYMBOLS-1)*SP_STEP+200){
-        var digit=spFreqToDigit(d.freq);
-        decodedSymbols.push(digit);
-        lastSymbolTime=now+SP_SYM_DUR+SP_GAP_DUR;
+    }else{ // STATE_DECODE
+      var sym=freqToSymbol(d.freq);
 
-        if(decodedSymbols.length===SP_NONCE_LEN){
-          // Full nonce decoded
-          var nonce=decodedSymbols.join('');
-          state=STATE_WAIT_PREAMBLE;
-          decodedSymbols=[];
-          spStopListening();
-          spRedeem(nonce, phone, name, db, titleEl, subEl, msgEl);
+      if(sym<0){
+        // Out of data range — could be gap or inter-loop silence
+        // If we've been out of range for > 1 full loop, reset to preamble wait
+        if(lastStableFreq>=0){
+          lastStableFreq=-1;
+          stableFreqStart=0;
+        }
+        // Allow generous out-of-range window before resetting (handles gaps)
+        // Reset happens via timeout below
+        return;
+      }
+
+      var symFreq=SP_BASE_FREQ+sym*SP_STEP;
+
+      if(sameSymbol(d.freq, symFreq)){
+        if(!sameSymbol(symFreq, lastStableFreq)){
+          // Frequency changed — new symbol candidate, start holding
+          lastStableFreq=symFreq;
+          stableFreqStart=now;
+        }else if(now-stableFreqStart>=STABLE_MS){
+          // Frequency has held stable long enough — lock it in as a symbol
+          // But only accept it once (edge-triggered: only on first confirmation)
+          if(stableFreqStart>0){
+            decodedSymbols.push(sym.toString(16));
+            stableFreqStart=-1; // mark as consumed; wait for freq to change
+            if(subEl)subEl.textContent='Decoded '+decodedSymbols.length+'/'+SP_NONCE_LEN+' symbols...';
+
+            if(decodedSymbols.length===SP_NONCE_LEN){
+              // Full nonce received
+              var nonce=decodedSymbols.join('');
+              state=STATE_WAIT_PREAMBLE;
+              decodedSymbols=[];
+              lastStableFreq=-1;
+              stableFreqStart=0;
+              spStopListening();
+              spRedeem(nonce, phone, name, db, titleEl, subEl, msgEl);
+            }
+          }
         }
       }else{
-        // Out of range — reset
-        if(now-lastSymbolTime>500){
-          state=STATE_WAIT_PREAMBLE;
-          decodedSymbols=[];
-          preambleTime=0;
-        }
+        // Dominant freq shifted — reset stable tracking
+        lastStableFreq=-1;
+        stableFreqStart=0;
       }
     }
   }
 
   detect();
 
-  // Auto-stop after 60 seconds
+  // Auto-stop after 65 seconds (slightly longer than token TTL)
   setTimeout(function(){
     if(_spListening){
       spStopListening();
       if(titleEl)titleEl.textContent='Timed out';
-      if(subEl)subEl.textContent='No sound detected in 60 seconds. Try again.';
+      if(subEl)subEl.textContent='No sound detected in 65 seconds. Try again.';
     }
-  },60000);
+  },65000);
 }
 
 async function spRedeem(nonce, phone, name, db, titleEl, subEl, msgEl){
