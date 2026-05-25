@@ -1147,12 +1147,3 @@ document.addEventListener('DOMContentLoaded', () => {
     phoneEl.addEventListener('paste',  () => setTimeout(handler, 0));
   }
 });
-// ═══════════════════════════════════════════
-// BLUETOOTH TRANSFER
-// Uses Web Bluetooth API (Chrome Android only)
-// Protocol: PayMesh acts as GATT server (receiver) or client (sender)
-// Custom Service UUID so only PayMesh devices pair
-// ═══════════════════════════════════════════
-
-
-
