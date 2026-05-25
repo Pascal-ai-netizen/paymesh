@@ -876,7 +876,15 @@ window.__PM_SPLASH_TIMEOUT = setTimeout(function() {
     </div>
     <button type="button" class="btn-primary" onclick="sendMoney()">Send Now</button>
     <div id="send-msg" class="msg"></div>
+    <div class="grid1">
+    <button type="button" class="action-btn" style="background:linear-gradient(135deg,rgba(0,210,190,0.12),rgba(0,210,190,0.06));border-color:rgba(0,210,190,0.25);" onclick="showScreen('screen-nfc')">
+      <div class="action-icon" style="background:rgba(0,210,190,0.15);border-color:rgba(0,210,190,0.3);">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#00D2BE" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7-3 11-6 11S6 15 6 8z"/><path d="M10 8a2 2 0 0 1 4 0"/></svg>
+      </div>
+      <span style="color:#00D2BE">NFC Pay</span>
+    </button>
   </div>
+</div>
 </div>
 
 <!-- ══════════════════════════════════════
@@ -1268,6 +1276,86 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 });
 </script>
+<!-- NFC SCREEN -->
+<div id="screen-nfc" class="screen">
+  <div class="topbar">
+    <button type="button" class="back-btn" onclick="nfcBack()">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+      Back
+    </button>
+    <span class="screen-title">NFC Pay</span>
+    <div style="width:60px"></div>
+  </div>
+  <div style="padding:16px 0 20px;">
+    <div id="nfc-unsupported" style="display:none;" class="card" style="text-align:center;padding:32px;">
+      <div style="font-size:36px;margin-bottom:12px;">&#128248;</div>
+      <div style="font-weight:600;color:var(--text);margin-bottom:8px;">NFC Not Supported</div>
+      <div style="font-size:13px;color:var(--text2);">Web NFC requires Chrome on Android. Please open PayMesh in Chrome browser.</div>
+    </div>
+    <div id="nfc-mode-select">
+      <div class="card" style="text-align:center;padding:24px 20px 20px;margin-bottom:14px;">
+        <div style="width:56px;height:56px;border-radius:16px;background:rgba(0,210,190,0.12);border:1px solid rgba(0,210,190,0.25);display:flex;align-items:center;justify-content:center;margin:0 auto 14px;">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#00D2BE" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7-3 11-6 11S6 15 6 8z"/><path d="M10 8a2 2 0 0 1 4 0"/></svg>
+        </div>
+        <div style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:6px;">Tap Phones Together</div>
+        <div style="font-size:13px;color:var(--text2);margin-bottom:20px;">Send or receive PayMesh balance by tapping phones. No code needed.</div>
+        <div style="display:flex;gap:10px;">
+          <button type="button" onclick="nfcStartSend()" class="btn-primary" style="flex:1;background:linear-gradient(135deg,#00D2BE,#00b8a0);box-shadow:0 4px 20px rgba(0,210,190,0.3);color:#001a18;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;vertical-align:middle;"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+            Send
+          </button>
+          <button type="button" onclick="nfcStartReceive()" class="btn-primary" style="flex:1;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;vertical-align:middle;"><polyline points="8 17 12 21 16 17"/><line x1="12" y1="3" x2="12" y2="21"/></svg>
+            Receive
+          </button>
+        </div>
+      </div>
+      <div class="card" style="padding:14px 16px;">
+        <div style="font-size:11px;font-weight:700;letter-spacing:1.5px;color:var(--text3);text-transform:uppercase;margin-bottom:10px;">How it works</div>
+        <div style="font-size:13px;color:var(--text2);line-height:1.7;">
+          &#128242; <b style="color:var(--text)">Receiver</b> taps Receive &#8212; phone starts listening<br>
+          &#128241; <b style="color:var(--text)">Sender</b> taps Send, enters amount &#8212; then taps phones together<br>
+          &#9889; Transfer completes instantly. No code. No pairing.
+        </div>
+      </div>
+    </div>
+    <div id="nfc-send-panel" style="display:none;">
+      <div class="card" style="margin-bottom:14px;">
+        <div class="form-group">
+          <label>Amount to Send (&#8377;)</label>
+          <input type="number" id="nfc-send-amount" placeholder="0.00" min="1" inputmode="decimal" />
+        </div>
+        <button type="button" onclick="nfcWrite()" class="btn-primary" style="background:linear-gradient(135deg,#00D2BE,#00b8a0);box-shadow:0 4px 20px rgba(0,210,190,0.3);color:#001a18;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:8px;vertical-align:middle;"><path d="M6 8a6 6 0 0 1 12 0c0 7-3 11-6 11S6 15 6 8z"/><path d="M10 8a2 2 0 0 1 4 0"/></svg>
+          Tap to Send
+        </button>
+        <div id="nfc-send-msg" class="msg" style="margin-top:10px;"></div>
+      </div>
+      <div id="nfc-send-status" style="display:none;" class="card" style="text-align:center;padding:24px;">
+        <div id="nfc-send-icon" style="font-size:40px;margin-bottom:10px;"></div>
+        <div id="nfc-send-text" style="font-weight:600;color:var(--text);margin-bottom:6px;"></div>
+        <div id="nfc-send-sub"  style="font-size:13px;color:var(--text2);"></div>
+      </div>
+    </div>
+    <div id="nfc-receive-panel" style="display:none;">
+      <div class="card" style="text-align:center;padding:28px 20px;">
+        <div id="nfc-receive-anim" style="width:80px;height:80px;border-radius:50%;background:rgba(0,210,190,0.1);border:2px solid rgba(0,210,190,0.3);display:flex;align-items:center;justify-content:center;margin:0 auto 16px;animation:nfcPulse 2s ease-in-out infinite;">
+          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#00D2BE" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7-3 11-6 11S6 15 6 8z"/><path d="M10 8a2 2 0 0 1 4 0"/></svg>
+        </div>
+        <div id="nfc-receive-title" style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:8px;">Ready to Receive</div>
+        <div id="nfc-receive-sub"  style="font-size:13px;color:var(--text2);margin-bottom:16px;">Hold your phone steady. Ask sender to tap their phone to yours.</div>
+        <div id="nfc-receive-msg" class="msg"></div>
+      </div>
+    </div>
+  </div>
+</div>
+<style>
+@keyframes nfcPulse{
+  0%,100%{box-shadow:0 0 0 0 rgba(0,210,190,0.3);transform:scale(1)}
+  50%{box-shadow:0 0 0 18px rgba(0,210,190,0);transform:scale(1.05)}
+}
+</style>
+
 <script type="module">
 import { getApps } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import { getFirestore, doc, setDoc, updateDoc, getDoc, addDoc, collection, onSnapshot, runTransaction } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
@@ -1434,7 +1522,7 @@ window.btRedeemCode = async function() {
       if(sBal<amount) throw new Error('Insufficient balance. You have &#8377;'+sBal.toFixed(2));
       tx.update(sRef,{balance:sBal-amount});
       tx.update(rRef,{balance:rBal+amount});
-      tx.update(btRef,{status:'completed',amount:amount,sender:phone,senderName:name,completedAt:new Date().toISOString()});
+      tx.delete(btRef); // Delete after use to save Firestore space
     });
 
     _qtAttempts = 0;
@@ -1455,6 +1543,159 @@ window.btRedeemCode = async function() {
     console.error(e);
   }
 };
+</script>
+<script type="module">
+import { getApps } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+import { getFirestore, doc, getDoc, updateDoc, addDoc, collection, runTransaction } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+
+function _nfcDb(){var a=getApps();return a.length?getFirestore(a[0]):null;}
+function _nfcPanel(send,receive,mode,unsup){
+  ['nfc-send-panel','nfc-receive-panel','nfc-mode-select','nfc-unsupported'].forEach(function(id,i){
+    var el=document.getElementById(id);if(el)el.style.display=[send,receive,mode,unsup][i]?'block':'none';
+  });
+}
+function _nfcStatus(icon,text,sub){
+  var st=document.getElementById('nfc-send-status');if(st)st.style.display='block';
+  var i=document.getElementById('nfc-send-icon');var t=document.getElementById('nfc-send-text');var s=document.getElementById('nfc-send-sub');
+  if(i)i.textContent=icon;if(t)t.textContent=text;if(s)s.textContent=sub;
+}
+
+window.nfcBack=function(){
+  var s=document.getElementById('nfc-send-panel');var r=document.getElementById('nfc-receive-panel');var u=document.getElementById('nfc-unsupported');
+  var inSub=(s&&s.style.display==='block')||(r&&r.style.display==='block')||(u&&u.style.display==='block');
+  if(inSub){_nfcPanel(false,false,true,false);}else{if(window.showScreen)window.showScreen('screen-home');}
+};
+
+window.nfcStartSend=function(){
+  if(!('NDEFReader' in window)){_nfcPanel(false,false,false,true);return;}
+  _nfcPanel(true,false,false,false);
+  var msg=document.getElementById('nfc-send-msg');if(msg){msg.className='msg';msg.textContent='';}
+  var st=document.getElementById('nfc-send-status');if(st)st.style.display='none';
+  var a=document.getElementById('nfc-send-amount');if(a)a.value='';
+};
+
+window.nfcStartReceive=function(){
+  if(!('NDEFReader' in window)){_nfcPanel(false,false,false,true);return;}
+  _nfcPanel(false,true,false,false);
+  nfcListen();
+};
+
+window.nfcWrite=async function(){
+  var amountEl=document.getElementById('nfc-send-amount');
+  var msg=document.getElementById('nfc-send-msg');
+  var amount=parseFloat(amountEl?amountEl.value:'0');
+  var phone=localStorage.getItem('pm_phone');
+  var name=localStorage.getItem('pm_name')||phone;
+  var db=_nfcDb();
+  function setMsg(type,text){if(msg){msg.className='msg '+(type||'');msg.textContent=text;}}
+  if(!amount||amount<=0){setMsg('error','Enter a valid amount');return;}
+  if(!phone){setMsg('error','Session error. Please refresh.');return;}
+  if(!db){setMsg('error','App not ready. Please refresh.');return;}
+  if(window.requirePin){
+    try{await window.requirePin('Confirm NFC Send','Enter PIN to send');}
+    catch(e){return;}
+  }
+  try{
+    var ndef=new NDEFReader();
+    _nfcStatus('\u{1F4F1}','Hold phones together...','Keep touching until you feel vibration');
+    await ndef.write({records:[{recordType:'text',data:JSON.stringify({type:'pm_nfc_pay',from:phone,fromName:name,amount:amount,ts:Date.now(),expires:Date.now()+2*60*1000})}]});
+    _nfcStatus('\u2705','Written! Receiver processing...','Amount will transfer once receiver taps');
+    setMsg('success','Waiting for receiver phone to tap...');
+    var scanReader=new NDEFReader();
+    await scanReader.scan();
+    scanReader.addEventListener('reading',async function(e){
+      try{
+        for(var rec of e.message.records){
+          if(rec.recordType==='text'){
+            var data=JSON.parse(new TextDecoder().decode(rec.data));
+            if(data.type==='pm_nfc_confirm'&&data.originalFrom===phone){
+              var receiverPhone=data.from;var receiverName=data.fromName;
+              var sRef=doc(db,'users',phone);var rRef=doc(db,'users',receiverPhone);
+              await runTransaction(db,async function(tx){
+                var sSnap=await tx.get(sRef);var rSnap=await tx.get(rRef);
+                if(!sSnap.exists())throw new Error('Your account not found');
+                if(!rSnap.exists())throw new Error('Receiver not on PayMesh');
+                var sBal=sSnap.data().balance||0;var rBal=rSnap.data().balance||0;
+                if(sBal<amount)throw new Error('Insufficient balance');
+                tx.update(sRef,{balance:sBal-amount});tx.update(rRef,{balance:rBal+amount});
+              });
+              var time=new Date().toISOString();
+              await Promise.all([
+                addDoc(collection(db,'transactions'),{phone:phone,label:'NFC Sent to '+receiverName,amount:amount,type:'debit',time:time}),
+                addDoc(collection(db,'transactions'),{phone:receiverPhone,label:'NFC Received from '+name,amount:amount,type:'credit',time:time})
+              ]);
+              var newBal=Math.max(0,parseFloat(localStorage.getItem('pm_balance')||'0')-amount);
+              localStorage.setItem('pm_balance',newBal.toFixed(2));
+              if(navigator.vibrate)navigator.vibrate([100,50,200]);
+              _nfcStatus('\u2705','Sent!','Transfer complete');
+              if(window.showOverlay)window.showOverlay('','NFC Sent!','Transfer complete');
+            }
+          }
+        }
+      }catch(err){setMsg('error',err.message||'Transfer failed');console.error(err);}
+    });
+  }catch(e){
+    if(e.name==='NotAllowedError'){setMsg('error','NFC permission denied. Enable NFC in Chrome settings.');}
+    else{setMsg('error',e.message||'NFC failed. Try again.');}
+    var st=document.getElementById('nfc-send-status');if(st)st.style.display='none';
+    console.error(e);
+  }
+};
+
+async function nfcListen(){
+  var titleEl=document.getElementById('nfc-receive-title');
+  var subEl=document.getElementById('nfc-receive-sub');
+  var msgEl=document.getElementById('nfc-receive-msg');
+  var phone=localStorage.getItem('pm_phone');
+  var name=localStorage.getItem('pm_name')||phone;
+  var db=_nfcDb();
+  if(!phone){if(msgEl){msgEl.className='msg error';msgEl.textContent='Session error.';}return;}
+  try{
+    var ndef=new NDEFReader();
+    await ndef.scan();
+    if(titleEl)titleEl.textContent='Ready to Receive';
+    if(subEl)subEl.textContent='Hold phones together. You will feel a vibration when done.';
+    ndef.addEventListener('reading',async function(e){
+      try{
+        for(var rec of e.message.records){
+          if(rec.recordType==='text'){
+            var data=JSON.parse(new TextDecoder().decode(rec.data));
+            if(data.type==='pm_nfc_pay'){
+              if(Date.now()>data.expires){if(msgEl){msgEl.className='msg error';msgEl.textContent='Request expired. Ask sender to retry.';}return;}
+              if(data.from===phone){if(msgEl){msgEl.className='msg error';msgEl.textContent='Cannot receive from yourself.';}return;}
+              if(titleEl)titleEl.textContent='Processing...';
+              if(subEl)subEl.textContent='Completing transfer...';
+              try{
+                var wr=new NDEFReader();
+                await wr.write({records:[{recordType:'text',data:JSON.stringify({type:'pm_nfc_confirm',from:phone,fromName:name,originalFrom:data.from})}]});
+              }catch(we){console.warn('Confirm write:',we);}
+              var rRef=doc(db,'users',phone);
+              var rSnap=await getDoc(rRef);
+              if(rSnap.exists()){
+                var newBal=(rSnap.data().balance||0)+data.amount;
+                await updateDoc(rRef,{balance:newBal});
+                localStorage.setItem('pm_balance',newBal.toFixed(2));
+              }
+              if(navigator.vibrate)navigator.vibrate([100,50,200]);
+              if(titleEl)titleEl.textContent='Money Received!';
+              if(subEl)subEl.innerHTML='<div style="font-size:36px;font-weight:800;color:var(--em);margin:12px 0;">+&#8377;'+data.amount.toFixed(2)+'</div><div style="color:var(--text2);font-size:14px;">From '+data.fromName+'</div>';
+              var time=new Date().toISOString();
+              await Promise.all([
+                addDoc(collection(db,'transactions'),{phone:phone,label:'NFC Received from '+data.fromName,amount:data.amount,type:'credit',time:time}),
+                addDoc(collection(db,'transactions'),{phone:data.from,label:'NFC Sent to '+name,amount:data.amount,type:'debit',time:time})
+              ]).catch(function(){});
+              setTimeout(function(){if(window.showScreen)window.showScreen('screen-home');},2500);
+            }
+          }
+        }
+      }catch(err){if(msgEl){msgEl.className='msg error';msgEl.textContent='Error reading NFC. Try again.';}console.error(err);}
+    });
+  }catch(e){
+    if(e.name==='NotAllowedError'){if(msgEl){msgEl.className='msg error';msgEl.textContent='NFC permission denied.';}}
+    else{if(msgEl){msgEl.className='msg error';msgEl.textContent=e.message||'NFC scan failed.';}}
+    console.error(e);
+  }
+}
 </script>
 </body>
 </html>

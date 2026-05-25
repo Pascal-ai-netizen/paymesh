@@ -1,7 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import {
   getFirestore,
-  doc, setDoc, updateDoc, getDoc,
+  doc, setDoc, updateDoc, getDoc, deleteDoc,
   collection, addDoc, query, where,
   runTransaction,
   onSnapshot,
@@ -1067,6 +1067,8 @@ window.redeemVoucher = async function() {
       addDoc(collection(db,"transactions"), { phone:CURRENT_USER.phone, label:`Voucher from ${fromName}`,          amount, type:"credit", time }),
       addDoc(collection(db,"transactions"), { phone:createdBy,          label:`Voucher redeemed by ${CURRENT_USER.name}`, amount, type:"debit",  time })
     ]);
+    // Delete voucher doc after successful redeem to save Firestore space
+    deleteDoc(vRef).catch(() => {});
 
     const newBal = parseFloat(localStorage.getItem('pm_balance')||'0') + amount;
     localStorage.setItem('pm_balance', newBal.toFixed(2));
