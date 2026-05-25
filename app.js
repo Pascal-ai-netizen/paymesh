@@ -112,6 +112,10 @@ function requirePin(title = 'Enter PIN', sub = 'Required to complete this action
   });
 }
 
+// Expose PIN functions for QT module
+window.requirePin = requirePin;
+window.hasPinSet  = hasPinSet;
+
 window.cancelPinOverlay = function() {
   document.getElementById('pin-overlay').classList.add('hidden');
   _pinBuffer = ''; _pinMode = null; _pinTemp = '';
