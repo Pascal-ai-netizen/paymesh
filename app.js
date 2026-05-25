@@ -366,7 +366,7 @@ function addRipple(e) {
 // OVERLAY
 // ═══════════════════════════════════════════
 
-function showOverlay(icon, title, sub) {
+window.showOverlay = function showOverlay(icon, title, sub) {
   document.getElementById('overlay-title').textContent = title;
   document.getElementById('overlay-sub').textContent   = sub;
   document.getElementById('success-overlay').classList.remove('hidden');

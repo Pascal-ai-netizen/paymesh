@@ -205,6 +205,7 @@ body{
 
 /* ── ACTION GRID ── */
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:0 14px 10px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;padding:0 14px 12px}
 .grid1{padding:0 14px 12px}
 
 .action-btn{
@@ -835,22 +836,24 @@ window.__PM_SPLASH_TIMEOUT = setTimeout(function() {
       Scan QR — Pay or Receive
     </button>
   </div>
-  <div class="grid2">
-    <button type="button" class="action-btn" style="background:linear-gradient(135deg,rgba(77,159,255,0.12),rgba(77,159,255,0.06));border-color:rgba(77,159,255,0.25);" onclick="showScreen('screen-bluetooth')">
-      <div class="action-icon" style="background:rgba(77,159,255,0.15);border-color:rgba(77,159,255,0.3);">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4D9FFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
-        </svg>
+  <div class="grid3">
+    <button type="button" class="action-btn" style="background:linear-gradient(135deg,rgba(77,159,255,0.12),rgba(77,159,255,0.06));border-color:rgba(77,159,255,0.25);padding:18px 8px;" onclick="showScreen('screen-bluetooth')">
+      <div class="action-icon" style="background:rgba(77,159,255,0.15);border-color:rgba(77,159,255,0.3);width:42px;height:42px;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4D9FFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
       </div>
-      <span style="color:#4D9FFF">Quick Transfer</span>
+      <span style="color:#4D9FFF;font-size:11px;">Quick Transfer</span>
     </button>
-    <button type="button" class="action-btn" style="background:linear-gradient(135deg,rgba(0,210,190,0.12),rgba(0,210,190,0.06));border-color:rgba(0,210,190,0.25);" onclick="showScreen('screen-nfc')">
-      <div class="action-icon" style="background:rgba(0,210,190,0.15);border-color:rgba(0,210,190,0.3);">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#00D2BE" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
-        </svg>
+    <button type="button" class="action-btn" style="background:linear-gradient(135deg,rgba(0,210,190,0.12),rgba(0,210,190,0.06));border-color:rgba(0,210,190,0.25);padding:18px 8px;" onclick="showScreen('screen-nfc')">
+      <div class="action-icon" style="background:rgba(0,210,190,0.15);border-color:rgba(0,210,190,0.3);width:42px;height:42px;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#00D2BE" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
       </div>
-      <span style="color:#00D2BE">NFC Pay</span>
+      <span style="color:#00D2BE;font-size:11px;">NFC Pay</span>
+    </button>
+    <button type="button" class="action-btn" style="background:linear-gradient(135deg,rgba(255,165,0,0.12),rgba(255,165,0,0.06));border-color:rgba(255,165,0,0.25);padding:18px 8px;" onclick="showScreen('screen-soundpay')">
+      <div class="action-icon" style="background:rgba(255,165,0,0.15);border-color:rgba(255,165,0,0.3);width:42px;height:42px;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FFA500" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+      </div>
+      <span style="color:#FFA500;font-size:11px;">Sound Pay</span>
     </button>
   </div>
 
@@ -1214,7 +1217,7 @@ if ('serviceWorker' in navigator) {
 </style>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script type="module" src="app.js?v=13"></script>
+<script type="module" src="app.js?v=14"></script>
 
 
 <!-- PWA INSTALL BANNER -->
@@ -1276,6 +1279,96 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 });
 </script>
+<!-- SOUNDPAY SCREEN -->
+<div id="screen-soundpay" class="screen">
+  <div class="topbar">
+    <button type="button" class="back-btn" onclick="spBack()">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+      Back
+    </button>
+    <span class="screen-title">Sound Pay</span>
+    <div style="width:60px"></div>
+  </div>
+  <div style="padding:16px 0 20px;">
+
+    <div id="sp-unsupported" style="display:none;" class="card" style="text-align:center;padding:32px;">
+      <div style="font-size:36px;margin-bottom:12px;">&#128266;</div>
+      <div style="font-weight:600;color:var(--text);margin-bottom:8px;">Not Supported</div>
+      <div style="font-size:13px;color:var(--text2);">Sound Pay requires microphone access and Web Audio API. Please use Chrome on Android.</div>
+    </div>
+
+    <div id="sp-mode-select">
+      <div class="card" style="text-align:center;padding:24px 20px 20px;margin-bottom:14px;">
+        <div style="width:56px;height:56px;border-radius:16px;background:rgba(255,165,0,0.12);border:1px solid rgba(255,165,0,0.25);display:flex;align-items:center;justify-content:center;margin:0 auto 14px;">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#FFA500" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+        </div>
+        <div style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:6px;">Pay with Sound</div>
+        <div style="font-size:13px;color:var(--text2);margin-bottom:20px;">Sender emits an ultrasonic tone. Receiver's phone hears it and completes the transfer. No tap, no code, no QR.</div>
+        <div style="display:flex;gap:10px;">
+          <button type="button" onclick="spStartSend()" class="btn-primary" style="flex:1;background:linear-gradient(135deg,#FFA500,#FF8C00);box-shadow:0 4px 20px rgba(255,165,0,0.3);color:#1a0a00;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;vertical-align:middle;"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+            Send
+          </button>
+          <button type="button" onclick="spStartReceive()" class="btn-primary" style="flex:1;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;vertical-align:middle;"><path d="M1 1l22 22"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+            Receive
+          </button>
+        </div>
+      </div>
+      <div class="card" style="padding:14px 16px;">
+        <div style="font-size:11px;font-weight:700;letter-spacing:1.5px;color:var(--text3);text-transform:uppercase;margin-bottom:10px;">How it works</div>
+        <div style="font-size:13px;color:var(--text2);line-height:1.8;">
+          &#128266; <b style="color:var(--text)">Sender</b> enters amount &#8212; phone emits ultrasonic tone (inaudible)<br>
+          &#127897; <b style="color:var(--text)">Receiver</b> taps Receive &#8212; mic listens for the tone<br>
+          &#9889; Transfer executes automatically. Works up to 2 metres away.
+        </div>
+      </div>
+    </div>
+
+    <!-- SEND panel -->
+    <div id="sp-send-panel" style="display:none;">
+      <div class="card" style="margin-bottom:14px;">
+        <div class="form-group">
+          <label>Amount to Send (&#8377;)</label>
+          <input type="number" id="sp-send-amount" placeholder="0.00" min="1" inputmode="decimal" />
+        </div>
+        <button type="button" onclick="spEmit()" class="btn-primary" style="background:linear-gradient(135deg,#FFA500,#FF8C00);box-shadow:0 4px 20px rgba(255,165,0,0.3);color:#1a0a00;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:8px;vertical-align:middle;"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+          Emit Sound Token
+        </button>
+        <div id="sp-send-msg" class="msg" style="margin-top:10px;"></div>
+      </div>
+      <div id="sp-send-status" style="display:none;" class="card" style="text-align:center;padding:28px;">
+        <div id="sp-send-icon" style="font-size:44px;margin-bottom:12px;"></div>
+        <div id="sp-send-text" style="font-weight:700;color:var(--text);font-size:16px;margin-bottom:6px;"></div>
+        <div id="sp-send-sub"  style="font-size:13px;color:var(--text2);line-height:1.6;"></div>
+      </div>
+    </div>
+
+    <!-- RECEIVE panel -->
+    <div id="sp-receive-panel" style="display:none;">
+      <div class="card" style="text-align:center;padding:32px 20px;">
+        <div id="sp-receive-anim" style="width:90px;height:90px;border-radius:50%;background:rgba(255,165,0,0.1);border:2px solid rgba(255,165,0,0.3);display:flex;align-items:center;justify-content:center;margin:0 auto 18px;animation:spPulse 1.5s ease-in-out infinite;">
+          <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="#FFA500" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 1l22 22"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+        </div>
+        <div id="sp-receive-title" style="font-size:17px;font-weight:700;color:var(--text);margin-bottom:8px;">Listening...</div>
+        <div id="sp-receive-sub"  style="font-size:13px;color:var(--text2);margin-bottom:6px;">Hold near sender's phone. Mic is active.</div>
+        <div id="sp-level-bar" style="height:6px;border-radius:3px;background:var(--surface2);margin:12px 0;overflow:hidden;">
+          <div id="sp-level-fill" style="height:100%;width:0%;background:linear-gradient(90deg,#FFA500,#FFD700);border-radius:3px;transition:width 0.1s;"></div>
+        </div>
+        <div id="sp-receive-msg" class="msg"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+<style>
+@keyframes spPulse{
+  0%,100%{box-shadow:0 0 0 0 rgba(255,165,0,0.35);transform:scale(1)}
+  50%{box-shadow:0 0 0 20px rgba(255,165,0,0);transform:scale(1.06)}
+}
+</style>
+
 <!-- NFC SCREEN -->
 <div id="screen-nfc" class="screen">
   <div class="topbar">
@@ -1546,65 +1639,116 @@ window.btRedeemCode = async function() {
 </script>
 <script type="module">
 import { getApps } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-import { getFirestore, doc, getDoc, addDoc, collection, runTransaction } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+import { getFirestore, doc, setDoc, getDoc, deleteDoc, addDoc, collection, onSnapshot, runTransaction } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
-function _nfcDb(){var a=getApps();return a.length?getFirestore(a[0]):null;}
+// ══════════════════════════════════════════════════════
+// SOUNDPAY — Ultrasonic FSK Payment System
+// Protocol:
+//   - Token stored in Firestore under /sound_tokens/{nonce}
+//   - Sender emits 8 tones encoding a hex nonce (FSK)
+//   - Each symbol = one of 16 frequencies (18000-21500 Hz)
+//   - Receiver detects dominant frequency → decodes nonce
+//   - Receiver fetches token from Firestore → runs transaction
+//   - Token deleted after use (saves space)
+//
+// Frequency map (4-bit FSK, 16 symbols):
+//   Symbol 0 = 18000 Hz, Symbol 1 = 18250 Hz, ..., Symbol 15 = 21750 Hz
+//   Step = 250 Hz per symbol
+//   Each symbol duration = 80ms, gap = 20ms
+// ══════════════════════════════════════════════════════
 
-function _nfcPanel(send,receive,mode,unsup){
-  ['nfc-send-panel','nfc-receive-panel','nfc-mode-select','nfc-unsupported'].forEach(function(id,i){
+const SP_BASE_FREQ   = 18000;  // Hz — start of ultrasonic range
+const SP_STEP        = 250;    // Hz per symbol
+const SP_SYMBOLS     = 16;     // 4 bits per symbol (hex digit)
+const SP_SYM_DUR     = 80;     // ms per symbol
+const SP_GAP_DUR     = 20;     // ms gap between symbols
+const SP_NONCE_LEN   = 8;      // 8 hex digits = 32-bit nonce
+const SP_PREAMBLE    = 17500;  // Hz — sync tone before data
+const SP_PREAMBLE_DUR= 200;    // ms
+const SP_TOKEN_TTL   = 30000;  // ms — token expires in 30s
+const SP_DETECT_THRESH = -60;  // dB threshold - below this is noise
+
+function _spDb(){var a=getApps();return a.length?getFirestore(a[0]):null;}
+
+function _spPanel(send,receive,mode,unsup){
+  ['sp-send-panel','sp-receive-panel','sp-mode-select','sp-unsupported'].forEach(function(id,i){
     var el=document.getElementById(id);
     if(el)el.style.display=[send,receive,mode,unsup][i]?'block':'none';
   });
 }
 
-function _nfcStatus(icon,text,sub){
-  var st=document.getElementById('nfc-send-status');
+function _spStatus(icon,text,sub){
+  var st=document.getElementById('sp-send-status');
   if(st)st.style.display='block';
-  var i=document.getElementById('nfc-send-icon');
-  var t=document.getElementById('nfc-send-text');
-  var s=document.getElementById('nfc-send-sub');
+  var i=document.getElementById('sp-send-icon');
+  var t=document.getElementById('sp-send-text');
+  var s=document.getElementById('sp-send-sub');
   if(i)i.textContent=icon;
   if(t)t.textContent=text;
   if(s)s.textContent=sub;
 }
 
-window.nfcBack=function(){
-  var s=document.getElementById('nfc-send-panel');
-  var r=document.getElementById('nfc-receive-panel');
-  var u=document.getElementById('nfc-unsupported');
+// ── Navigation ──
+window.spBack=function(){
+  var s=document.getElementById('sp-send-panel');
+  var r=document.getElementById('sp-receive-panel');
+  var u=document.getElementById('sp-unsupported');
   var inSub=(s&&s.style.display==='block')||(r&&r.style.display==='block')||(u&&u.style.display==='block');
-  if(inSub){_nfcPanel(false,false,true,false);}
-  else{if(window.showScreen)window.showScreen('screen-home');}
+  if(inSub){
+    spStopListening();
+    _spPanel(false,false,true,false);
+  }else{
+    if(window.showScreen)window.showScreen('screen-home');
+  }
 };
 
-window.nfcStartSend=function(){
-  if(!('NDEFReader' in window)){_nfcPanel(false,false,false,true);return;}
-  _nfcPanel(true,false,false,false);
-  var msg=document.getElementById('nfc-send-msg');
+window.spStartSend=function(){
+  _spPanel(true,false,false,false);
+  var msg=document.getElementById('sp-send-msg');
   if(msg){msg.className='msg';msg.textContent='';}
-  var st=document.getElementById('nfc-send-status');
+  var st=document.getElementById('sp-send-status');
   if(st)st.style.display='none';
-  var a=document.getElementById('nfc-send-amount');
+  var a=document.getElementById('sp-send-amount');
   if(a)a.value='';
 };
 
-window.nfcStartReceive=function(){
-  if(!('NDEFReader' in window)){_nfcPanel(false,false,false,true);return;}
-  _nfcPanel(false,true,false,false);
-  nfcListen();
+window.spStartReceive=function(){
+  _spPanel(false,true,false,false);
+  spListen();
 };
 
-// ────────────────────────────────────────
-// SEND: write payment to receiver's phone via NFC
-// Flow: Sender writes → Receiver reads → Firestore transaction runs on RECEIVER side
-// ────────────────────────────────────────
-window.nfcWrite=async function(){
-  var amountEl=document.getElementById('nfc-send-amount');
-  var msg=document.getElementById('nfc-send-msg');
+// ── Generate cryptographic nonce ──
+function spNonce(){
+  var arr=new Uint8Array(4);
+  crypto.getRandomValues(arr);
+  return Array.from(arr).map(function(b){return b.toString(16).padStart(2,'0');}).join('');
+}
+
+// ── Encode nonce as frequency sequence ──
+// Each hex char (0-F) → one frequency (18000 + digit*250 Hz)
+function spEncodeFreqs(nonce){
+  return nonce.split('').map(function(c){
+    var digit=parseInt(c,16);
+    return SP_BASE_FREQ + digit*SP_STEP;
+  });
+}
+
+// ── Decode frequency back to hex digit ──
+function spFreqToDigit(freq){
+  var digit=Math.round((freq-SP_BASE_FREQ)/SP_STEP);
+  if(digit<0)digit=0;
+  if(digit>=SP_SYMBOLS)digit=SP_SYMBOLS-1;
+  return digit.toString(16);
+}
+
+// ── SENDER: emit ultrasonic token ──
+window.spEmit=async function(){
+  var amountEl=document.getElementById('sp-send-amount');
+  var msg=document.getElementById('sp-send-msg');
   var amount=parseFloat(amountEl?amountEl.value:'0');
   var phone=localStorage.getItem('pm_phone');
   var name=localStorage.getItem('pm_name')||phone;
-  var db=_nfcDb();
+  var db=_spDb();
 
   function setMsg(type,text){if(msg){msg.className='msg '+(type||'');msg.textContent=text;}}
 
@@ -1612,80 +1756,126 @@ window.nfcWrite=async function(){
   if(!phone){setMsg('error','Session error. Please refresh.');return;}
   if(!db){setMsg('error','App not ready. Please refresh.');return;}
 
-  // Balance check before asking for PIN
+  // Balance check first
   try{
     var sSnap=await getDoc(doc(db,'users',phone));
-    if(!sSnap.exists())throw new Error('Your account not found.');
-    if((sSnap.data().balance||0)<amount)throw new Error('Insufficient balance. You have &#8377;'+(sSnap.data().balance||0).toFixed(2));
+    if(!sSnap.exists())throw new Error('Account not found.');
+    if((sSnap.data().balance||0)<amount)throw new Error('Insufficient balance. You have \u20b9'+(sSnap.data().balance||0).toFixed(2));
   }catch(e){setMsg('error',e.message);return;}
 
+  // PIN before emitting
   if(window.requirePin){
-    try{await window.requirePin('Confirm NFC Send','Enter PIN to send &#8377;'+amount.toFixed(2));}
+    try{await window.requirePin('Confirm Sound Pay','Enter PIN to send \u20b9'+amount.toFixed(2));}
     catch(e){return;}
   }
 
-  try{
-    if(!('NDEFReader' in window))throw new Error('NFC not supported in this browser.');
-    var ndef=new NDEFReader();
-    _nfcStatus('📱','Hold phones together...','Tap the receiver\'s phone to yours');
-    setMsg('','');
+  var nonce=spNonce();
+  var expires=Date.now()+SP_TOKEN_TTL;
 
-    // Write payment payload to receiver's phone
-    // Receiver's phone reads this and executes the Firestore transaction
-    var payload=JSON.stringify({
-      type:'pm_nfc_pay',
-      from:phone,
-      fromName:name,
-      amount:amount,
-      expires:Date.now()+2*60*1000  // 2 min expiry
+  try{
+    // Store token in Firestore
+    await setDoc(doc(db,'sound_tokens',nonce),{
+      nonce:nonce, from:phone, fromName:name,
+      amount:amount, expires:expires,
+      status:'pending', createdAt:new Date().toISOString()
     });
 
-    await ndef.write({records:[{recordType:'text',data:payload}]});
-    _nfcStatus('✅','Payment sent!','Receiver\'s phone will confirm momentarily');
-    setMsg('success','NFC data written. Receiver\'s phone will complete the transfer.');
+    _spStatus('\uD83D\uDD0A','Emitting sound...','Hold phone near receiver. Keep still for 2 seconds.');
+    setMsg('','');
 
-    // Debit sender immediately after write succeeds
-    // Receiver credits themselves when they read the NFC tag
-    var sRef=doc(db,'users',phone);
-    var sSnap2=await getDoc(sRef);
-    if(!sSnap2.exists())throw new Error('Account not found');
-    var sBal=sSnap2.data().balance||0;
-    if(sBal<amount)throw new Error('Insufficient balance');
+    // Emit: preamble + 8 symbol tones
+    var ctx=new AudioContext();
+    var freqs=spEncodeFreqs(nonce);
 
-    // We can't do a full transaction here without knowing receiver yet
-    // So we debit sender and let receiver credit themselves
-    // This is safe because receiver validates the payload before crediting
-    // In worst case (receiver doesn't tap) sender is NOT debited yet - write happens on read
-    // Actually the cleanest approach: don't debit here, let receiver's runTransaction handle both
-    // Sender just writes the NFC tag. Receiver executes the full atomic transaction.
-    _nfcStatus('✅','Ready!','Hold phone to receiver until they confirm');
+    // Preamble sync tone
+    var osc=ctx.createOscillator();
+    var gain=ctx.createGain();
+    osc.connect(gain);gain.connect(ctx.destination);
+    osc.type='sine';
+    osc.frequency.value=SP_PREAMBLE;
+    gain.gain.value=0.8;
+    osc.start();
+    await new Promise(function(r){setTimeout(r,SP_PREAMBLE_DUR);});
+    osc.stop();
+    await new Promise(function(r){setTimeout(r,SP_GAP_DUR);});
 
-    if(amountEl)amountEl.value='';
+    // Emit each symbol
+    for(var i=0;i<freqs.length;i++){
+      var o=ctx.createOscillator();
+      var g=ctx.createGain();
+      o.connect(g);g.connect(ctx.destination);
+      o.type='sine';
+      o.frequency.value=freqs[i];
+      g.gain.value=0.8;
+      o.start();
+      await new Promise(function(r){setTimeout(r,SP_SYM_DUR);});
+      o.stop();
+      await new Promise(function(r){setTimeout(r,SP_GAP_DUR);});
+    }
+
+    ctx.close();
+    _spStatus('\u23F3','Waiting for receiver...','Token valid for 30 seconds. Keep app open.');
+
+    // Listen for completion via Firestore onSnapshot
+    var unsub=onSnapshot(doc(db,'sound_tokens',nonce),function(snap){
+      if(!snap.exists())return;
+      var data=snap.data();
+      if(data.status==='completed'){
+        unsub();
+        if(navigator.vibrate)navigator.vibrate([200,100,200]);
+        _spStatus('\u2705','Payment Complete!','\u20b9'+amount.toFixed(2)+' sent to '+data.toName);
+        var newBal=Math.max(0,parseFloat(localStorage.getItem('pm_balance')||'0')-amount);
+        localStorage.setItem('pm_balance',newBal.toFixed(2));
+        if(amountEl)amountEl.value='';
+        setTimeout(function(){if(window.showScreen)window.showScreen('screen-home');},2500);
+      }
+      if(data.status==='expired'){
+        unsub();
+        _spStatus('\u274C','Expired','Token expired. Try again.');
+      }
+    });
+
+    // Auto-expire after 30s
+    setTimeout(async function(){
+      unsub();
+      try{
+        var t=await getDoc(doc(db,'sound_tokens',nonce));
+        if(t.exists()&&t.data().status==='pending'){
+          await deleteDoc(doc(db,'sound_tokens',nonce));
+          _spStatus('\u274C','Expired','Receiver didn\'t detect sound. Try again closer.');
+        }
+      }catch(e){}
+    },SP_TOKEN_TTL);
 
   }catch(e){
-    if(e.name==='NotAllowedError'||e.name==='SecurityError'){
-      setMsg('error','NFC permission denied. Make sure NFC is enabled in Android settings and allow NFC in Chrome.');
-    }else{
-      setMsg('error',e.message||'NFC write failed. Try again.');
-    }
-    var st=document.getElementById('nfc-send-status');
+    setMsg('error',e.message||'Sound emission failed.');
+    var st=document.getElementById('sp-send-status');
     if(st)st.style.display='none';
     console.error(e);
   }
 };
 
-// ────────────────────────────────────────
-// RECEIVE: scan for incoming NFC payment
-// Receiver executes the FULL Firestore transaction (debit sender, credit receiver)
-// This is the correct architecture - receiver validates and executes atomically
-// ────────────────────────────────────────
-async function nfcListen(){
-  var titleEl=document.getElementById('nfc-receive-title');
-  var subEl=document.getElementById('nfc-receive-sub');
-  var msgEl=document.getElementById('nfc-receive-msg');
+// ── RECEIVER: listen for ultrasonic token ──
+var _spListening=false;
+var _spAudioCtx=null;
+var _spStream=null;
+var _spAnimFrame=null;
+
+function spStopListening(){
+  _spListening=false;
+  if(_spAnimFrame){cancelAnimationFrame(_spAnimFrame);_spAnimFrame=null;}
+  if(_spStream){_spStream.getTracks().forEach(function(t){t.stop();});_spStream=null;}
+  if(_spAudioCtx){_spAudioCtx.close().catch(function(){});_spAudioCtx=null;}
+}
+
+async function spListen(){
+  var titleEl=document.getElementById('sp-receive-title');
+  var subEl=document.getElementById('sp-receive-sub');
+  var msgEl=document.getElementById('sp-receive-msg');
+  var levelFill=document.getElementById('sp-level-fill');
   var phone=localStorage.getItem('pm_phone');
   var name=localStorage.getItem('pm_name')||phone;
-  var db=_nfcDb();
+  var db=_spDb();
 
   function setMsg(type,text){if(msgEl){msgEl.className='msg '+(type||'');msgEl.textContent=text;}}
 
@@ -1693,105 +1883,157 @@ async function nfcListen(){
   if(!db){setMsg('error','App not ready. Please refresh.');return;}
 
   try{
-    var ndef=new NDEFReader();
-    await ndef.scan();
-    if(titleEl)titleEl.textContent='Ready to Receive';
-    if(subEl)subEl.textContent='Hold your phone steady. Ask sender to tap their phone to yours.';
-
-    var _processed=false; // prevent double-processing on multiple reads
-
-    ndef.addEventListener('reading',async function(e){
-      if(_processed)return;
-
-      try{
-        for(var rec of e.message.records){
-          if(rec.recordType!=='text')continue;
-
-          var data;
-          try{data=JSON.parse(new TextDecoder().decode(rec.data));}
-          catch(pe){continue;}
-
-          if(data.type!=='pm_nfc_pay')continue;
-
-          // Validate
-          if(Date.now()>data.expires){
-            setMsg('error','Payment request expired. Ask sender to try again.');
-            return;
-          }
-          if(data.from===phone){
-            setMsg('error','Cannot receive from yourself.');
-            return;
-          }
-          if(!data.amount||data.amount<=0){
-            setMsg('error','Invalid payment amount.');
-            return;
-          }
-
-          _processed=true;
-          if(titleEl)titleEl.textContent='Processing...';
-          if(subEl)subEl.textContent='Completing secure transfer...';
-
-          var senderPhone=data.from;
-          var senderName=data.fromName||senderPhone;
-          var amount=data.amount;
-          var sRef=doc(db,'users',senderPhone);
-          var rRef=doc(db,'users',phone);
-
-          // Full atomic transaction — debit sender, credit receiver
-          await runTransaction(db,async function(tx){
-            var sSnap=await tx.get(sRef);
-            var rSnap=await tx.get(rRef);
-            if(!sSnap.exists())throw new Error('Sender account not found.');
-            if(!rSnap.exists())throw new Error('Your account not found.');
-            var sBal=sSnap.data().balance||0;
-            var rBal=rSnap.data().balance||0;
-            if(sBal<amount)throw new Error('Sender has insufficient balance.');
-            tx.update(sRef,{balance:sBal-amount});
-            tx.update(rRef,{balance:rBal+amount});
-          });
-
-          // Write transaction records
-          var time=new Date().toISOString();
-          await Promise.all([
-            addDoc(collection(db,'transactions'),{phone:phone,label:'NFC Received from '+senderName,amount:amount,type:'credit',time:time}),
-            addDoc(collection(db,'transactions'),{phone:senderPhone,label:'NFC Sent to '+name,amount:amount,type:'debit',time:time})
-          ]);
-
-          // Update local balance cache
-          var newBal=parseFloat(localStorage.getItem('pm_balance')||'0')+amount;
-          localStorage.setItem('pm_balance',newBal.toFixed(2));
-
-          if(navigator.vibrate)navigator.vibrate([200,100,200]);
-          if(titleEl)titleEl.textContent='Money Received!';
-          if(subEl)subEl.innerHTML=
-            '<div style="font-size:40px;font-weight:800;color:var(--em);margin:14px 0;">+&#8377;'+amount.toFixed(2)+'</div>'+
-            '<div style="color:var(--text2);font-size:15px;">From '+senderName+'</div>';
-
-          setTimeout(function(){if(window.showScreen)window.showScreen('screen-home');},2500);
-          return; // exit loop after first valid record
-        }
-      }catch(err){
-        _processed=false; // allow retry
-        if(titleEl)titleEl.textContent='Ready to Receive';
-        if(subEl)subEl.textContent='Hold phones together again.';
-        setMsg('error',err.message||'Transfer failed. Try again.');
-        console.error(err);
-      }
-    });
-
-    ndef.addEventListener('readingerror',function(){
-      setMsg('error','Could not read NFC tag. Try again.');
-    });
-
+    _spStream=await navigator.mediaDevices.getUserMedia({audio:{
+      echoCancellation:false,
+      noiseSuppression:false,
+      autoGainControl:false
+    }});
   }catch(e){
-    if(e.name==='NotAllowedError'||e.name==='SecurityError'){
-      setMsg('error','NFC permission denied. Enable NFC in Android settings.');
-    }else{
-      setMsg('error',e.message||'NFC scan failed. Make sure NFC is enabled.');
-    }
-    console.error(e);
+    setMsg('error','Microphone permission denied. Allow mic access and try again.');
+    return;
   }
+
+  _spAudioCtx=new AudioContext({sampleRate:44100});
+  var source=_spAudioCtx.createMediaStreamSource(_spStream);
+  var analyser=_spAudioCtx.createAnalyser();
+  analyser.fftSize=8192; // high resolution for ultrasonic detection
+  analyser.smoothingTimeConstant=0.3;
+  source.connect(analyser);
+
+  var bufLen=analyser.frequencyBinCount;
+  var dataArr=new Float32Array(bufLen);
+  var sampleRate=_spAudioCtx.sampleRate;
+  var binWidth=sampleRate/analyser.fftSize;
+
+  if(titleEl)titleEl.textContent='Listening...';
+  if(subEl)subEl.textContent='Hold near sender\'s phone. Mic is active.';
+  _spListening=true;
+
+  // State machine for decoding
+  var STATE_WAIT_PREAMBLE=0, STATE_DECODE=1;
+  var state=STATE_WAIT_PREAMBLE;
+  var decodedSymbols=[];
+  var lastSymbolTime=0;
+  var preambleTime=0;
+  var lastDetectedFreq=0;
+  var sameFreqCount=0;
+
+  function freqToBin(f){return Math.round(f/binWidth);}
+
+  function getDominantFreq(){
+    analyser.getFloatFrequencyData(dataArr);
+    // Only look in ultrasonic range 17000-22500 Hz
+    var minBin=freqToBin(17000);
+    var maxBin=freqToBin(22500);
+    if(maxBin>bufLen-1)maxBin=bufLen-1;
+    var maxMag=-Infinity,maxB=minBin;
+    for(var b=minBin;b<=maxBin;b++){
+      if(dataArr[b]>maxMag){maxMag=dataArr[b];maxB=b;}
+    }
+    return {freq:maxB*binWidth, mag:maxMag};
+  }
+
+  function detect(){
+    if(!_spListening)return;
+    _spAnimFrame=requestAnimationFrame(detect);
+
+    var d=getDominantFreq();
+
+    // Update level bar
+    var level=Math.max(0,Math.min(100,(d.mag+120)*1.5));
+    if(levelFill)levelFill.style.width=level+'%';
+
+    if(d.mag<SP_DETECT_THRESH)return; // below noise floor
+
+    var now=Date.now();
+
+    if(state===STATE_WAIT_PREAMBLE){
+      // Look for preamble at ~17500 Hz
+      if(Math.abs(d.freq-SP_PREAMBLE)<300){
+        if(preambleTime===0)preambleTime=now;
+        else if(now-preambleTime>100){
+          // Preamble confirmed
+          state=STATE_DECODE;
+          decodedSymbols=[];
+          lastSymbolTime=now+SP_GAP_DUR;
+          preambleTime=0;
+          if(subEl)subEl.textContent='Signal detected! Decoding...';
+        }
+      }else{
+        preambleTime=0;
+      }
+    }else if(state===STATE_DECODE){
+      // Decode each symbol after its expected time window
+      if(now<lastSymbolTime)return;
+
+      // Check if freq is in our FSK range
+      if(d.freq>=SP_BASE_FREQ-200&&d.freq<=SP_BASE_FREQ+(SP_SYMBOLS-1)*SP_STEP+200){
+        var digit=spFreqToDigit(d.freq);
+        decodedSymbols.push(digit);
+        lastSymbolTime=now+SP_SYM_DUR+SP_GAP_DUR;
+
+        if(decodedSymbols.length===SP_NONCE_LEN){
+          // Full nonce decoded
+          var nonce=decodedSymbols.join('');
+          state=STATE_WAIT_PREAMBLE;
+          decodedSymbols=[];
+          spStopListening();
+          spRedeem(nonce, phone, name, db, titleEl, subEl, msgEl);
+        }
+      }else{
+        // Out of range — reset
+        if(now-lastSymbolTime>500){
+          state=STATE_WAIT_PREAMBLE;
+          decodedSymbols=[];
+          preambleTime=0;
+        }
+      }
+    }
+  }
+
+  detect();
+
+  // Auto-stop after 60 seconds
+  setTimeout(function(){
+    if(_spListening){
+      spStopListening();
+      if(titleEl)titleEl.textContent='Timed out';
+      if(subEl)subEl.textContent='No sound detected in 60 seconds. Try again.';
+    }
+  },60000);
 }
-</script>
-</body>
-</html>
+
+async function spRedeem(nonce, phone, name, db, titleEl, subEl, msgEl){
+  function setMsg(type,text){if(msgEl){msgEl.className='msg '+(type||'');msgEl.textContent=text;}}
+
+  if(titleEl)titleEl.textContent='Processing...';
+  if(subEl)subEl.textContent='Completing secure transfer...';
+
+  try{
+    var tokenRef=doc(db,'sound_tokens',nonce);
+    var tokenSnap=await getDoc(tokenRef);
+
+    if(!tokenSnap.exists())throw new Error('Token not found. May have expired.');
+    var token=tokenSnap.data();
+
+    if(token.status!=='pending')throw new Error('Token already used or expired.');
+    if(Date.now()>token.expires)throw new Error('Token expired. Ask sender to try again.');
+    if(token.from===phone)throw new Error('Cannot pay yourself.');
+
+    var senderPhone=token.from;
+    var senderName=token.fromName||senderPhone;
+    var amount=token.amount;
+    var sRef=doc(db,'users',senderPhone);
+    var rRef=doc(db,'users',phone);
+
+    // Atomic transaction — debit sender, credit receiver, mark token used
+    await runTransaction(db,async function(tx){
+      var sSnap=await tx.get(sRef);
+      var rSnap=await tx.get(rRef);
+      var tSnap=await tx.get(tokenRef);
+      if(!sSnap.exists())throw new Error('Sender account not found.');
+      if(!rSnap.exists())throw new Error('Your account not found.');
+      if(!tSnap.exists()||tSnap.data().status!=='pending')throw new Error('Token no longer valid.');
+      var sBal=sSnap.data().balance||0;
+      var rBal=rSnap.data().balance||0;
+      
