@@ -1268,67 +1268,141 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 });
 </script>
-<script>
-// Quick Transfer panel navigation -- these run immediately, no Firebase needed
-// Panel switching works without waiting for module to load
-function _qtShowPanel(send, receive, mode, unsup) {
-  var s = document.getElementById('bt-send-panel');
-  var r = document.getElementById('bt-receive-panel');
-  var m = document.getElementById('bt-mode-select');
-  var u = document.getElementById('bt-unsupported');
-  if (s) s.style.display    = send    ? 'block' : 'none';
-  if (r) r.style.display    = receive ? 'block' : 'none';
-  if (m) m.style.display    = mode    ? 'block' : 'none';
-  if (u) u.style.display    = unsup   ? 'block' : 'none';
+<script type="module">
+import { initializeApp, getApps } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+import { getFirestore, doc, setDoc, updateDoc, getDoc, addDoc, collection, onSnapshot, runTransaction } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+
+var _qtApp = getApps().length ? getApps()[0] : null;
+var _db;
+if (_qtApp) { _db = getFirestore(_qtApp); }
+
+function _qtPanel(send,receive,mode,unsup){
+  var ids=['bt-send-panel','bt-receive-panel','bt-mode-select','bt-unsupported'];
+  var vals=[send,receive,mode,unsup];
+  ids.forEach(function(id,i){var el=document.getElementById(id);if(el)el.style.display=vals[i]?'block':'none';});
 }
 
-window.btStartSend = function() {
-  _qtShowPanel(true, false, false, false);
-  var msg = document.getElementById('bt-send-msg');
-  if (msg) { msg.className = 'msg'; msg.textContent = ''; }
-  var st = document.getElementById('bt-send-status');
-  if (st) st.style.display = 'none';
-  var a = document.getElementById('bt-send-amount');
-  var c = document.getElementById('bt-code-input');
-  if (a) a.value = '';
-  if (c) c.value = '';
+window.btStartSend=function(){
+  _qtPanel(true,false,false,false);
+  var msg=document.getElementById('bt-send-msg');
+  if(msg){msg.className='msg';msg.textContent='';}
+  var st=document.getElementById('bt-send-status');
+  if(st)st.style.display='none';
+  var a=document.getElementById('bt-send-amount');
+  var c=document.getElementById('bt-code-input');
+  if(a)a.value='';
+  if(c)c.value='';
 };
 
-window.btStartReceive = function() {
-  _qtShowPanel(false, true, false, false);
-  var ra = 0, ri = setInterval(function() {
-    ra++;
-    if (window._btAdvertise) { clearInterval(ri); window._btAdvertise(); }
-    else if (ra > 50) { clearInterval(ri); var s = document.getElementById('bt-receive-sub'); if(s) s.textContent='App not ready. Please refresh.'; }
-  }, 100);
+window.btStartReceive=function(){
+  _qtPanel(false,true,false,false);
+  btAdvertise();
 };
 
-window.btRedeemCode = function() {
-  var ra = 0, ri = setInterval(function() {
-    ra++;
-    if (window._btRedeemCode) { clearInterval(ri); window._btRedeemCode(); }
-    else if (ra > 50) { clearInterval(ri); var m = document.getElementById('bt-send-msg'); if(m){m.className='msg error';m.textContent='App not ready. Please refresh.';} }
-  }, 100);
+window.btBack=function(){
+  var s=document.getElementById('bt-send-panel');
+  var r=document.getElementById('bt-receive-panel');
+  var u=document.getElementById('bt-unsupported');
+  var inSub=(s&&s.style.display==='block')||(r&&r.style.display==='block')||(u&&u.style.display==='block');
+  if(inSub){_qtPanel(false,false,true,false);}
+  else{if(window.showScreen)window.showScreen('screen-home');}
 };
 
-window.btBack = function() {
-  var s = document.getElementById('bt-send-panel');
-  var r = document.getElementById('bt-receive-panel');
-  var u = document.getElementById('bt-unsupported');
-  var inSub = (s && s.style.display === 'block') ||
-              (r && r.style.display === 'block') ||
-              (u && u.style.display === 'block');
-  if (inSub) {
-    _qtShowPanel(false, false, true, false);
-  } else {
-    if (window.showScreen) window.showScreen('screen-home');
+async function btAdvertise(){
+  var titleEl=document.getElementById('bt-receive-title');
+  var subEl=document.getElementById('bt-receive-sub');
+  var phone=localStorage.getItem('pm_phone');
+  var name=localStorage.getItem('pm_name')||phone;
+  if(!phone){if(subEl)subEl.textContent='Session error. Please log out and back in.';return;}
+  if(!_db){
+    var apps=getApps();
+    if(apps.length){_db=getFirestore(apps[0]);}else{if(subEl)subEl.textContent='App not ready. Please refresh.';return;}
   }
-};
+  if(titleEl)titleEl.textContent='Generating your code...';
+  if(subEl)subEl.textContent='Please wait...';
+  try{
+    var shortCode='BT'+Math.random().toString(36).substring(2,7).toUpperCase();
+    await setDoc(doc(_db,'bt_requests',shortCode),{code:shortCode,receiver:phone,receiverName:name,status:'waiting',createdAt:new Date().toISOString(),expiresAt:new Date(Date.now()+5*60*1000).toISOString()});
+    if(titleEl)titleEl.textContent='Your Receive Code';
+    if(subEl)subEl.innerHTML='<div style="font-family:var(--mono);font-size:44px;font-weight:800;color:#4D9FFF;letter-spacing:8px;margin:16px 0 10px;">'+shortCode+'</div><div style="font-size:13px;color:var(--text2);">Share this code with the sender.<br>They enter it in Send mode.<br><br><span style="color:var(--text3);">Expires in 5 minutes.</span></div>';
+    var unsub=onSnapshot(doc(_db,'bt_requests',shortCode),function(snap){
+      if(!snap.exists())return;
+      var data=snap.data();
+      if(data.status==='completed'){
+        unsub();
+        if(navigator.vibrate)navigator.vibrate([100,50,200]);
+        if(titleEl)titleEl.textContent='Money Received!';
+        if(subEl)subEl.innerHTML='<div style="font-size:36px;font-weight:800;color:var(--em);margin:12px 0;">+₹'+data.amount.toFixed(2)+'</div><div style="color:var(--text2);font-size:14px;">From '+data.senderName+'</div>';
+        var bal=parseFloat(localStorage.getItem('pm_balance')||'0')+data.amount;
+        localStorage.setItem('pm_balance',bal.toFixed(2));
+        setTimeout(function(){if(window.showScreen)window.showScreen('screen-home');},2500);
+      }
+    });
+    setTimeout(function(){unsub();updateDoc(doc(_db,'bt_requests',shortCode),{status:'expired'}).catch(function(){});},5*60*1000);
+  }catch(e){
+    if(subEl)subEl.textContent='Failed to generate code. Check internet.';
+    console.error(e);
+  }
+}
 
-window.btRedeemCode = function() {
-  // Delegate to module function when ready
-  if (window._btRedeemCode) window._btRedeemCode();
-  else document.addEventListener('pm-bt-ready', function() { window._btRedeemCode && window._btRedeemCode(); }, { once: true });
+window.btRedeemCode=async function(){
+  var codeEl=document.getElementById('bt-code-input');
+  var amountEl=document.getElementById('bt-send-amount');
+  var msg=document.getElementById('bt-send-msg');
+  var code=(codeEl?codeEl.value:'').trim().toUpperCase();
+  var amount=parseFloat(amountEl?amountEl.value:'0');
+  var phone=localStorage.getItem('pm_phone');
+  var name=localStorage.getItem('pm_name')||phone;
+  function setMsg(type,text){if(msg){msg.className='msg '+type;msg.textContent=text;}}
+  if(!code||code.length<4){setMsg('error','Enter the receiver code');return;}
+  if(!amount||amount<=0){setMsg('error','Enter a valid amount');return;}
+  if(!phone){setMsg('error','Session error. Please refresh.');return;}
+  if(!_db){var apps=getApps();if(apps.length){_db=getFirestore(apps[0]);}else{setMsg('error','App not ready. Please refresh.');return;}}
+  if(window.requirePin){
+    try{await window.requirePin('Confirm Transfer','Send via Quick Transfer');}
+    catch(e){return;}
+  }
+  setMsg('success','Processing...');
+  try{
+    var btRef=doc(_db,'bt_requests',code);
+    var btSnap=await getDoc(btRef);
+    if(!btSnap.exists())throw new Error('Code not found.');
+    var btData=btSnap.data();
+    if(btData.status!=='waiting')throw new Error('Code already used or expired.');
+    if(new Date(btData.expiresAt)<new Date())throw new Error('Code expired.');
+    if(btData.receiver===phone)throw new Error('Cannot send to yourself.');
+    var receiverPhone=btData.receiver;
+    var receiverName=btData.receiverName;
+    var sRef=doc(_db,'users',phone);
+    var rRef=doc(_db,'users',receiverPhone);
+    await runTransaction(_db,async function(tx){
+      var sSnap=await tx.get(sRef);
+      var rSnap=await tx.get(rRef);
+      if(!sSnap.exists())throw new Error('Your account not found.');
+      if(!rSnap.exists())throw new Error('Receiver not on PayMesh.');
+      var sBal=sSnap.data().balance||0;
+      var rBal=rSnap.data().balance||0;
+      if(sBal<amount)throw new Error('Insufficient balance. You have ₹'+sBal.toFixed(2));
+      tx.update(sRef,{balance:sBal-amount});
+      tx.update(rRef,{balance:rBal+amount});
+      tx.update(btRef,{status:'completed',amount:amount,sender:phone,senderName:name,completedAt:new Date().toISOString()});
+    });
+    var time=new Date().toISOString();
+    await Promise.all([
+      addDoc(collection(_db,'transactions'),{phone:phone,label:'Quick Transfer to '+receiverName,amount:amount,type:'debit',time:time}),
+      addDoc(collection(_db,'transactions'),{phone:receiverPhone,label:'Quick Transfer from '+name,amount:amount,type:'credit',time:time})
+    ]);
+    var newBal=Math.max(0,parseFloat(localStorage.getItem('pm_balance')||'0')-amount);
+    localStorage.setItem('pm_balance',newBal.toFixed(2));
+    if(navigator.vibrate)navigator.vibrate([100,50,200]);
+    if(window.showOverlay)window.showOverlay('','Sent!','₹'+amount.toFixed(2)+' sent to '+receiverName);
+    if(codeEl)codeEl.value='';
+    if(amountEl)amountEl.value='';
+    setMsg('','');
+  }catch(e){
+    setMsg('error',e.message||'Transfer failed.');
+    console.error(e);
+  }
 };
 </script>
 </body>
