@@ -1720,18 +1720,18 @@ import { getFirestore, doc, setDoc, getDoc, deleteDoc, addDoc, collection, onSna
 // ══════════════════════════════════════════════════════
 
 const SP_BASE_FREQ     = 18000; // Hz — start of ultrasonic range
-const SP_STEP          = 250;   // Hz per symbol
+const SP_STEP          = 375;   // Hz per symbol — wide enough that ±100 Hz tol never bleeds into neighbour
 const SP_SYMBOLS       = 16;    // 4 bits per symbol (hex digit)
-const SP_SYM_DUR       = 150;   // ms per symbol (was 80 — too short for FFT averaging)
-const SP_GAP_DUR       = 30;    // ms gap between symbols (was 20)
-const SP_NONCE_LEN     = 8;     // 8 hex digits = 32-bit nonce
+const SP_SYM_DUR       = 180;   // ms per symbol — longer window gives FFT more averages
+const SP_GAP_DUR       = 40;    // ms gap between symbols
+const SP_NONCE_LEN     = 9;     // 8 data hex digits + 1 XOR checksum digit = tamper/misread detection
 const SP_PREAMBLE      = 17500; // Hz — sync tone before data
 const SP_PREAMBLE_DUR  = 350;   // ms (was 200)
 const SP_INTER_LOOP_MS = 400;   // ms silence between repeat loops
 const SP_EMIT_LOOPS    = 4;     // repeat full sequence 4 times
 const SP_TOKEN_TTL     = 55000; // ms — covers 4 loops (~10s) + 45s margin
 const SP_DETECT_THRESH = -50;   // dB — raised from -60 (ultrasonic attenuates heavily)
-const SP_FREQ_TOL      = 400;   // Hz tolerance for bin matching (was ~130)
+const SP_FREQ_TOL      = 100;   // Hz tolerance — safe: 375 Hz step means ±100 never bleeds into adjacent symbol
 
 function _spDb(){var a=getApps();return a.length?getFirestore(a[0]):null;}
 
@@ -1782,11 +1782,15 @@ window.spStartReceive=function(){
   spListen();
 };
 
-// ── Generate cryptographic nonce ──
+// ── Generate cryptographic nonce (8 data hex digits + 1 XOR checksum) ──
+// Checksum lets receiver detect any decode error before touching Firestore.
 function spNonce(){
   var arr=new Uint8Array(4);
   crypto.getRandomValues(arr);
-  return Array.from(arr).map(function(b){return b.toString(16).padStart(2,'0');}).join('');
+  var hex=Array.from(arr).map(function(b){return b.toString(16).padStart(2,'0');}).join('');
+  var check=0;
+  hex.split('').forEach(function(c){check^=parseInt(c,16);});
+  return hex+check.toString(16); // 9 chars: 8 data + 1 checksum
 }
 
 // ── Encode nonce as frequency sequence ──
@@ -1837,17 +1841,18 @@ window.spEmit=async function(){
     catch(e){return;}
   }
 
-  var nonce=spNonce();
+  var nonce=spNonce();          // 9-char string: 8 data + 1 checksum
+  var nonceKey=nonce.slice(0,8); // Firestore doc key = 8 data chars only
   var expires=Date.now()+SP_TOKEN_TTL;
 
   try{
-    await setDoc(doc(db,'sound_tokens',nonce),{
-      nonce:nonce, from:phone, fromName:name,
+    await setDoc(doc(db,'sound_tokens',nonceKey),{
+      nonce:nonceKey, from:phone, fromName:name,
       amount:amount, expires:expires,
       status:'pending', createdAt:new Date().toISOString()
     });
 
-    var freqs=spEncodeFreqs(nonce);
+    var freqs=spEncodeFreqs(nonce); // encode all 9 symbols including checksum
     var RAMP=0.005; // 5ms gain attack/release — eliminates click artifacts
 
     // Helper: schedule one tone with envelope on an already-created AudioContext
@@ -1914,7 +1919,7 @@ window.spEmit=async function(){
     _spStatus('\u23F3','Waiting for receiver...','Token valid for ~55 seconds. Keep app open.');
 
     // Watch Firestore for completion
-    var unsub=onSnapshot(doc(db,'sound_tokens',nonce),function(snap){
+    var unsub=onSnapshot(doc(db,'sound_tokens',nonceKey),function(snap){
       if(!snap.exists())return;
       var data=snap.data();
       if(data.status==='completed'){
@@ -1936,9 +1941,9 @@ window.spEmit=async function(){
     setTimeout(async function(){
       unsub();
       try{
-        var t2=await getDoc(doc(db,'sound_tokens',nonce));
+        var t2=await getDoc(doc(db,'sound_tokens',nonceKey));
         if(t2.exists()&&t2.data().status==='pending'){
-          await deleteDoc(doc(db,'sound_tokens',nonce));
+          await deleteDoc(doc(db,'sound_tokens',nonceKey));
           _spStatus('\u274C','Expired','Receiver didn\'t detect sound. Move closer and try again.');
         }
       }catch(e){}
@@ -2153,11 +2158,23 @@ async function spListen(){
 async function spRedeem(nonce, phone, name, db, titleEl, subEl, msgEl){
   function setMsg(type,text){if(msgEl){msgEl.className='msg '+(type||'');msgEl.textContent=text;}}
 
+  // ── Validate XOR checksum before touching Firestore ──
+  // nonce is 9 chars: 8 data + 1 checksum. If they don't match, we decoded wrong.
+  var digits=nonce.split('').map(function(c){return parseInt(c,16);});
+  var xor=digits.slice(0,8).reduce(function(a,b){return a^b;},0);
+  if(xor!==digits[8]){
+    if(titleEl)titleEl.textContent='Decode Error';
+    setMsg('error','Signal misread — move phones closer and try again.');
+    setTimeout(function(){_spPanel(false,false,true,false);},3000);
+    return;
+  }
+  var nonceKey=nonce.slice(0,8); // Firestore key = 8 data chars only
+
   if(titleEl)titleEl.textContent='Processing...';
   if(subEl)subEl.textContent='Completing secure transfer...';
 
   try{
-    var tokenRef=doc(db,'sound_tokens',nonce);
+    var tokenRef=doc(db,'sound_tokens',nonceKey);
     var tokenSnap=await getDoc(tokenRef);
 
     if(!tokenSnap.exists())throw new Error('Token not found. May have expired.');
