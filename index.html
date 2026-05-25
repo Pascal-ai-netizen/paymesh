@@ -1217,6 +1217,61 @@ if ('serviceWorker' in navigator) {
 </style>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+// ═══════════════════════════════════════════════════════
+// MOBILE-ONLY GUARD
+// Blocks access from desktops/laptops. PayMesh is a mobile
+// PWA — desktop access (and devtools via desktop) is not
+// supported. Checks UA + touch capability + screen width.
+// ═══════════════════════════════════════════════════════
+(function() {
+  var ua = navigator.userAgent || '';
+  var isMobileUA = /Android|iPhone|iPad|iPod|Windows Phone|BlackBerry|Opera Mini|IEMobile|Mobile/i.test(ua);
+  var hasTouch = (navigator.maxTouchPoints > 0) || ('ontouchstart' in window);
+  var isNarrow = window.screen.width <= 1024;
+
+  // Block if: clearly not mobile UA, OR desktop-sized screen with no touch
+  var isDesktop = !isMobileUA || (!hasTouch && window.screen.width > 1024);
+
+  if (isDesktop) {
+    document.addEventListener('DOMContentLoaded', function() {
+      // Hide everything
+      document.body.innerHTML = '';
+      document.body.style.cssText = 'margin:0;padding:0;background:#03050A;display:flex;align-items:center;justify-content:center;min-height:100vh;font-family:system-ui,sans-serif;';
+      var box = document.createElement('div');
+      box.style.cssText = 'text-align:center;padding:40px 32px;max-width:400px;';
+      box.innerHTML =
+        '<svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="#FF4D6A" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:20px"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12" y2="18"/></svg>' +
+        '<div style="color:#EEF2FF;font-size:22px;font-weight:700;margin-bottom:10px;">Mobile Only</div>' +
+        '<div style="color:#8892a4;font-size:14px;line-height:1.7;margin-bottom:24px;">PayMesh is a mobile payment app.<br>Please open it on your Android or iOS phone.</div>' +
+        '<div style="display:inline-flex;align-items:center;gap:8px;background:rgba(255,77,106,0.1);border:1px solid rgba(255,77,106,0.25);border-radius:10px;padding:10px 18px;">' +
+        '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FF4D6A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>' +
+        '<span style="color:#FF4D6A;font-size:13px;font-weight:600;">Access denied on this device</span></div>';
+      document.body.appendChild(box);
+    });
+    // Prevent further script execution effects but let DOMContentLoaded fire
+    return;
+  }
+})();
+
+// ═══════════════════════════════════════════════════════
+// GLOBAL SHIMS — module functions bridged for inline onclick
+// ES module scripts are deferred; these shims ensure inline
+// onclick="showScreen(...)" etc. work at any point after load.
+// ═══════════════════════════════════════════════════════
+function showScreen(id) {
+  if (typeof window.showScreen === 'function') {
+    window.showScreen(id);
+  } else {
+    setTimeout(function() {
+      if (typeof window.showScreen === 'function') window.showScreen(id);
+    }, 300);
+  }
+}
+function spBack()   { if (typeof window.spBack   === 'function') window.spBack(); }
+function stopScan() { if (typeof window.stopScan === 'function') window.stopScan(); else showScreen('screen-home'); }
+function startScan(){ if (typeof window.startScan=== 'function') window.startScan(); }
+</script>
 <script type="module" src="app.js?v=14"></script>
 
 
@@ -2036,4 +2091,42 @@ async function spRedeem(nonce, phone, name, db, titleEl, subEl, msgEl){
       if(!tSnap.exists()||tSnap.data().status!=='pending')throw new Error('Token no longer valid.');
       var sBal=sSnap.data().balance||0;
       var rBal=rSnap.data().balance||0;
-      
+      if(sBal<amount)throw new Error('Sender has insufficient balance.');
+      tx.update(sRef,{balance:sBal-amount});
+      tx.update(rRef,{balance:rBal+amount});
+      tx.update(tokenRef,{status:'completed',toName:name,toPhone:phone,completedAt:new Date().toISOString()});
+    });
+
+    // Write transaction records
+    var time=new Date().toISOString();
+    await Promise.all([
+      addDoc(collection(db,'transactions'),{phone:phone,      label:'Sound Pay from '+senderName,amount:amount,type:'credit',time:time}),
+      addDoc(collection(db,'transactions'),{phone:senderPhone,label:'Sound Pay to '+name,         amount:amount,type:'debit',  time:time})
+    ]);
+
+    // Clean up token doc
+    deleteDoc(tokenRef).catch(function(){});
+
+    // Update local balance cache
+    var newBal=parseFloat(localStorage.getItem('pm_balance')||'0')+amount;
+    localStorage.setItem('pm_balance',newBal.toFixed(2));
+
+    if(navigator.vibrate)navigator.vibrate([200,100,200,100,400]);
+    if(titleEl)titleEl.textContent='Payment Received!';
+    if(subEl)subEl.textContent='\u20b9'+amount.toFixed(2)+' from '+senderName+' added to wallet.';
+    setMsg('success','Transfer complete!');
+
+    setTimeout(function(){
+      _spPanel(false,false,true,false);
+      if(window.showScreen)window.showScreen('screen-home');
+    },2500);
+
+  }catch(e){
+    if(titleEl)titleEl.textContent='Transfer Failed';
+    if(subEl)subEl.textContent='';
+    setMsg('error',e.message||'Transfer failed. Try again.');
+    console.error('[SoundPay] spRedeem error:',e);
+    setTimeout(function(){_spPanel(false,false,true,false);},3000);
+  }
+}
+</script>
