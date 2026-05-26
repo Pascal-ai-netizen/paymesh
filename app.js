@@ -573,6 +573,7 @@ window.showScreen = function(id) {
   if (id === 'screen-home')    loadHomeData();
   if (id === 'screen-receive') generateReceiveQR();
   if (id === 'screen-pin')     refreshPinSettingsUI();
+  if (id === 'screen-copilot') ariaLoadDashboard();
   if (id === 'screen-load') {
     document.getElementById('display-upi').textContent = PAYMESH_UPI;
     buildUPILink();
@@ -580,6 +581,11 @@ window.showScreen = function(id) {
   if (id === 'screen-voucher') {
     const m = document.getElementById('voucher-msg');
     if (m) { m.className = 'msg'; m.textContent = ''; }
+    _hideVoucherFraudPanel();
+    _voucherFraudOverrideGranted = false;
+    _voucherFraudLastAmount = 0; // reset so re-entering same amount fires a fresh analysis
+    const vBtn = document.getElementById('voucher-submit-btn');
+    if (vBtn) { vBtn.disabled = false; vBtn.style.opacity = '1'; vBtn.style.cursor = 'pointer'; vBtn.textContent = 'Generate Offline Voucher'; }
     loadVouchersFromFirestore();
   }
   if (id === 'screen-send') {
@@ -798,6 +804,9 @@ async function loadHomeData() {
   document.getElementById('display-name').textContent = displayName;
   const cached = parseFloat(sessionStorage.getItem('pm_balance') || '0');
   document.getElementById('wallet-balance').textContent = cached.toFixed(2);
+
+  // Update Aria alert dot on home load
+  try { if (CURRENT_USER.phone) _ariaUpdateAlertDot(ariaGetData()); } catch(e) {}
 
   // Only attach listeners once per session -- prevent stacking
   if (_homeListenersActive) return;
@@ -1088,11 +1097,11 @@ function _renderFraudPanel(score, signals, amount) {
   const pct = Math.min(Math.round(score / 100 * 100), 100);
 
   // ── Badge ──
-  badge.className = `fraud-badge visible ${tier}`;
-  if      (tier === 'green')   { badgeIco.textContent = '✓'; badgeLbl.textContent = 'SAFE'; }
-  else if (tier === 'amber')   { badgeIco.textContent = '⚠'; badgeLbl.textContent = 'CAUTION'; }
-  else if (tier === 'red')     { badgeIco.textContent = '🛡'; badgeLbl.textContent = 'WARNING'; }
-  else                         { badgeIco.textContent = '🚫'; badgeLbl.textContent = 'HIGH RISK'; }
+  if (badge) {
+    badge.className = `fraud-badge visible ${tier}`;
+    if (badgeIco) { if      (tier === 'green')   badgeIco.textContent = '✓';  else if (tier === 'amber') badgeIco.textContent = '⚠'; else if (tier === 'red') badgeIco.textContent = '🛡'; else badgeIco.textContent = '🚫'; }
+    if (badgeLbl) { if      (tier === 'green')   badgeLbl.textContent = 'SAFE'; else if (tier === 'amber') badgeLbl.textContent = 'CAUTION'; else if (tier === 'red') badgeLbl.textContent = 'WARNING'; else badgeLbl.textContent = 'HIGH RISK'; }
+  }
 
   if (tier === 'green') {
     panel.className = 'fraud-panel'; // hide
@@ -1102,38 +1111,43 @@ function _renderFraudPanel(score, signals, amount) {
       sendBtn.style.cursor  = 'pointer';
       sendBtn.textContent = 'Send Now';
     }
+    // Log safe send to Aria
+    if (typeof ariaLogEvent === 'function') ariaLogEvent('green', 'send', [], amount);
     return;
   }
 
-  // ── Panel ──
-  panel.className = `fraud-panel show ${tier}`;
+  // Log to Aria
+  if (typeof ariaLogEvent === 'function') ariaLogEvent(tier, 'send', signals, amount);
 
-  fill.style.width = pct + '%';
-  fill.className = `fraud-score-fill ${tier}`;
+  // ── Panel ──
+  if (panel) panel.className = `fraud-panel show ${tier}`;
+
+  if (fill) { fill.style.width = pct + '%'; fill.className = `fraud-score-fill ${tier}`; }
 
   // Panel title + icon
   if (tier === 'amber') {
-    panelIcon.textContent = '⚠️';
-    title.textContent = 'Fraud Copilot — Caution';
-    subtitle.textContent = 'Some risk signals detected. Review before sending.';
+    if (panelIcon) panelIcon.textContent = '⚠️';
+    if (title)    title.textContent = 'Fraud Copilot — Caution';
+    if (subtitle) subtitle.textContent = 'Some risk signals detected. Review before sending.';
   } else if (tier === 'red') {
-    panelIcon.textContent = '🛡️';
-    title.textContent = 'Fraud Copilot — Strong Warning';
-    subtitle.textContent = 'Multiple fraud patterns detected. Proceed carefully.';
+    if (panelIcon) panelIcon.textContent = '🛡️';
+    if (title)    title.textContent = 'Fraud Copilot — Strong Warning';
+    if (subtitle) subtitle.textContent = 'Multiple fraud patterns detected. Proceed carefully.';
   } else {
-    panelIcon.textContent = '🚫';
-    title.textContent = 'Fraud Copilot — Transaction Blocked';
-    subtitle.textContent = 'This transaction matches high-risk scam patterns.';
+    if (panelIcon) panelIcon.textContent = '🚫';
+    if (title)    title.textContent = 'Fraud Copilot — Transaction Blocked';
+    if (subtitle) subtitle.textContent = 'This transaction matches high-risk scam patterns.';
   }
 
   // Signal rows
-  sigCont.innerHTML = signals.map(s => `
+  if (sigCont) sigCont.innerHTML = signals.map(s => `
     <div class="fraud-signal ${s.sev}">
       <span class="fraud-signal-icon">${s.icon}</span>
       <span>${s.text}</span>
     </div>`).join('');
 
   // Action area
+  if (!actions) return;
   actions.innerHTML = '';
   if (tier === 'blocked') {
     // No proceed option
@@ -1202,6 +1216,367 @@ function _hideFraudPanel() {
   if (badge) badge.className = 'fraud-badge';
   if (panel) panel.className = 'fraud-panel';
   _fraudOverrideGranted = false;
+}
+
+// ═══════════════════════════════════════════
+// ARIA — FRAUD COPILOT DATA & PERSISTENCE
+// All data stored in localStorage under pm_aria_*
+// ═══════════════════════════════════════════
+
+const ARIA_TIPS = [
+  "Never send money to someone claiming to be from a bank or government — they will never ask for wallet transfers.",
+  "If someone says 'send ₹1 to verify your account', it's always a scam. No legitimate service does this.",
+  "Be extra careful at night — most payment scams happen between 10 PM and 4 AM.",
+  "Round numbers like ₹500, ₹1000 or ₹5000 from unknown contacts are a common fraud pattern.",
+  "If someone is pressuring you urgently to send money, take a breath. Scammers rely on panic.",
+  "Vouchers can only be redeemed once. If someone asks you to 'test' one, they're stealing from you.",
+  "Never share your PayMesh PIN with anyone — not even someone claiming to be PayMesh support.",
+  "A brand-new account sending or requesting large amounts is a serious red flag.",
+  "Trust your gut. If something feels off, Aria's here to back you up — don't override warnings lightly.",
+  "Check transaction history regularly. Early detection stops fraud before it escalates.",
+  "QR codes can be tampered with in person. Always verify the recipient's name before paying.",
+  "Using 'emergency' or 'stranded' language is a manipulation tactic. Call the person directly first."
+];
+
+function _ariaKey(k) { return 'pm_aria_' + (CURRENT_USER.phone || 'unknown') + '_' + k; }
+
+function ariaGetData() {
+  try {
+    const raw = localStorage.getItem(_ariaKey('data'));
+    if (!raw) return { safe: 0, warned: 0, blocked: 0, log: [], riskScore: 0 };
+    return JSON.parse(raw);
+  } catch(e) {
+    return { safe: 0, warned: 0, blocked: 0, log: [], riskScore: 0 };
+  }
+}
+
+function ariaSaveData(data) {
+  try {
+    // Keep log to last 50 entries
+    if (data.log && data.log.length > 50) data.log = data.log.slice(-50);
+    localStorage.setItem(_ariaKey('data'), JSON.stringify(data));
+  } catch(e) {}
+}
+
+function ariaLogEvent(tier, context, signals, amount) {
+  const data = ariaGetData();
+  if (tier === 'green') { data.safe = (data.safe || 0) + 1; }
+  else if (tier === 'amber') { data.warned = (data.warned || 0) + 1; }
+  else if (tier === 'red' || tier === 'blocked') { data.blocked = (data.blocked || 0) + 1; }
+
+  // Recalculate rolling risk score (weighted average of last 10 events)
+  const logEntry = {
+    tier,
+    context, // 'send' | 'voucher'
+    amount,
+    signals: signals.map(s => s.text),
+    time: new Date().toISOString()
+  };
+  data.log = data.log || [];
+  data.log.push(logEntry);
+
+  // Risk score: average severity of last 10 events (blocked=100,red=70,amber=30,green=0)
+  const tierWeights = { blocked: 100, red: 70, amber: 30, green: 0 };
+  const recent = data.log.slice(-10);
+  const avgRisk = recent.reduce((sum, e) => sum + (tierWeights[e.tier] || 0), 0) / recent.length;
+  data.riskScore = Math.round(avgRisk);
+
+  ariaSaveData(data);
+  _ariaUpdateAlertDot(data);
+  return data;
+}
+
+function _ariaUpdateAlertDot(data) {
+  const dot = document.getElementById('aria-alert-dot');
+  if (!dot) return;
+  const hasRisk = (data.blocked || 0) > 0 || (data.riskScore || 0) >= 30;
+  dot.classList.toggle('show', hasRisk);
+}
+
+function ariaLoadDashboard() {
+  const data = ariaGetData();
+  if (!data) return;
+
+  // Stats — only update if elements exist
+  const safEl = document.getElementById('aria-stat-safe');
+  const wrnEl = document.getElementById('aria-stat-warned');
+  const blkEl = document.getElementById('aria-stat-blocked');
+  if (safEl) safEl.textContent = data.safe || 0;
+  if (wrnEl) wrnEl.textContent = data.warned || 0;
+  if (blkEl) blkEl.textContent = data.blocked || 0;
+
+  // Risk ring
+  const ring      = document.getElementById('aria-risk-ring');
+  const scoreVal  = document.getElementById('aria-risk-score-val');
+  const riskDesc  = document.getElementById('aria-risk-desc');
+  const riskScore = data.riskScore || 0;
+  if (ring) {
+    const circumference = 176;
+    const offset = circumference - (riskScore / 100) * circumference;
+    ring.style.strokeDashoffset = offset;
+    ring.style.stroke = riskScore >= 70 ? 'var(--red)' : riskScore >= 40 ? 'var(--amber)' : 'var(--em)';
+  }
+  if (scoreVal) {
+    scoreVal.textContent = riskScore;
+    scoreVal.style.color = riskScore >= 70 ? 'var(--red)' : riskScore >= 40 ? 'var(--amber)' : 'var(--em)';
+  }
+  if (riskDesc) {
+    if      (riskScore >= 70) riskDesc.textContent = 'High risk — review your recent transactions carefully.';
+    else if (riskScore >= 40) riskDesc.textContent = 'Moderate risk — some suspicious patterns detected.';
+    else if (riskScore >= 15) riskDesc.textContent = 'Low risk — minor signals in recent activity.';
+    else                      riskDesc.textContent = 'All clear — your account looks healthy.';
+  }
+
+  // Greeting message
+  const greeting = document.getElementById('aria-greeting-msg');
+  if (greeting) {
+    const name = CURRENT_USER.name ? CURRENT_USER.name.split(' ')[0] : 'there';
+    if      (riskScore >= 70) greeting.textContent = `${name}, I need your attention — your recent activity shows high-risk patterns. Please review my detection log below and stay cautious.`;
+    else if (riskScore >= 30) greeting.textContent = `Hey ${name}! I've spotted a few things worth watching. Nothing critical yet, but check my log below. I'll keep watching your back.`;
+    else                      greeting.textContent = `Hey ${name}! All good here — your account is looking clean. I'm monitoring every transaction and voucher in real-time. Stay safe!`;
+  }
+
+  // Tip of the day (rotates daily)
+  const tipEl = document.getElementById('aria-tip-text');
+  if (tipEl) {
+    const dayIdx = Math.floor(Date.now() / 86400000) % ARIA_TIPS.length;
+    tipEl.textContent = ARIA_TIPS[dayIdx];
+  }
+
+  // Log list
+  _ariaRenderLog(data.log || []);
+}
+
+function _ariaRenderLog(log) {
+  const listEl = document.getElementById('aria-log-list');
+  if (!listEl) return;
+  if (!log || !log.length) {
+    listEl.innerHTML = '<div class="p-log-empty">No detections yet — Aria\'s watching 👀</div>';
+    return;
+  }
+  const tierIcon  = { green: '✅', amber: '⚠️', red: '🚨', blocked: '🚫' };
+  const tierLabel = { green: 'Safe', amber: 'Warning', red: 'High Risk', blocked: 'Blocked' };
+  const ctxLabel  = { send: 'Send Money', voucher: 'Voucher' };
+  function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  listEl.innerHTML = [...log].reverse().map(e => {
+    let displayTime = e.time || '';
+    try { const d = new Date(e.time); if (!isNaN(d)) displayTime = d.toLocaleString(); } catch(ex) {}
+    const topSignal = (e.signals && e.signals[0]) ? esc(e.signals[0]) : 'Analysed and cleared.';
+    const tier = e.tier || 'green';
+    return `<div class="p-log-item ${esc(tier)}">
+      <div class="p-log-icon">${tierIcon[tier] || '🛡️'}</div>
+      <div class="p-log-body">
+        <div class="p-log-title">${tierLabel[tier] || 'Check'} · ${ctxLabel[e.context] || esc(e.context || '')} · ₹${Number(e.amount || 0).toFixed(2)}</div>
+        <div class="p-log-sub">${topSignal}</div>
+        <div class="p-log-time">${esc(displayTime)}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+window.ariaClearLog = function() {
+  if (!confirm('Clear Aria\'s detection log?')) return;
+  const data = ariaGetData();
+  data.log = [];
+  data.safe = 0; data.warned = 0; data.blocked = 0; data.riskScore = 0;
+  ariaSaveData(data);
+  _ariaUpdateAlertDot(data);
+  ariaLoadDashboard();
+};
+
+// ═══════════════════════════════════════════
+// VOUCHER FRAUD COPILOT
+// Extended fraud analysis for voucher creation
+// ═══════════════════════════════════════════
+
+let _voucherFraudOverrideGranted = false;
+let _voucherFraudDebounceTimer = null;
+let _voucherFraudSeq = 0;
+let _voucherFraudLastAmount = 0;
+
+window.onVoucherFieldChange = function() {
+  const amount = parseFloat(document.getElementById('voucher-amount').value) || 0;
+
+  if (!amount || amount <= 0) {
+    _hideVoucherFraudPanel();
+    return;
+  }
+
+  const amountChanged = (amount !== _voucherFraudLastAmount);
+  if (amountChanged) {
+    _voucherFraudOverrideGranted = false;
+    _voucherFraudLastAmount = amount;
+  }
+  if (_voucherFraudOverrideGranted && !amountChanged) return;
+
+  clearTimeout(_voucherFraudDebounceTimer);
+  _voucherFraudDebounceTimer = setTimeout(() => _runVoucherFraudScore(amount), 350);
+};
+
+async function _runVoucherFraudScore(amount) {
+  const seq = ++_voucherFraudSeq;
+  const signals = [];
+  let score = 0;
+
+  const currentBal = parseFloat(sessionStorage.getItem('pm_balance') || '0');
+  const hour = new Date().getHours();
+  const isNight = hour >= 20 || hour < 6;
+
+  // Pattern V1: Drains nearly all balance
+  if (currentBal > 0) {
+    const drainRatio = amount / currentBal;
+    if (drainRatio > 0.95) {
+      score += 50;
+      signals.push({ sev:'red', icon:'💸', text:`This voucher uses ${Math.round(drainRatio*100)}% of your entire balance. Don't create it unless you're absolutely sure.` });
+    } else if (drainRatio > 0.75) {
+      score += 25;
+      signals.push({ sev:'amber', icon:'💸', text:`This uses ${Math.round(drainRatio*100)}% of your wallet. That's a large voucher — are you sure?` });
+    }
+  }
+
+  // Pattern V2: Very large voucher at night
+  if (amount >= 2000 && isNight) {
+    score += 30;
+    signals.push({ sev:'red', icon:'🌙', text:`Creating a ₹${amount.toFixed(0)} voucher late at night is unusual. Scammers often pressure victims to create vouchers at odd hours.` });
+  } else if (amount >= 5000) {
+    score += 20;
+    signals.push({ sev:'amber', icon:'💰', text:`₹${amount.toFixed(0)} is a large voucher. Make sure you personally know who will redeem this.` });
+  }
+
+  // Pattern V3: Rapid repeated voucher creation (check Aria log — non-green entries only)
+  try {
+    const data = ariaGetData();
+    const recent = (data.log || []).filter(e =>
+      e.context === 'voucher' &&
+      e.tier !== 'green' &&
+      Date.now() - new Date(e.time).getTime() < 10 * 60 * 1000 // last 10 minutes
+    );
+    if (recent.length >= 2) {
+      score += 35;
+      signals.push({ sev:'red', icon:'🔁', text:`You've created ${recent.length} warned vouchers in the last 10 minutes. This rapid pattern can indicate you're being pressured by a scammer.` });
+    } else if (recent.length === 1) {
+      score += 15;
+      signals.push({ sev:'amber', icon:'🔁', text:`You recently created a flagged voucher. If someone is asking you to create multiple vouchers, that's a red flag.` });
+    }
+  } catch(e) {}
+
+  if (seq !== _voucherFraudSeq) return;
+  _renderVoucherFraudPanel(score, signals, amount);
+}
+
+function _renderVoucherFraudPanel(score, signals, amount) {
+  const badge    = document.getElementById('voucher-fraud-badge');
+  const panel    = document.getElementById('voucher-fraud-panel');
+  const fill     = document.getElementById('voucher-fraud-score-fill');
+  const sigCont  = document.getElementById('voucher-fraud-signals');
+  const actions  = document.getElementById('voucher-fraud-actions');
+  const title    = document.getElementById('voucher-fraud-panel-title');
+  const subtitle = document.getElementById('voucher-fraud-panel-subtitle');
+  const panelIcon= document.getElementById('voucher-fraud-panel-icon');
+  const badgeLbl = document.getElementById('voucher-fraud-badge-label');
+  const badgeIco = document.getElementById('voucher-fraud-badge-icon');
+  const vBtn     = document.getElementById('voucher-submit-btn');
+
+  let tier;
+  if      (score >= 80) tier = 'blocked';
+  else if (score >= 45) tier = 'red';
+  else if (score >= 20) tier = 'amber';
+  else                  tier = 'green';
+
+  const pct = Math.min(Math.round(score / 100 * 100), 100);
+
+  // Badge
+  if (badge) {
+    badge.className = `fraud-badge visible ${tier === 'green' ? 'green' : tier === 'amber' ? 'amber' : 'red'}`;
+    if (badgeIco) badgeIco.textContent = tier === 'green' ? '✅' : tier === 'amber' ? '⚠️' : '🚫';
+    if (badgeLbl) badgeLbl.textContent = tier === 'green' ? 'ARIA OK' : tier === 'amber' ? 'CAUTION' : tier === 'blocked' ? 'BLOCKED' : 'WARNING';
+  }
+
+  if (tier === 'green') {
+    if (panel) panel.className = 'voucher-fraud-panel';
+    if (vBtn) { vBtn.disabled = false; vBtn.style.opacity = '1'; vBtn.style.cursor = 'pointer'; }
+    ariaLogEvent('green', 'voucher', [], amount);
+    return;
+  }
+
+  // Log to Aria (non-green tiers only, after early return)
+  ariaLogEvent(tier, 'voucher', signals, amount);
+
+  if (panel) panel.className = `voucher-fraud-panel show ${tier === 'blocked' ? 'red' : tier}`;
+  if (fill)  { fill.style.width = pct + '%'; fill.className = `fraud-score-fill ${tier === 'blocked' ? 'red' : tier}`; }
+
+  if (tier === 'amber') {
+    if (panelIcon) panelIcon.textContent = '⚠️';
+    if (title)    title.textContent   = 'Aria · Heads Up';
+    if (subtitle) subtitle.textContent = 'Some signals detected. Double-check before creating.';
+  } else {
+    if (panelIcon) panelIcon.textContent = '🚨';
+    if (title)    title.textContent   = 'Aria · Strong Warning';
+    if (subtitle) subtitle.textContent = 'This voucher shows high-risk patterns. Be very careful.';
+  }
+
+  if (sigCont) sigCont.innerHTML = signals.map(s => `
+    <div class="fraud-signal ${s.sev}">
+      <span class="fraud-signal-icon">${s.icon}</span>
+      <span>${s.text}</span>
+    </div>`).join('');
+
+  if (actions) {
+    actions.innerHTML = '';
+    if (tier === 'blocked') {
+      if (vBtn) { vBtn.disabled = true; vBtn.style.opacity = '.4'; vBtn.style.cursor = 'not-allowed'; }
+      const msg = document.createElement('div');
+      msg.className = 'fraud-blocked-msg';
+      msg.textContent = 'Aria has frozen this voucher. Change the amount or go back home.';
+      actions.appendChild(msg);
+    } else if (tier === 'red') {
+      if (vBtn) { vBtn.disabled = true; vBtn.style.opacity = '.4'; vBtn.style.cursor = 'not-allowed'; }
+      const row = document.createElement('div');
+      row.className = 'fraud-confirm-row';
+      row.innerHTML = `
+        <input type="text" class="fraud-confirm-input" id="voucher-fraud-confirm-input"
+          placeholder='Type "CONFIRM" to proceed' maxlength="10"
+          oninput="_voucherFraudCheckConfirm(this.value)">
+        <button type="button" class="fraud-confirm-submit" id="voucher-fraud-confirm-submit"
+          disabled onclick="_voucherFraudUnlock()">Create</button>`;
+      actions.appendChild(row);
+    } else {
+      if (vBtn) vBtn.disabled = false;
+      const proceedBtn = document.createElement('button');
+      proceedBtn.type = 'button';
+      proceedBtn.className = 'fraud-proceed-btn';
+      proceedBtn.textContent = 'I understand the risks — create anyway';
+      proceedBtn.onclick = () => {
+        _voucherFraudOverrideGranted = true;
+        if (panel) panel.className = 'voucher-fraud-panel';
+        if (badge) { badge.className = 'fraud-badge visible amber'; if (badgeLbl) badgeLbl.textContent = 'OVERRIDDEN'; }
+      };
+      actions.appendChild(proceedBtn);
+    }
+  }
+}
+
+window._voucherFraudCheckConfirm = function(val) {
+  const btn = document.getElementById('voucher-fraud-confirm-submit');
+  if (btn) btn.disabled = val.toUpperCase() !== 'CONFIRM';
+};
+
+window._voucherFraudUnlock = function() {
+  _voucherFraudOverrideGranted = true;
+  const panel = document.getElementById('voucher-fraud-panel');
+  const vBtn  = document.getElementById('voucher-submit-btn');
+  if (panel) panel.className = 'voucher-fraud-panel';
+  if (vBtn)  { vBtn.disabled = false; vBtn.style.opacity = '1'; vBtn.style.cursor = 'pointer'; }
+  const badge = document.getElementById('voucher-fraud-badge');
+  const badgeLbl = document.getElementById('voucher-fraud-badge-label');
+  if (badge) { badge.className = 'fraud-badge visible red'; if (badgeLbl) badgeLbl.textContent = 'OVERRIDDEN'; }
+};
+
+function _hideVoucherFraudPanel() {
+  const badge = document.getElementById('voucher-fraud-badge');
+  const panel = document.getElementById('voucher-fraud-panel');
+  if (badge) badge.className = 'fraud-badge';
+  if (panel) panel.className = 'voucher-fraud-panel';
 }
 
 // ═══════════════════════════════════════════
@@ -1293,6 +1668,13 @@ window.generateVoucher = async function() {
 
   if (!amount || amount <= 0) { showMsg(msg,'error','Enter a valid amount'); return; }
   if (!CURRENT_USER.phone)    { showMsg(msg,'error','Session error — please log out and log in again.'); return; }
+
+  // ── Aria Voucher Fraud gate ──
+  const vBtn = document.getElementById('voucher-submit-btn');
+  if (vBtn && vBtn.disabled) {
+    showMsg(msg,'error','Aria has flagged this voucher. Review the warning above.');
+    return;
+  }
 
   try { await requirePin('Confirm Voucher', `Enter PIN to create ₹${amount.toFixed(2)} voucher`); }
   catch(e) { return; }

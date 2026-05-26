@@ -814,6 +814,159 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
   text-align:center;padding:8px 0;
   font:700 12px/1.6 var(--sans);color:rgba(255,120,140,.9);
 }
+
+/* ── ARIA — FRAUD COPILOT HOME BUTTON ── */
+.aria-home-btn{
+  position:relative;
+  width:36px;height:36px;
+  background:linear-gradient(135deg,rgba(255,184,48,.18),rgba(255,184,48,.06));
+  border:1px solid rgba(255,184,48,.3);
+  color:var(--amber);border-radius:var(--r);
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+  transition:all .2s;overflow:hidden;
+  box-shadow:0 0 14px rgba(255,184,48,.12);
+}
+.aria-home-btn:hover{background:linear-gradient(135deg,rgba(255,184,48,.28),rgba(255,184,48,.12));border-color:rgba(255,184,48,.5);box-shadow:0 0 22px rgba(255,184,48,.22)}
+.aria-home-btn:active{transform:scale(.88)}
+.aria-alert-dot{
+  position:absolute;top:4px;right:4px;
+  width:7px;height:7px;border-radius:50%;
+  background:var(--red);border:1.5px solid var(--bg);
+  animation:ariaDotPulse 2s ease-in-out infinite;
+  display:none;
+}
+.aria-alert-dot.show{display:block}
+@keyframes ariaDotPulse{0%,100%{box-shadow:0 0 0 0 rgba(255,77,106,.6)}50%{box-shadow:0 0 0 4px rgba(255,77,106,0)}}
+
+/* ── ARIA COPILOT SCREEN ── */
+#screen-copilot .topbar{border-bottom-color:rgba(255,184,48,.18)}
+#screen-copilot .topbar::after{background:linear-gradient(90deg,transparent,rgba(255,184,48,.4),transparent)}
+
+.aria-hero{
+  margin:14px 14px 0;padding:22px 20px 20px;
+  border-radius:var(--r3);position:relative;overflow:hidden;
+  background:linear-gradient(145deg,rgba(255,184,48,.1) 0%,rgba(255,184,48,.04) 50%,rgba(255,77,106,.06) 100%);
+  border:1px solid rgba(255,184,48,.2);
+  box-shadow:0 0 0 1px rgba(255,184,48,.06),0 20px 48px rgba(0,0,0,.45);
+}
+.aria-hero::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:1.5px;
+  background:linear-gradient(90deg,transparent,rgba(255,184,48,.65) 40%,rgba(255,184,48,.9) 50%,rgba(255,184,48,.65) 60%,transparent);
+  background-size:200%;animation:shimmerTop 3.5s ease-in-out infinite;
+}
+.aria-hero-inner{display:flex;align-items:center;gap:16px}
+.aria-avatar{
+  width:56px;height:56px;border-radius:18px;flex-shrink:0;
+  background:linear-gradient(145deg,rgba(255,184,48,.22),rgba(255,184,48,.08));
+  border:1px solid rgba(255,184,48,.3);
+  display:flex;align-items:center;justify-content:center;font-size:26px;
+  box-shadow:0 0 28px rgba(255,184,48,.18),0 1px 0 rgba(255,255,255,.06) inset;
+  animation:ariaFloat 4s ease-in-out infinite alternate;
+}
+@keyframes ariaFloat{0%{transform:translateY(0)}100%{transform:translateY(-4px)}}
+.aria-name{font-size:18px;font-weight:800;color:var(--amber);letter-spacing:-.4px}
+.aria-role{font-size:11px;color:var(--text2);font-weight:600;letter-spacing:.3px;margin-top:2px}
+.aria-status{
+  display:inline-flex;align-items:center;gap:5px;
+  margin-top:8px;padding:3px 10px;border-radius:20px;
+  font-size:10px;font-weight:800;letter-spacing:.5px;
+  background:rgba(0,232,122,.1);border:1px solid rgba(0,232,122,.2);color:var(--em);
+}
+.aria-msg-bubble{
+  margin-top:16px;padding:14px 16px;border-radius:14px;
+  background:rgba(0,0,0,.35);border:1px solid rgba(255,184,48,.12);
+  font-size:13px;color:var(--text2);line-height:1.65;font-weight:500;
+  position:relative;
+}
+.aria-msg-bubble::before{
+  content:'"';position:absolute;top:-6px;left:14px;font-size:28px;color:rgba(255,184,48,.3);
+  font-family:Georgia,serif;line-height:1;
+}
+
+/* Copilot stats row */
+.copilot-stats{
+  display:grid;grid-template-columns:1fr 1fr 1fr;
+  gap:8px;padding:12px 14px 0;
+}
+.c-stat{
+  padding:14px 10px;border-radius:var(--r2);
+  background:var(--surface);border:1px solid var(--border);
+  text-align:center;
+  transition:border-color .2s,background .2s;
+}
+.c-stat-val{font-family:var(--mono);font-size:22px;font-weight:700;line-height:1;margin-bottom:4px}
+.c-stat-lbl{font-size:9px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3)}
+.c-stat.green .c-stat-val{color:var(--em)}
+.c-stat.amber .c-stat-val{color:var(--amber)}
+.c-stat.red   .c-stat-val{color:var(--red)}
+
+/* Risk score ring */
+.risk-ring-wrap{
+  margin:12px 14px 0;padding:20px;
+  border-radius:var(--r2);background:var(--surface);border:1px solid var(--border);
+  display:flex;align-items:center;gap:18px;
+}
+.risk-ring-svg{flex-shrink:0}
+.risk-ring-info{flex:1}
+.risk-ring-label{font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:6px}
+.risk-ring-score{font-family:var(--mono);font-size:32px;font-weight:700;line-height:1;margin-bottom:4px}
+.risk-ring-desc{font-size:12px;color:var(--text2);font-weight:600;line-height:1.55}
+
+/* Pattern log */
+.pattern-log{margin:12px 14px 0}
+.pattern-log-header{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:8px;
+}
+.pattern-log-title{font-size:9px;font-weight:700;letter-spacing:2.5px;text-transform:uppercase;color:var(--text3)}
+.pattern-log-clear{font-size:10px;font-weight:700;color:rgba(255,77,106,.6);cursor:pointer;letter-spacing:.3px;padding:2px 0;}
+.pattern-log-clear:hover{color:var(--red)}
+
+.p-log-item{
+  display:flex;align-items:flex-start;gap:10px;
+  padding:12px 14px;background:var(--surface);
+  border-radius:12px;border:1px solid var(--border);
+  margin-bottom:6px;position:relative;overflow:hidden;
+}
+.p-log-item::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px}
+.p-log-item.green::before{background:var(--em)}
+.p-log-item.amber::before{background:var(--amber)}
+.p-log-item.red::before{background:var(--red)}
+.p-log-icon{font-size:16px;flex-shrink:0;margin-top:1px}
+.p-log-body{flex:1}
+.p-log-title{font-size:12px;font-weight:700;color:var(--text);margin-bottom:2px}
+.p-log-sub{font-size:11px;color:var(--text2);font-weight:500;line-height:1.5}
+.p-log-time{font-size:10px;color:var(--text3);font-weight:600;margin-top:4px;font-family:var(--mono)}
+.p-log-empty{text-align:center;color:var(--text3);padding:32px 20px;font-size:13px;font-weight:500}
+
+/* Tips */
+.aria-tip{
+  margin:12px 14px 0;padding:14px 16px;border-radius:var(--r2);
+  background:linear-gradient(135deg,rgba(77,159,255,.08),rgba(77,159,255,.04));
+  border:1px solid rgba(77,159,255,.18);
+  display:flex;align-items:flex-start;gap:12px;
+}
+.aria-tip-icon{font-size:18px;flex-shrink:0;margin-top:1px}
+.aria-tip-text{font-size:12px;color:rgba(150,190,255,.9);font-weight:600;line-height:1.6}
+
+/* Voucher fraud panel */
+.voucher-fraud-panel{
+  margin:0 14px 12px;border-radius:var(--r2);
+  border:1px solid transparent;overflow:hidden;
+  transition:all .35s var(--ease);max-height:0;opacity:0;pointer-events:none;
+}
+.voucher-fraud-panel.show{
+  max-height:400px;opacity:1;pointer-events:auto;
+  animation:fraudSlide .38s var(--ease) both;
+}
+.voucher-fraud-panel.amber{
+  background:linear-gradient(135deg,rgba(255,184,48,.09),rgba(255,184,48,.04));
+  border-color:var(--shield-border);box-shadow:0 8px 28px rgba(255,184,48,.08);
+}
+.voucher-fraud-panel.red{
+  background:linear-gradient(135deg,rgba(255,77,106,.11),rgba(255,77,106,.05));
+  border-color:var(--danger-border);box-shadow:0 8px 28px rgba(255,77,106,.1);
+}
 </style>
 </head>
 <body>
@@ -1007,6 +1160,12 @@ window.__PM_SPLASH_TIMEOUT = setTimeout(function() {
       </div>
     </div>
     <div style="display:flex;gap:8px;align-items:center;">
+      <button type="button" class="aria-home-btn" id="aria-home-btn" onclick="showScreen('screen-copilot')" title="Fraud Copilot — Aria">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+        </svg>
+        <span class="aria-alert-dot" id="aria-alert-dot"></span>
+      </button>
       <button type="button" class="pin-btn" id="home-pin-btn" onclick="showScreen('screen-pin')" title="Manage PIN">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
           <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
@@ -1190,16 +1349,36 @@ window.__PM_SPLASH_TIMEOUT = setTimeout(function() {
       Back
     </button>
     <span class="screen-title">Offline Voucher</span>
-    <div style="width:60px"></div>
+    <div id="voucher-fraud-badge" class="fraud-badge">
+      <span id="voucher-fraud-badge-icon">🛡️</span>
+      <span id="voucher-fraud-badge-label">ARIA</span>
+    </div>
   </div>
   <div style="height:12px"></div>
+
+  <!-- ── ARIA VOUCHER FRAUD PANEL ── -->
+  <div id="voucher-fraud-panel" class="voucher-fraud-panel">
+    <div class="fraud-panel-inner">
+      <div class="fraud-header">
+        <div class="fraud-shield-icon" id="voucher-fraud-panel-icon">🛡️</div>
+        <div>
+          <div class="fraud-title" id="voucher-fraud-panel-title">Aria · Voucher Guard</div>
+          <div class="fraud-subtitle" id="voucher-fraud-panel-subtitle">Reviewing amount…</div>
+        </div>
+      </div>
+      <div class="fraud-score-bar"><div class="fraud-score-fill" id="voucher-fraud-score-fill" style="width:0%"></div></div>
+      <div class="fraud-signals" id="voucher-fraud-signals"></div>
+      <div class="fraud-actions" id="voucher-fraud-actions"></div>
+    </div>
+  </div>
+
   <div class="card">
     <p class="info-text">Generate a voucher to pay offline without internet</p>
     <div class="form-group">
       <label>Amount (₹)</label>
-      <input type="number" id="voucher-amount" placeholder="Enter amount" min="1">
+      <input type="number" id="voucher-amount" placeholder="Enter amount" min="1" oninput="onVoucherFieldChange()" onchange="onVoucherFieldChange()">
     </div>
-    <button type="button" class="btn-primary" onclick="generateVoucher()">Generate Offline Voucher</button>
+    <button type="button" class="btn-primary" id="voucher-submit-btn" onclick="generateVoucher()">Generate Offline Voucher</button>
     <div id="voucher-msg" class="msg"></div>
   </div>
   <!-- FIX: restore button is explicit, not automatic on screen entry -->
@@ -1389,6 +1568,74 @@ if ('serviceWorker' in navigator) {
 </script>
 
 <!-- ══ BLUETOOTH SCREEN ══ -->
+<div id="screen-copilot" class="screen">
+  <div class="topbar">
+    <button type="button" class="back-btn" onclick="showScreen('screen-home')">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+      Back
+    </button>
+    <span class="screen-title">Fraud Copilot</span>
+    <div style="width:60px"></div>
+  </div>
+  <div class="aria-hero">
+    <div class="aria-hero-inner">
+      <div class="aria-avatar">🛡️</div>
+      <div>
+        <div class="aria-name">Aria</div>
+        <div class="aria-role">Your Fraud Protection Manager</div>
+        <div class="aria-status">
+          <span style="width:5px;height:5px;background:var(--em);border-radius:50%;flex-shrink:0;animation:ping 2.2s ease-out infinite;box-shadow:0 0 0 0 var(--em-glow);"></span>
+          ACTIVE · WATCHING
+        </div>
+      </div>
+    </div>
+    <div class="aria-msg-bubble" id="aria-greeting-msg">
+      Hey! I'm Aria — I'm always keeping an eye on your transactions. I analyse every payment and voucher in real-time and step in before anything suspicious goes through. You can trust me to keep your wallet safe.
+    </div>
+  </div>
+  <div class="copilot-stats">
+    <div class="c-stat green">
+      <div class="c-stat-val" id="aria-stat-safe">0</div>
+      <div class="c-stat-lbl">Safe Txns</div>
+    </div>
+    <div class="c-stat amber">
+      <div class="c-stat-val" id="aria-stat-warned">0</div>
+      <div class="c-stat-lbl">Warned</div>
+    </div>
+    <div class="c-stat red">
+      <div class="c-stat-val" id="aria-stat-blocked">0</div>
+      <div class="c-stat-lbl">Blocked</div>
+    </div>
+  </div>
+  <div class="risk-ring-wrap">
+    <svg class="risk-ring-svg" width="72" height="72" viewBox="0 0 72 72">
+      <circle cx="36" cy="36" r="28" fill="none" stroke="var(--surface3)" stroke-width="6"/>
+      <circle id="aria-risk-ring" cx="36" cy="36" r="28" fill="none" stroke="var(--em)" stroke-width="6"
+        stroke-linecap="round" stroke-dasharray="176" stroke-dashoffset="176"
+        transform="rotate(-90 36 36)" style="transition:stroke-dashoffset .8s var(--ease),stroke .5s"/>
+    </svg>
+    <div class="risk-ring-info">
+      <div class="risk-ring-label">Account Risk Score</div>
+      <div class="risk-ring-score" id="aria-risk-score-val" style="color:var(--em)">0</div>
+      <div class="risk-ring-desc" id="aria-risk-desc">All clear — your account looks healthy.</div>
+    </div>
+  </div>
+  <div class="aria-tip">
+    <div class="aria-tip-icon">💡</div>
+    <div class="aria-tip-text" id="aria-tip-text">Loading tip…</div>
+  </div>
+  <div class="pattern-log">
+    <div class="pattern-log-header">
+      <div class="section-label" style="padding:18px 0 8px">Aria's Detection Log</div>
+      <div class="pattern-log-clear" onclick="ariaClearLog()">Clear Log</div>
+    </div>
+    <div id="aria-log-list">
+      <div class="p-log-empty">No detections yet — Aria's watching 👀</div>
+    </div>
+  </div>
+  <p class="dev-footer" style="padding:16px 18px">Aria · PayMesh Fraud Copilot · All data stored locally on your device</p>
+</div>
+
 <div id="screen-bluetooth" class="screen">
   <div class="topbar">
     <button type="button" class="back-btn" onclick="window.btBack()">
