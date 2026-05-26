@@ -678,10 +678,17 @@ window.loginUser = async function() {
     }
 
     addKnownPhone(phone);
+    // Write to localStorage so session survives tab close / app reopen (original behavior)
+    localStorage.setItem('pm_name', finalName);
+    localStorage.setItem('pm_phone', phone);
+    localStorage.setItem('pm_upi', finalUpi);
+    const _fp = generateDeviceToken();
+    localStorage.setItem('pm_fp', _fp);
+    // Mirror to sessionStorage for fast in-session reads
     sessionStorage.setItem('pm_name', finalName);
     sessionStorage.setItem('pm_phone', phone);
     sessionStorage.setItem('pm_upi', finalUpi);
-    sessionStorage.setItem('pm_fp', generateDeviceToken());
+    sessionStorage.setItem('pm_fp', _fp);
 
 
     CURRENT_USER.name  = finalName;
@@ -710,7 +717,10 @@ window.logoutUser = function() {
   if (!confirm('Log out of PayMesh?')) return;
   const lastPhone = CURRENT_USER.phone; // remember before clearing
   teardownListeners();
-  ['pm_name','pm_phone','pm_upi','pm_logged_in','pm_balance','pm_fingerprint','pm_device_token','pm_fp'].forEach(k => sessionStorage.removeItem(k));
+  ['pm_name','pm_phone','pm_upi','pm_logged_in','pm_balance','pm_fingerprint','pm_device_token','pm_fp'].forEach(k => {
+    sessionStorage.removeItem(k);
+    localStorage.removeItem(k);
+  });
   sessionStorage.removeItem('pm_session_phone');
   // Clear PIN hash cache and lockout counter for this user
   if (CURRENT_USER.phone) localStorage.removeItem('pm_pin_' + CURRENT_USER.phone);
@@ -746,7 +756,10 @@ function teardownListeners() {
 
 function forceRelogin(reason) {
   teardownListeners();
-  ['pm_name','pm_phone','pm_upi','pm_logged_in','pm_balance','pm_fingerprint','pm_device_token','pm_fp'].forEach(k => sessionStorage.removeItem(k));
+  ['pm_name','pm_phone','pm_upi','pm_logged_in','pm_balance','pm_fingerprint','pm_device_token','pm_fp'].forEach(k => {
+    sessionStorage.removeItem(k);
+    localStorage.removeItem(k);
+  });
   sessionStorage.removeItem('pm_session_phone');
   // Clear PIN hash cache for this user
   if (CURRENT_USER.phone) localStorage.removeItem('pm_pin_' + CURRENT_USER.phone);
@@ -762,13 +775,13 @@ function forceRelogin(reason) {
 
 let _homeListenersActive = false;
 async function loadHomeData() {
-  // Fallback: read from sessionStorage if CURRENT_USER not set yet
+  // Fallback: read from localStorage (persisted) or sessionStorage if CURRENT_USER not set yet
   if (!CURRENT_USER.phone) {
-    const savedPhone = sessionStorage.getItem('pm_phone');
+    const savedPhone = localStorage.getItem('pm_phone') || sessionStorage.getItem('pm_phone');
     if (savedPhone) {
       CURRENT_USER.phone = savedPhone;
-      CURRENT_USER.name  = sessionStorage.getItem('pm_name')  || '';
-      CURRENT_USER.upi   = sessionStorage.getItem('pm_upi')   || '';
+      CURRENT_USER.name  = localStorage.getItem('pm_name')  || sessionStorage.getItem('pm_name')  || '';
+      CURRENT_USER.upi   = localStorage.getItem('pm_upi')   || sessionStorage.getItem('pm_upi')   || '';
     } else {
       showScreen('screen-login');
       return;
@@ -800,10 +813,12 @@ async function loadHomeData() {
       if (data.name && data.name !== CURRENT_USER.name) {
         CURRENT_USER.name = data.name;
         sessionStorage.setItem('pm_name', data.name);
+        localStorage.setItem('pm_name', data.name);
       }
       if (data.upi && data.upi !== CURRENT_USER.upi) {
         CURRENT_USER.upi = data.upi;
         sessionStorage.setItem('pm_upi', data.upi);
+        localStorage.setItem('pm_upi', data.upi);
       }
       // Sync PIN cache live — if PIN was set/removed on another login it reflects here
       syncPinCache(data);
@@ -1307,9 +1322,11 @@ window.stopScan = function() {
 
 (function init() {
   function run() {
-    const phone = sessionStorage.getItem('pm_phone');
-    const name  = sessionStorage.getItem('pm_name')  || '';
-    const upi   = sessionStorage.getItem('pm_upi')   || '';
+    // Read from localStorage first (persists across tab close/app reopen),
+    // fall back to sessionStorage for any legacy in-session-only writes.
+    const phone = localStorage.getItem('pm_phone') || sessionStorage.getItem('pm_phone');
+    const name  = localStorage.getItem('pm_name')  || sessionStorage.getItem('pm_name')  || '';
+    const upi   = localStorage.getItem('pm_upi')   || sessionStorage.getItem('pm_upi')   || '';
 
     if (!phone) {
       showScreen('screen-login');
