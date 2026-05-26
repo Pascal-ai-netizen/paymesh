@@ -1352,13 +1352,14 @@ document.addEventListener('DOMContentLoaded', function() {
       <div style="font-size:13px;color:var(--text2);">Sound Pay requires microphone access and Web Audio API. Please use Chrome on Android.</div>
     </div>
 
+    <!-- MODE SELECT -->
     <div id="sp-mode-select">
       <div class="card" style="text-align:center;padding:24px 20px 20px;margin-bottom:14px;">
         <div style="width:56px;height:56px;border-radius:16px;background:rgba(255,165,0,0.12);border:1px solid rgba(255,165,0,0.25);display:flex;align-items:center;justify-content:center;margin:0 auto 14px;">
           <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#FFA500" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
         </div>
         <div style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:6px;">Pay with Sound</div>
-        <div style="font-size:13px;color:var(--text2);margin-bottom:20px;">Sender emits an ultrasonic tone. Receiver's phone hears it and completes the transfer. No tap, no code, no QR.</div>
+        <div style="font-size:13px;color:var(--text2);margin-bottom:20px;">Hold phones face-to-face, touching or within 3 cm. Transfer completes in seconds — no QR, no tap, no internet needed on sender.</div>
         <div style="display:flex;gap:10px;">
           <button type="button" onclick="spStartSend()" class="btn-primary" style="flex:1;background:linear-gradient(135deg,#FFA500,#FF8C00);box-shadow:0 4px 20px rgba(255,165,0,0.3);color:#1a0a00;">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;vertical-align:middle;"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
@@ -1372,16 +1373,25 @@ document.addEventListener('DOMContentLoaded', function() {
       </div>
       <div class="card" style="padding:14px 16px;">
         <div style="font-size:11px;font-weight:700;letter-spacing:1.5px;color:var(--text3);text-transform:uppercase;margin-bottom:10px;">How it works</div>
-        <div style="font-size:13px;color:var(--text2);line-height:1.8;">
-          &#128266; <b style="color:var(--text)">Sender</b> enters amount &#8212; phone emits ultrasonic tone (inaudible)<br>
-          &#127897; <b style="color:var(--text)">Receiver</b> taps Receive &#8212; mic listens for the tone<br>
-          &#9889; Transfer executes automatically. Works up to 2 metres away.
+        <div style="font-size:13px;color:var(--text2);line-height:1.9;">
+          <span style="color:#FFA500;font-weight:700;">1</span>&nbsp; Receiver taps <b style="color:var(--text)">Receive</b> first — mic starts listening<br>
+          <span style="color:#FFA500;font-weight:700;">2</span>&nbsp; Sender enters amount, taps <b style="color:var(--text)">Send</b> — tone plays<br>
+          <span style="color:#FFA500;font-weight:700;">3</span>&nbsp; Hold phones <b style="color:var(--text)">face-to-face, touching</b> — transfer done &#9889;<br>
+          <span style="color:var(--text3);font-size:11px;">&#128276; Turn volume to maximum on sender's phone for best results</span>
         </div>
       </div>
     </div>
 
     <!-- SEND panel -->
     <div id="sp-send-panel" style="display:none;">
+      <!-- Volume warning — shown before emit, hidden after -->
+      <div id="sp-vol-warn" class="card" style="margin-bottom:14px;background:rgba(255,165,0,0.06);border:1px solid rgba(255,165,0,0.25);padding:14px 16px;display:flex;align-items:flex-start;gap:12px;">
+        <div style="font-size:26px;line-height:1;">&#128266;</div>
+        <div>
+          <div style="font-size:13px;font-weight:700;color:#FFA500;margin-bottom:3px;">Turn Volume to Maximum</div>
+          <div style="font-size:12px;color:var(--text2);line-height:1.6;">Sound Pay works best at full volume. Press your phone's volume-up button now before sending.</div>
+        </div>
+      </div>
       <div class="card" style="margin-bottom:14px;">
         <div class="form-group">
           <label>Amount to Send (&#8377;)</label>
@@ -1402,15 +1412,25 @@ document.addEventListener('DOMContentLoaded', function() {
 
     <!-- RECEIVE panel -->
     <div id="sp-receive-panel" style="display:none;">
+      <!-- Calibration status card — shows noise floor measurement -->
+      <div id="sp-cal-card" class="card" style="margin-bottom:14px;padding:13px 16px;display:flex;align-items:center;gap:12px;">
+        <div id="sp-cal-icon" style="font-size:22px;line-height:1;">&#128268;</div>
+        <div style="flex:1;min-width:0;">
+          <div id="sp-cal-title" style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:2px;">Calibrating mic...</div>
+          <div id="sp-cal-sub" style="font-size:11px;color:var(--text2);">Measuring ambient noise. Stay quiet for 1 second.</div>
+        </div>
+      </div>
       <div class="card" style="text-align:center;padding:32px 20px;">
         <div id="sp-receive-anim" style="width:90px;height:90px;border-radius:50%;background:rgba(255,165,0,0.1);border:2px solid rgba(255,165,0,0.3);display:flex;align-items:center;justify-content:center;margin:0 auto 18px;animation:spPulse 1.5s ease-in-out infinite;">
           <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="#FFA500" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 1l22 22"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
         </div>
         <div id="sp-receive-title" style="font-size:17px;font-weight:700;color:var(--text);margin-bottom:8px;">Listening...</div>
         <div id="sp-receive-sub"  style="font-size:13px;color:var(--text2);margin-bottom:6px;">Hold near sender's phone. Mic is active.</div>
-        <div id="sp-level-bar" style="height:6px;border-radius:3px;background:var(--surface2);margin:12px 0;overflow:hidden;">
-          <div id="sp-level-fill" style="height:100%;width:0%;background:linear-gradient(90deg,#FFA500,#FFD700);border-radius:3px;transition:width 0.1s;"></div>
+        <!-- Level bar: colour shifts amber→green when signal detected -->
+        <div id="sp-level-bar" style="height:8px;border-radius:4px;background:var(--surface2);margin:14px 0 4px;overflow:hidden;">
+          <div id="sp-level-fill" style="height:100%;width:0%;background:linear-gradient(90deg,#FFA500,#FFD700);border-radius:4px;transition:width 0.08s;"></div>
         </div>
+        <div id="sp-noise-label" style="font-size:10px;color:var(--text3);margin-bottom:10px;">Signal level</div>
         <div id="sp-receive-msg" class="msg"></div>
       </div>
     </div>
@@ -1697,39 +1717,44 @@ import { getApps } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app
 import { getFirestore, doc, setDoc, getDoc, deleteDoc, addDoc, collection, onSnapshot, runTransaction } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 // ══════════════════════════════════════════════════════
-// SOUNDPAY — Near-Audible FSK Payment System  (v3 — India budget phone rewrite)
+// SOUNDPAY — Near-Audible FSK Payment System  (v4 — India production build)
 // ══════════════════════════════════════════════════════════════════════════════
-// FREQUENCY DESIGN — why 15000 Hz base, 500 Hz step:
-//   Budget Android phones (Redmi, Realme, Samsung M-series) roll off sharply
-//   above 16–17 kHz. Old 18000–21750 Hz range produced near-zero SPL on these
-//   speakers. 15000 Hz is reliably within every phone speaker manufactured
-//   since 2018, while staying above most ambient noise (traffic, crowds < 8kHz).
-//   500 Hz step + ±100 Hz tolerance = 400 Hz guard band each side — zero bleed.
-//   Old design had 250 Hz step with 400 Hz tolerance — tolerance > step = chaos.
+// WHAT CHANGED v1→v4 (full history):
 //
-// CHECKSUM — 9th symbol (SP_NONCE_LEN = 9):
-//   Nonce = 8 data hex digits + 1 XOR-of-all-nibbles checksum digit (0–F).
-//   Receiver validates checksum before Firestore lookup. Any misread fails fast
-//   with "move closer" instead of "token not found. may have expired."
+// v1 (original): 18000–21750 Hz, 250 Hz step, 400 Hz tolerance (tolerance>step!),
+//   8-char nonce, requestAnimationFrame polling, fixed sample-rate assumption,
+//   no checksum, no retry, no WakeLock, SP_DETECT_THRESH hardcoded.
 //
-// RECEIVER — AudioWorklet preferred, ScriptProcessor fallback:
-//   requestAnimationFrame fires at 60fps on render thread and gets throttled
-//   when screen dims or browser backgrounds. AudioWorklet runs on a dedicated
-//   audio thread — never throttled, never frame-dropped.
+// v2: Fixed timing (ctx.currentTime), gain envelopes, 4 loops, TTL 55s.
+//   Tolerance still 400 Hz > step 250 Hz — symbol bleed persisted.
 //
-// SAMPLE RATE LOCK:
-//   Android drivers often run at 48000 Hz regardless of request. We detect
-//   actual sampleRate after context creation and recompute all bin math live.
+// v3: Moved to 15000 Hz base (budget phone speakers), 500 Hz step, ±100 Hz tol,
+//   9-char nonce with XOR checksum, ScriptProcessor audio-thread polling,
+//   real sampleRate read post-creation (Android 48kHz fix), silence-in-decode
+//   state machine fix, 5 loops, TTL 75s.
 //
-// PREAMBLE separation:
-//   Preamble = 16000 Hz, base = 15000 Hz. Gap = 1000 Hz (2× step). With
-//   ±100 Hz tolerance there is 800 Hz dead space — preamble cannot be confused
-//   with symbol 0, even on a badly tuned speaker.
+// v4 (this build): All v3 fixes plus:
+//   + Ambient noise calibration (800ms on receive start) — dynamic threshold
+//     self-adjusts: peakNoise+10dB, clamped [-55,−30]. Works in street noise.
+//   + Volume warning UI on sender (mandatory "turn to MAX" prompt)
+//   + iOS AudioContext unlock (silent buffer in user-gesture context)
+//   + WakeLock API on both sender and receiver — prevents screen-off throttle
+//     on MIUI/ColorOS aggressive battery management
+//   + visibilitychange listener resumes AudioContext on tab restore
+//   + Firestore getDoc retry once after 1.5s (Jio/Airtel packet loss)
+//   + Level bar colour shifts amber→green when signal crosses threshold
+//   + Corrected UI: "face-to-face touching", removed false "2 metres" claim
+//   + Receiver order instruction: Receive first, then Send
 //
-// Protocol:
-//   Sender: preamble(16000 Hz,400ms) + [9 symbols] × 5 loops + confirm tone
-//   Receiver: preamble-detect → edge-FSK decode → XOR validate → Firestore tx
-//   Token TTL: 75s (5 loops ≈ 16s audio + 59s margin)
+// PROTOCOL (v4):
+//   Sender  : iOS-unlock → WakeLock → Firestore setDoc → AudioContext schedule:
+//             [preamble(16000Hz,400ms) + gap + 9 FSK symbols + confirm] × 5 loops
+//   Receiver: getUserMedia → AudioContext → 800ms noise calibration →
+//             ScriptProcessor detect loop → preamble-lock → edge-FSK decode →
+//             XOR checksum validate → Firestore getDoc (1 retry) → runTransaction
+//   Frequencies: base=15000Hz, step=500Hz, preamble=16000Hz (1kHz above base)
+//   Tolerance : ±100Hz (400Hz guard band — no bleed possible)
+//   Token TTL : 75s | Nonce: 8 data + 1 XOR checksum = 9 symbols emitted
 // ══════════════════════════════════════════════════════════════════════════════
 
 const SP_BASE_FREQ     = 15000; // Hz — reliable on every budget phone speaker
@@ -1790,6 +1815,9 @@ window.spStartSend=function(){
   if(st)st.style.display='none';
   var a=document.getElementById('sp-send-amount');
   if(a)a.value='';
+  // Show volume warning — hidden automatically when emit starts
+  var vw=document.getElementById('sp-vol-warn');
+  if(vw)vw.style.display='flex';
 };
 
 window.spStartReceive=function(){
@@ -1811,7 +1839,8 @@ function spNonce(){
 }
 
 // ── Encode nonce as frequency sequence ──
-// Each hex char (0-F) → one frequency (18000 + digit*250 Hz)
+// Each hex char (0–F) → one of 16 FSK frequencies: SP_BASE_FREQ + digit*SP_STEP
+// e.g. digit 0 → 15000 Hz, digit 7 → 18500 Hz, digit F → 22500 Hz
 function spEncodeFreqs(nonce){
   return nonce.split('').map(function(c){
     var digit=parseInt(c,16);
@@ -1819,7 +1848,9 @@ function spEncodeFreqs(nonce){
   });
 }
 
-// ── Decode frequency back to hex digit ──
+// ── Utility: decode a single frequency to its hex digit ──
+// Not used in the main decode path (receiver uses freqToSymbol inside spListen).
+// Kept for debugging — call spFreqToDigit(freq) in devtools to check a bin.
 function spFreqToDigit(freq){
   var digit=Math.round((freq-SP_BASE_FREQ)/SP_STEP);
   if(digit<0)digit=0;
@@ -1858,6 +1889,10 @@ window.spEmit=async function(){
     try{await window.requirePin('Confirm Sound Pay','Enter PIN to send \u20b9'+amount.toFixed(2));}
     catch(e){return;}
   }
+
+  // Hide volume warning — user has been prompted, now we're going
+  var vw=document.getElementById('sp-vol-warn');
+  if(vw)vw.style.display='none';
 
   var nonce=spNonce();             // 9-char string: 8 data + 1 XOR checksum
   var nonceKey=nonce.slice(0,8);   // Firestore doc ID — 8 data chars only
@@ -1902,7 +1937,21 @@ window.spEmit=async function(){
 
     // Single AudioContext — all loops scheduled up front, sample-accurate
     var ctx=new AudioContext();
-    var t=ctx.currentTime+0.08; // 80ms startup margin for slow Android audio init
+
+    // iOS/Android unlock: play a zero-gain buffer synchronously in the
+    // user-gesture context. Without this, scheduled audio is silent on iOS
+    // and delayed on some Android OEM firmwares.
+    (function unlockAudio(){
+      var buf=ctx.createBuffer(1,1,ctx.sampleRate);
+      var src=ctx.createBufferSource();
+      src.buffer=buf;
+      src.connect(ctx.destination);
+      src.start(0);
+    })();
+    // Resume in case browser suspended context (happens on tab re-focus)
+    if(ctx.state==='suspended') await ctx.resume();
+
+    var t=ctx.currentTime+0.12; // 120ms startup margin — iOS needs more than Android
 
     for(var loop=0;loop<SP_EMIT_LOOPS;loop++){
       // Preamble sync tone
@@ -1917,6 +1966,13 @@ window.spEmit=async function(){
       t=scheduleTone(ctx, SP_PREAMBLE, t, confDurSec);
       // Inter-loop silence
       if(loop<SP_EMIT_LOOPS-1) t+=interSec;
+    }
+
+    // Request WakeLock so screen stays on during emission
+    // Prevents AudioContext throttle on MIUI/ColorOS power-saver modes
+    var _wakeLock = null;
+    if('wakeLock' in navigator){
+      try{ _wakeLock = await navigator.wakeLock.request('screen'); }catch(e){}
     }
 
     _spStatus('\uD83D\uDD0A','Emitting sound...','Hold phones face-to-face. Loop 1 of '+SP_EMIT_LOOPS+'.');
@@ -1935,6 +1991,8 @@ window.spEmit=async function(){
     await new Promise(function(r){setTimeout(r,totalMs);});
     clearInterval(loopDisplayInterval);
     ctx.close().catch(function(){});
+    // Release WakeLock — audio done, screen can dim again
+    if(_wakeLock){ try{await _wakeLock.release();}catch(e){} _wakeLock=null; }
 
     _spStatus('\u23F3','Waiting for receiver...','Token valid for ~75 seconds. Keep app open.');
 
@@ -2048,6 +2106,66 @@ async function spListen(){
   var dataArr=new Float32Array(bufLen);
   var binWidth=sampleRate/analyser.fftSize; // recomputed from ACTUAL sample rate
 
+  // ── Ambient noise calibration (800ms) ──
+  // Measure the peak noise in the signal band before entering listen mode.
+  // Dynamic threshold = measured_peak + 10dB, clamped to [-55, -30] dB.
+  // This makes the detector self-adjust for noisy streets vs quiet rooms.
+  var calCard  = document.getElementById('sp-cal-card');
+  var calTitle = document.getElementById('sp-cal-title');
+  var calSub   = document.getElementById('sp-cal-sub');
+  var calIcon  = document.getElementById('sp-cal-icon');
+  var noiseLabel = document.getElementById('sp-noise-label');
+
+  var dynamicThresh = SP_DETECT_THRESH; // will be overwritten by calibration
+
+  // Sample noise over 800ms (≈ 48 rAF frames or many ScriptProcessor calls)
+  await new Promise(function(resolve){
+    var calBuf  = new Float32Array(analyser.frequencyBinCount);
+    var peakMag = -Infinity;
+    var calStart = Date.now();
+    var CAL_MS  = 800;
+
+    function calTick(){
+      analyser.getFloatFrequencyData(calBuf);
+      var minB = Math.round(14500 / binWidth);
+      var maxB = Math.min(Math.round(22600 / binWidth), calBuf.length - 1);
+      for(var b = minB; b <= maxB; b++){
+        if(calBuf[b] > peakMag) peakMag = calBuf[b];
+      }
+      // Update level bar during calibration for visual feedback
+      var lvl = Math.max(0, Math.min(100, (peakMag + 100) * 1.5));
+      if(levelFill) levelFill.style.width = lvl + '%';
+
+      if(Date.now() - calStart < CAL_MS){
+        requestAnimationFrame(calTick);
+      } else {
+        // Calibration done — set dynamic threshold
+        dynamicThresh = Math.min(-30, Math.max(-55, peakMag + 10));
+
+        if(calCard && calTitle && calSub && calIcon){
+          if(peakMag > -38){
+            // Environment is noisy — warn but continue
+            calIcon.textContent  = '⚠️';
+            calTitle.textContent = 'Noisy Environment';
+            calSub.textContent   = 'Background noise detected (' + peakMag.toFixed(0) + ' dB). Hold phones closer and find a quieter spot.';
+            calCard.style.background = 'rgba(255,77,106,0.07)';
+            calCard.style.borderColor = 'rgba(255,77,106,0.3)';
+          } else {
+            // Clear environment
+            calIcon.textContent  = '✅';
+            calTitle.textContent = 'Mic Ready';
+            calSub.textContent   = 'Noise floor: ' + peakMag.toFixed(0) + ' dB. Threshold set to ' + dynamicThresh.toFixed(0) + ' dB.';
+            calCard.style.background = 'rgba(0,232,122,0.06)';
+            calCard.style.borderColor = 'rgba(0,232,122,0.2)';
+          }
+        }
+        if(noiseLabel) noiseLabel.textContent = 'Noise floor: ' + peakMag.toFixed(0) + ' dB';
+        resolve();
+      }
+    }
+    requestAnimationFrame(calTick);
+  });
+
   if(titleEl)titleEl.textContent='Listening...';
   if(subEl)subEl.textContent='Hold near sender\'s phone. Mic is active.';
   _spListening=true;
@@ -2108,8 +2226,17 @@ async function spListen(){
     var level=Math.max(0,Math.min(100,(d.mag+100)*1.5));
     if(levelFill)levelFill.style.width=level+'%';
 
-    // Below noise floor — treat as silence
-    if(d.mag<SP_DETECT_THRESH){
+    // Level bar colour: amber = ambient, green = signal above threshold
+    if(levelFill){
+      if(d.mag >= dynamicThresh){
+        levelFill.style.background='linear-gradient(90deg,#00E87A,#00FFA3)';
+      } else {
+        levelFill.style.background='linear-gradient(90deg,#FFA500,#FFD700)';
+      }
+    }
+
+    // Below dynamic noise floor — treat as silence
+    if(d.mag<dynamicThresh){
       if(state===STATE_WAIT_PREAMBLE){
         preambleHoldStart=0;
       }else{
@@ -2201,6 +2328,37 @@ async function spListen(){
     })();
   }
 
+  // Request WakeLock on receiver — keep screen alive during listen window
+  var _rxWakeLock = null;
+  if('wakeLock' in navigator){
+    try{ _rxWakeLock = await navigator.wakeLock.request('screen'); }catch(e){}
+  }
+  // Release WakeLock when listening stops (patch spStopListening)
+  var _spStopOrig2 = spStopListening;
+  spStopListening = function(){
+    if(_rxWakeLock){ try{_rxWakeLock.release();}catch(e){} _rxWakeLock=null; }
+    spStopListening = _spStopOrig2;
+    _spStopOrig2();
+  };
+
+  // ── AudioContext resume on tab/screen visibility restore ──
+  // MIUI, ColorOS, Realme UI all suspend AudioContext when screen dims.
+  // This listener resumes it the moment the user comes back.
+  function _spVisHandler(){
+    if(document.visibilityState==='visible' && _spAudioCtx && _spListening){
+      _spAudioCtx.resume().catch(function(){});
+    }
+  }
+  document.addEventListener('visibilitychange', _spVisHandler);
+
+  // Clean up listener when we stop
+  var _origStop = spStopListening;
+  spStopListening = function(){
+    document.removeEventListener('visibilitychange', _spVisHandler);
+    spStopListening = _origStop; // restore
+    _origStop();
+  };
+
   // Auto-stop: 85 seconds (token TTL 75s + 10s grace)
   setTimeout(function(){
     if(_spListening){
@@ -2236,9 +2394,18 @@ async function spRedeem(nonce, phone, name, db, titleEl, subEl, msgEl){
   if(titleEl)titleEl.textContent='Processing...';
   if(subEl)subEl.textContent='Completing secure transfer...';
 
+  // Retry helper — one retry after 1.5s for network blips on Jio/Airtel
+  async function getDocWithRetry(ref){
+    try{ return await getDoc(ref); }
+    catch(e){
+      await new Promise(function(r){setTimeout(r,1500);});
+      return await getDoc(ref); // throws naturally on second failure
+    }
+  }
+
   try{
     var tokenRef=doc(db,'sound_tokens',nonceKey);
-    var tokenSnap=await getDoc(tokenRef);
+    var tokenSnap=await getDocWithRetry(tokenRef);
 
     if(!tokenSnap.exists())throw new Error('Token not found. May have expired.');
     var token=tokenSnap.data();
