@@ -4,6 +4,11 @@
 // ═══════════════════════════════════════════
 
 (function PM_SECURITY() {
+  // ── 0. HTTPS ENFORCEMENT ──
+  if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+    location.replace('https:' + location.href.slice(6));
+  }
+
   // ── 1. DEVTOOLS DETECTION (size-based, works on mobile Chrome/Firefox DevTools) ──
   const DT_THRESHOLD = 160; // px — DevTools panel is almost always >160px
   let _devToolsOpen  = false;
@@ -150,9 +155,41 @@ function generateDeviceToken() {
     .map(b => b.toString(16).padStart(2,'0')).join('');
 }
 
-function getLocalToken()        { return localStorage.getItem('pm_device_token') || null; }
-function setLocalToken(token)   { localStorage.setItem('pm_device_token', token); }
-function clearLocalToken()      { localStorage.removeItem('pm_device_token'); }
+function getLocalToken()        { return sessionStorage.getItem('pm_device_token') || null; }
+function setLocalToken(token)   { sessionStorage.setItem('pm_device_token', token); }
+function clearLocalToken()      { sessionStorage.removeItem('pm_device_token'); }
+
+// ═══════════════════════════════════════════
+// PIN BRUTE-FORCE LOCKOUT
+// Max 5 attempts then 10-minute cooldown.
+// State lives in sessionStorage so it resets on fresh browser session
+// but persists across same-tab refreshes (harder to bypass than memory).
+// ═══════════════════════════════════════════
+
+const PIN_MAX_ATTEMPTS = 5;
+const PIN_LOCKOUT_MS   = 10 * 60 * 1000; // 10 minutes
+
+function getPinAttempts()  { return parseInt(sessionStorage.getItem('pm_pin_attempts') || '0', 10); }
+function setPinAttempts(n) { sessionStorage.setItem('pm_pin_attempts', String(n)); }
+function getPinLockedUntil()  { return parseInt(sessionStorage.getItem('pm_pin_locked_until') || '0', 10); }
+function setPinLockedUntil(t) { sessionStorage.setItem('pm_pin_locked_until', String(t)); }
+function resetPinAttempts()   { sessionStorage.removeItem('pm_pin_attempts'); sessionStorage.removeItem('pm_pin_locked_until'); }
+
+function isPinLocked() {
+  const until = getPinLockedUntil();
+  if (!until) return false;
+  if (Date.now() < until) return true;
+  resetPinAttempts(); // lockout expired — clear it
+  return false;
+}
+
+function pinLockoutRemaining() {
+  const ms = getPinLockedUntil() - Date.now();
+  if (ms <= 0) return '';
+  const m = Math.floor(ms / 60000);
+  const s = Math.floor((ms % 60000) / 1000);
+  return m > 0 ? `${m}m ${s}s` : `${s}s`;
+}
 
 // ═══════════════════════════════════════════
 // PIN STATE
@@ -209,6 +246,12 @@ let _rememberMe = false;
 function requirePin(title = 'Enter PIN', sub = 'Required to complete this action') {
   return new Promise((resolve, reject) => {
     if (!hasPinSet()) { resolve(); return; }
+    // Lockout check
+    if (isPinLocked()) {
+      reject(new Error(`PIN locked. Try again in ${pinLockoutRemaining()}.`));
+      alert(`Too many wrong PINs. Try again in ${pinLockoutRemaining()}.`);
+      return;
+    }
     _pinMode     = 'verify';
     _pinBuffer   = '';
     _pinCallback = resolve;
@@ -267,15 +310,38 @@ function flashPinError() {
 
 async function handlePinComplete() {
   if (_pinMode === 'verify') {
+    // Lockout check (re-check in case timer expired between overlay open and submit)
+    if (isPinLocked()) {
+      document.getElementById('pin-overlay').classList.add('hidden');
+      _pinBuffer = ''; _pinMode = null;
+      alert(`Too many wrong PINs. Try again in ${pinLockoutRemaining()}.`);
+      const rej = _pinReject; _pinReject = null; _pinCallback = null;
+      if (rej) rej(new Error('PIN locked'));
+      return;
+    }
     const stored  = getCachedPinHash();
     const entered = await hashPin(_pinBuffer);
     if (entered === stored) {
+      resetPinAttempts(); // success — clear fail counter
       document.getElementById('pin-overlay').classList.add('hidden');
       _pinBuffer = ''; _pinMode = null;
       if (_pinCallback) { _pinCallback(); _pinCallback = null; }
     } else {
-      showMsg(document.getElementById('pin-msg'), 'error', 'Incorrect PIN. Try again.');
-      flashPinError();
+      const attempts = getPinAttempts() + 1;
+      setPinAttempts(attempts);
+      const remaining = PIN_MAX_ATTEMPTS - attempts;
+      if (attempts >= PIN_MAX_ATTEMPTS) {
+        setPinLockedUntil(Date.now() + PIN_LOCKOUT_MS);
+        resetPinAttempts(); // clear counter now that lockout is set
+        document.getElementById('pin-overlay').classList.add('hidden');
+        _pinBuffer = ''; _pinMode = null;
+        const rej = _pinReject; _pinReject = null; _pinCallback = null;
+        alert('Too many wrong PINs. Locked for 10 minutes.');
+        if (rej) rej(new Error('PIN locked'));
+      } else {
+        showMsg(document.getElementById('pin-msg'), 'error', `Incorrect PIN. ${remaining} attempt${remaining !== 1 ? 's' : ''} left.`);
+        flashPinError();
+      }
     }
   } else if (_pinMode === 'setup-new') {
     _pinTemp   = _pinBuffer;
@@ -289,6 +355,7 @@ async function handlePinComplete() {
       const hash = await hashPin(_pinBuffer);
       try {
         await savePinToFirestore(hash);   // saves to Firestore + local cache
+        resetPinAttempts(); // new PIN set — clear any lingering fail count
         _pinBuffer = ''; _pinMode = null; _pinTemp = '';
         document.getElementById('pin-overlay').classList.add('hidden');
         refreshPinSettingsUI();
@@ -611,10 +678,10 @@ window.loginUser = async function() {
     }
 
     addKnownPhone(phone);
-    localStorage.setItem('pm_name',  finalName);
-    localStorage.setItem('pm_phone', phone);
-    localStorage.setItem('pm_upi',   finalUpi);
-    localStorage.setItem('pm_fp',    generateDeviceToken());
+    sessionStorage.setItem('pm_name', finalName);
+    sessionStorage.setItem('pm_phone', phone);
+    sessionStorage.setItem('pm_upi', finalUpi);
+    sessionStorage.setItem('pm_fp', generateDeviceToken());
 
 
     CURRENT_USER.name  = finalName;
@@ -643,8 +710,11 @@ window.logoutUser = function() {
   if (!confirm('Log out of PayMesh?')) return;
   const lastPhone = CURRENT_USER.phone; // remember before clearing
   teardownListeners();
-  ['pm_name','pm_phone','pm_upi','pm_logged_in','pm_balance','pm_fingerprint','pm_device_token','pm_fp'].forEach(k => localStorage.removeItem(k));
+  ['pm_name','pm_phone','pm_upi','pm_logged_in','pm_balance','pm_fingerprint','pm_device_token','pm_fp'].forEach(k => sessionStorage.removeItem(k));
   sessionStorage.removeItem('pm_session_phone');
+  // Clear PIN hash cache and lockout counter for this user
+  if (CURRENT_USER.phone) localStorage.removeItem('pm_pin_' + CURRENT_USER.phone);
+  resetPinAttempts();
   CURRENT_USER.name = ''; CURRENT_USER.phone = ''; CURRENT_USER.upi = '';
   _rememberMe = false;
   const track = document.getElementById('remember-track');
@@ -676,8 +746,11 @@ function teardownListeners() {
 
 function forceRelogin(reason) {
   teardownListeners();
-  ['pm_name','pm_phone','pm_upi','pm_logged_in','pm_balance','pm_fingerprint','pm_device_token','pm_fp'].forEach(k => localStorage.removeItem(k));
+  ['pm_name','pm_phone','pm_upi','pm_logged_in','pm_balance','pm_fingerprint','pm_device_token','pm_fp'].forEach(k => sessionStorage.removeItem(k));
   sessionStorage.removeItem('pm_session_phone');
+  // Clear PIN hash cache for this user
+  if (CURRENT_USER.phone) localStorage.removeItem('pm_pin_' + CURRENT_USER.phone);
+  resetPinAttempts();
   CURRENT_USER.name = ''; CURRENT_USER.phone = ''; CURRENT_USER.upi = '';
   if (reason) alert(reason);
   showScreen('screen-login');
@@ -689,13 +762,13 @@ function forceRelogin(reason) {
 
 let _homeListenersActive = false;
 async function loadHomeData() {
-  // Fallback: read from localStorage if CURRENT_USER not set yet
+  // Fallback: read from sessionStorage if CURRENT_USER not set yet
   if (!CURRENT_USER.phone) {
-    const savedPhone = localStorage.getItem('pm_phone');
+    const savedPhone = sessionStorage.getItem('pm_phone');
     if (savedPhone) {
       CURRENT_USER.phone = savedPhone;
-      CURRENT_USER.name  = localStorage.getItem('pm_name')  || '';
-      CURRENT_USER.upi   = localStorage.getItem('pm_upi')   || '';
+      CURRENT_USER.name  = sessionStorage.getItem('pm_name')  || '';
+      CURRENT_USER.upi   = sessionStorage.getItem('pm_upi')   || '';
     } else {
       showScreen('screen-login');
       return;
@@ -704,7 +777,7 @@ async function loadHomeData() {
 
   const displayName = CURRENT_USER.name ? `Hi, ${CURRENT_USER.name} 👋` : 'Welcome 👋';
   document.getElementById('display-name').textContent = displayName;
-  const cached = parseFloat(localStorage.getItem('pm_balance') || '0');
+  const cached = parseFloat(sessionStorage.getItem('pm_balance') || '0');
   document.getElementById('wallet-balance').textContent = cached.toFixed(2);
 
   // Only attach listeners once per session -- prevent stacking
@@ -726,11 +799,11 @@ async function loadHomeData() {
       const bal = data.balance || 0;
       if (data.name && data.name !== CURRENT_USER.name) {
         CURRENT_USER.name = data.name;
-        localStorage.setItem('pm_name', data.name);
+        sessionStorage.setItem('pm_name', data.name);
       }
       if (data.upi && data.upi !== CURRENT_USER.upi) {
         CURRENT_USER.upi = data.upi;
-        localStorage.setItem('pm_upi', data.upi);
+        sessionStorage.setItem('pm_upi', data.upi);
       }
       // Sync PIN cache live — if PIN was set/removed on another login it reflects here
       syncPinCache(data);
@@ -738,7 +811,7 @@ async function loadHomeData() {
 
       document.getElementById('display-name').textContent = `Hi, ${CURRENT_USER.name} 👋`;
       animateBalance(bal);
-      localStorage.setItem('pm_balance', bal.toFixed(2));
+      sessionStorage.setItem('pm_balance', bal.toFixed(2));
     },
     (err) => console.warn('Balance listener error:', err.message)
   );
@@ -830,6 +903,14 @@ window.submitLoad = async function() {
 // SEND MONEY
 // ═══════════════════════════════════════════
 
+// ═══════════════════════════════════════════
+// SEND RATE LIMIT
+// One send per 30 seconds per session. Prevents scripted wallet drain.
+// ═══════════════════════════════════════════
+
+let _lastSendTime = 0;
+const SEND_COOLDOWN_MS = 30 * 1000; // 30 seconds
+
 window.sendMoney = async function() {
   const phone  = document.getElementById('send-phone').value.trim();
   const amount = parseFloat(document.getElementById('send-amount').value);
@@ -839,6 +920,14 @@ window.sendMoney = async function() {
   if (!amount || amount <= 0)  { showMsg(msg,'error','Enter a valid amount'); return; }
   if (!CURRENT_USER.phone)     { showMsg(msg,'error','Session error — please log out and log in again.'); return; }
   if (phone === CURRENT_USER.phone) { showMsg(msg,'error','Cannot send to yourself'); return; }
+
+  // Rate limit: enforce 30-second cooldown between sends
+  const now = Date.now();
+  if (now - _lastSendTime < SEND_COOLDOWN_MS) {
+    const waitSec = Math.ceil((SEND_COOLDOWN_MS - (now - _lastSendTime)) / 1000);
+    showMsg(msg, 'error', `Please wait ${waitSec}s before sending again.`);
+    return;
+  }
 
   try { await requirePin('Confirm Send', `Enter PIN to send ₹${amount.toFixed(2)}`); }
   catch(e) { return; }
@@ -869,8 +958,9 @@ window.sendMoney = async function() {
       addDoc(collection(db,"transactions"), { phone,                     label:`From ${CURRENT_USER.name}`, amount, type:"credit", time })
     ]);
 
-    const newBal = parseFloat(localStorage.getItem('pm_balance')||'0') - amount;
-    localStorage.setItem('pm_balance', Math.max(0,newBal).toFixed(2));
+    const newBal = parseFloat(sessionStorage.getItem('pm_balance')||'0') - amount;
+    sessionStorage.setItem('pm_balance', Math.max(0, newBal).toFixed(2));
+    _lastSendTime = Date.now(); // stamp cooldown on success only
     document.getElementById('send-phone').value  = '';
     document.getElementById('send-amount').value = '';
     if (navigator.vibrate) navigator.vibrate(200);
@@ -921,8 +1011,8 @@ window.generateVoucher = async function() {
       })
     ]);
 
-    const newBal = parseFloat(localStorage.getItem('pm_balance')||'0') - amount;
-    localStorage.setItem('pm_balance', Math.max(0,newBal).toFixed(2));
+    const newBal = parseFloat(sessionStorage.getItem('pm_balance')||'0') - amount;
+    sessionStorage.setItem('pm_balance', Math.max(0, newBal).toFixed(2));
 
     document.getElementById('voucher-amount').value = '';
     showMsg(msg,'success',`Voucher for ₹${amount.toFixed(2)} created!`);
@@ -1181,8 +1271,8 @@ window.redeemVoucher = async function() {
     // Delete voucher doc after successful redeem to save Firestore space
     deleteDoc(vRef).catch(() => {});
 
-    const newBal = parseFloat(localStorage.getItem('pm_balance')||'0') + amount;
-    localStorage.setItem('pm_balance', newBal.toFixed(2));
+    const newBal = parseFloat(sessionStorage.getItem('pm_balance')||'0') + amount;
+    sessionStorage.setItem('pm_balance', newBal.toFixed(2));
     stopScan();
     launchConfetti(80);
     if (navigator.vibrate) navigator.vibrate([200,100,200,100,400]);
@@ -1193,8 +1283,8 @@ window.redeemVoucher = async function() {
       const pending = JSON.parse(localStorage.getItem('pending_vouchers') || '[]');
       pending.push({ ...voucher, amount, redeemedBy:CURRENT_USER.phone, time:new Date().toISOString() });
       localStorage.setItem('pending_vouchers', JSON.stringify(pending));
-      const lb = parseFloat(localStorage.getItem('pm_balance') || '0');
-      localStorage.setItem('pm_balance', (lb + amount).toFixed(2));
+      const lb = parseFloat(sessionStorage.getItem('pm_balance') || '0');
+      sessionStorage.setItem('pm_balance', (lb + amount).toFixed(2));
       stopScan();
       showOverlay('', 'Saved Offline!', `₹${amount.toFixed(2)} saved — syncs when internet returns`);
     } else {
@@ -1217,9 +1307,9 @@ window.stopScan = function() {
 
 (function init() {
   function run() {
-    const phone = localStorage.getItem('pm_phone');
-    const name  = localStorage.getItem('pm_name')  || '';
-    const upi   = localStorage.getItem('pm_upi')   || '';
+    const phone = sessionStorage.getItem('pm_phone');
+    const name  = sessionStorage.getItem('pm_name')  || '';
+    const upi   = sessionStorage.getItem('pm_upi')   || '';
 
     if (!phone) {
       showScreen('screen-login');
@@ -1233,7 +1323,7 @@ window.stopScan = function() {
     showScreen('screen-home');
   }
 
-  // Small delay ensures localStorage is fully readable in PWA standalone mode
+  // Small delay ensures sessionStorage is fully readable in PWA standalone mode
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', function() { setTimeout(run, 100); });
   } else {
