@@ -1137,57 +1137,6 @@ window.__PM_SPLASH_TIMEOUT = setTimeout(function() {
   </div>
 </div>
 
-<!-- invisible recaptcha container for Firebase Phone Auth -->
-<div id="recaptcha-container"></div>
-
-<!-- ══════════════════════════════════════
-     OTP VERIFICATION SCREEN
-═══════════════════════════════════════ -->
-<div id="screen-otp" class="screen">
-  <div class="login-wrap">
-    <div class="login-logo">
-      <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
-        <path d="M18 4L8 18H16L14 28L24 14H16L18 4Z" fill="url(#otpGrad)" stroke="rgba(0,232,122,0.4)" stroke-width="1"/>
-        <defs>
-          <linearGradient id="otpGrad" x1="8" y1="4" x2="24" y2="28" gradientUnits="userSpaceOnUse">
-            <stop offset="0%" stop-color="#00E87A"/>
-            <stop offset="100%" stop-color="#00FFA3"/>
-          </linearGradient>
-        </defs>
-      </svg>
-    </div>
-    <h1 class="login-title">Pay<span>Mesh</span></h1>
-    <p class="login-sub">OTP Verification</p>
-    <div class="form-card card" style="max-width:400px">
-      <p style="font-size:13px;color:var(--text3);margin-bottom:16px;text-align:center;line-height:1.5;">
-        We sent a 6-digit OTP to<br>
-        <strong style="color:var(--em);font-size:15px;" id="otp-phone-display">+91 XXXXXXXXXX</strong>
-      </p>
-      <div class="form-group">
-        <label>Enter OTP</label>
-        <input type="number" id="otp-input" placeholder="6-digit OTP" maxlength="6"
-          style="letter-spacing:6px;font-size:22px;text-align:center;font-family:var(--mono);font-weight:700;"
-          oninput="if(this.value.length>6)this.value=this.value.slice(0,6)">
-      </div>
-      <button type="button" class="btn-primary" id="otp-verify-btn" onclick="verifyOTP()">
-        <span>Verify OTP</span>
-      </button>
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;">
-        <button type="button" onclick="otpBack()"
-          style="background:none;border:none;color:var(--text3);font:600 13px/1 var(--sans);cursor:pointer;padding:4px 0;">
-          ← Change Number
-        </button>
-        <button type="button" id="otp-resend-btn" onclick="resendOTP()"
-          style="background:none;border:none;color:var(--em);font:600 13px/1 var(--sans);cursor:pointer;padding:4px 0;">
-          Resend OTP
-        </button>
-      </div>
-      <div id="otp-msg" class="msg"></div>
-    </div>
-    <p class="dev-footer">PayMesh v2.0 · Built by <span>Utkarsh Goyal</span></p>
-  </div>
-</div>
-
 <!-- ══════════════════════════════════════
      HOME SCREEN
 ═══════════════════════════════════════ -->
