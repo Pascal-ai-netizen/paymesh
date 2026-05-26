@@ -2128,12 +2128,10 @@ window.nfcWrite=async function(){
   if(!phone){setMsg('error','Session error. Please refresh.');return;}
   if(!db){setMsg('error','App not ready. Please refresh.');return;}
 
-  // Balance check before asking for PIN
-  try{
-    var sSnap=await getDoc(doc(db,'users',phone));
-    if(!sSnap.exists())throw new Error('Your account not found.');
-    if((sSnap.data().balance||0)<amount)throw new Error('Insufficient balance. You have &#8377;'+(sSnap.data().balance||0).toFixed(2));
-  }catch(e){setMsg('error',e.message);return;}
+  // Quick local balance check from cache — no Firestore read needed here.
+  // The receiver's atomic runTransaction is the authoritative guard against overdraft.
+  var cachedBal=parseFloat(localStorage.getItem('pm_balance')||sessionStorage.getItem('pm_balance')||'0');
+  if(cachedBal<amount){setMsg('error','Insufficient balance. You have &#8377;'+cachedBal.toFixed(2));return;}
 
   if(window.requirePin){
     try{await window.requirePin('Confirm NFC Send','Enter PIN to send &#8377;'+amount.toFixed(2));}

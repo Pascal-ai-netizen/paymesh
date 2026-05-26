@@ -118,7 +118,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/fireba
 import {
   getFirestore,
   doc, setDoc, updateDoc, getDoc, deleteDoc,
-  collection, addDoc, query, where,
+  collection, addDoc, query, where, orderBy, limit,
   runTransaction,
   onSnapshot,
   getDocFromServer
@@ -846,7 +846,12 @@ async function loadHomeData() {
     (err) => console.warn('Balance listener error:', err.message)
   );
 
-  const txQuery = query(collection(db,"transactions"), where("phone","==",CURRENT_USER.phone));
+  const txQuery = query(
+    collection(db,"transactions"),
+    where("phone","==",CURRENT_USER.phone),
+    orderBy("time","desc"),
+    limit(20)
+  );
   unsubTxns = onSnapshot(
     txQuery,
     (snap) => renderTransactions(snap),
@@ -857,10 +862,10 @@ async function loadHomeData() {
 function renderTransactions(snap) {
   const list = document.getElementById('tx-list');
   if (snap.empty) { list.innerHTML = '<div class="tx-empty">No transactions yet</div>'; return; }
+  // Snapshot is already ordered by time desc, limited to 20 by the query
   const txs = [];
   snap.forEach(d => txs.push(d.data()));
-  txs.sort((a,b) => (b.time||'').localeCompare(a.time||''));
-  list.innerHTML = txs.slice(0,20).map((tx, i) => {
+  list.innerHTML = txs.map((tx, i) => {
     const isDebit   = tx.type === 'debit';
     const isPending = tx.type === 'pending';
     const amtClass  = isPending ? 'tx-pending' : isDebit ? 'tx-debit' : 'tx-credit';
@@ -979,6 +984,35 @@ window.onSendFieldChange = function() {
   _fraudDebounceTimer = setTimeout(() => _runFraudScore(phone, amount, note), 350);
 }
 
+// ── Fraud read-cache helpers (sessionStorage, TTL-based) ──
+// Key: pm_fc_<userPhone>_<recipPhone>  → 'new' | 'known'  (no expiry needed, resets on logout)
+// Key: pm_ud_<recipPhone>              → JSON {data, ts}   TTL 5 min
+const _FC_PREFIX = 'pm_fc_';
+const _UD_PREFIX = 'pm_ud_';
+const _UD_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+function _fcCacheKey(recipPhone)  { return _FC_PREFIX + (CURRENT_USER.phone||'') + '_' + recipPhone; }
+function _udCacheKey(recipPhone)  { return _UD_PREFIX + recipPhone; }
+
+function _getFcCache(recipPhone) {
+  return sessionStorage.getItem(_fcCacheKey(recipPhone)); // 'new' | 'known' | null
+}
+function _setFcCache(recipPhone, val) {
+  try { sessionStorage.setItem(_fcCacheKey(recipPhone), val); } catch(e) {}
+}
+function _getUdCache(recipPhone) {
+  try {
+    const raw = sessionStorage.getItem(_udCacheKey(recipPhone));
+    if (!raw) return null;
+    const obj = JSON.parse(raw);
+    if (Date.now() - obj.ts > _UD_TTL_MS) { sessionStorage.removeItem(_udCacheKey(recipPhone)); return null; }
+    return obj.data; // the Firestore doc data object
+  } catch(e) { return null; }
+}
+function _setUdCache(recipPhone, data) {
+  try { sessionStorage.setItem(_udCacheKey(recipPhone), JSON.stringify({ data, ts: Date.now() })); } catch(e) {}
+}
+
 async function _runFraudScore(phone, amount, note) {
   // Stamp a sequence number; discard result if a newer call has started
   const seq = ++_fraudSeq;
@@ -992,17 +1026,26 @@ async function _runFraudScore(phone, amount, note) {
 
   // ── Pattern 1: First Contact High Value ──
   // Uses `toPhone` field written by sendMoney on each debit transaction.
+  // Cache result in sessionStorage — once we know it's 'known' or 'new', no need to re-query.
   let isNewContact = true;
-  try {
-    const { getDocs: gd, query: qr, collection: col, where: wh } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
-    const priorSnap = await gd(qr(col(db,'transactions'),
-      wh('phone','==',CURRENT_USER.phone),
-      wh('type','==','debit'),
-      wh('toPhone','==',phone)
-    ));
-    isNewContact = priorSnap.empty;
-  } catch(e) {
-    isNewContact = true; // conservative default on network error
+  const cachedFc = _getFcCache(phone);
+  if (cachedFc !== null) {
+    isNewContact = (cachedFc === 'new');
+  } else {
+    try {
+      const { getDocs: gd, query: qr, collection: col, where: wh } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
+      const priorSnap = await gd(qr(col(db,'transactions'),
+        wh('phone','==',CURRENT_USER.phone),
+        wh('type','==','debit'),
+        wh('toPhone','==',phone)
+      ));
+      isNewContact = priorSnap.empty;
+      // Cache: if NOT new contact, it stays 'known' forever this session.
+      // If new, we'll re-check after a successful send (cache gets cleared).
+      _setFcCache(phone, isNewContact ? 'new' : 'known');
+    } catch(e) {
+      isNewContact = true; // conservative default on network error
+    }
   }
 
   if (seq !== _fraudSeq) return; // stale — a newer call is in flight
@@ -1051,11 +1094,21 @@ async function _runFraudScore(phone, amount, note) {
   }
 
   // ── Pattern 7: Time-Since-Account ──
+  // Cache the recipient's user doc for 5 minutes to avoid a read on every debounce tick.
   try {
-    const rSnap = await getDoc(doc(db,'users',phone));
-    if (seq !== _fraudSeq) return; // stale check after second await
-    if (rSnap.exists()) {
-      const created = rSnap.data().createdAt;
+    let recipData = _getUdCache(phone);
+    if (!recipData) {
+      const rSnap = await getDoc(doc(db,'users',phone));
+      if (seq !== _fraudSeq) return; // stale check after second await
+      if (rSnap.exists()) {
+        recipData = rSnap.data();
+        _setUdCache(phone, recipData);
+      }
+    } else {
+      if (seq !== _fraudSeq) return;
+    }
+    if (recipData) {
+      const created = recipData.createdAt;
       if (created) {
         const ageHours = (Date.now() - new Date(created).getTime()) / 3600000;
         if (ageHours < 24 && amount >= 1000) {
@@ -1647,6 +1700,8 @@ window.sendMoney = async function() {
 
     const newBal = parseFloat(sessionStorage.getItem('pm_balance')||'0') - amount;
     sessionStorage.setItem('pm_balance', Math.max(0, newBal).toFixed(2));
+    // Invalidate first-contact cache — this phone is now a known contact
+    try { sessionStorage.removeItem(_FC_PREFIX + CURRENT_USER.phone + '_' + phone); } catch(e) {}
     _lastSendTime = Date.now(); // stamp cooldown on success only
     document.getElementById('send-phone').value  = '';
     document.getElementById('send-amount').value = '';
@@ -1707,6 +1762,8 @@ window.generateVoucher = async function() {
 
     const newBal = parseFloat(sessionStorage.getItem('pm_balance')||'0') - amount;
     sessionStorage.setItem('pm_balance', Math.max(0, newBal).toFixed(2));
+    // Invalidate voucher list cache so new voucher appears on next screen open
+    try { sessionStorage.removeItem(_VOUCHER_CACHE_KEY()); } catch(e) {}
 
     document.getElementById('voucher-amount').value = '';
     showMsg(msg,'success',`Voucher for ₹${amount.toFixed(2)} created!`);
@@ -1722,28 +1779,51 @@ window.generateVoucher = async function() {
 }
 
 // Load all UNUSED vouchers created by this user from Firestore
+// Cached in sessionStorage for 2 minutes — screen re-opens don't cost a read.
+const _VOUCHER_CACHE_KEY = () => 'pm_vcache_' + (CURRENT_USER.phone || '');
+const _VOUCHER_CACHE_TTL = 2 * 60 * 1000; // 2 minutes
+
 async function loadVouchersFromFirestore() {
   if (!CURRENT_USER.phone) return;
   const display = document.getElementById('voucher-display');
+
+  // Try cache first
+  try {
+    const raw = sessionStorage.getItem(_VOUCHER_CACHE_KEY());
+    if (raw) {
+      const cached = JSON.parse(raw);
+      if (Date.now() - cached.ts < _VOUCHER_CACHE_TTL) {
+        _renderVouchers(cached.vouchers);
+        return;
+      }
+    }
+  } catch(e) {}
+
   display.innerHTML = '<div style="text-align:center;color:var(--text3);padding:20px;font-size:13px">Loading vouchers…</div>';
   try {
     const q    = query(collection(db,"vouchers"), where("createdBy","==",CURRENT_USER.phone), where("status","==","UNUSED"));
     const { getDocs } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
     const vSnap = await getDocs(q);
-    display.innerHTML = '';
-    if (vSnap.empty) {
-      display.innerHTML = '<div style="text-align:center;color:var(--text3);padding:20px;font-size:13px">No active vouchers</div>';
-      return;
-    }
-    // Sort newest first
     const vouchers = [];
     vSnap.forEach(d => vouchers.push(d.data()));
     vouchers.sort((a,b) => (b.createdAt||'').localeCompare(a.createdAt||''));
-    vouchers.forEach(v => renderSingleVoucher(v.code, v.amount, v.status));
+    // Save to cache
+    try { sessionStorage.setItem(_VOUCHER_CACHE_KEY(), JSON.stringify({ vouchers, ts: Date.now() })); } catch(e) {}
+    _renderVouchers(vouchers);
   } catch(e) {
     display.innerHTML = '<div style="text-align:center;color:var(--text3);padding:20px;font-size:13px">Could not load vouchers</div>';
     console.error('Voucher load error:', e);
   }
+}
+
+function _renderVouchers(vouchers) {
+  const display = document.getElementById('voucher-display');
+  display.innerHTML = '';
+  if (!vouchers.length) {
+    display.innerHTML = '<div style="text-align:center;color:var(--text3);padding:20px;font-size:13px">No active vouchers</div>';
+    return;
+  }
+  vouchers.forEach(v => renderSingleVoucher(v.code, v.amount, v.status));
 }
 
 window.restoreVoucher = loadVouchersFromFirestore;
