@@ -123,6 +123,11 @@ import {
   onSnapshot,
   getDocFromServer
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import {
+  getAuth,
+  RecaptchaVerifier,
+  signInWithPhoneNumber
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDKs_5eQADpVoFgoRhTJea-SGW0205C9Wc",
@@ -133,8 +138,16 @@ const firebaseConfig = {
   appId: "1:64830673482:web:5722735cf616109b500cb3"
 };
 
-const app = initializeApp(firebaseConfig);
-const db  = getFirestore(app);
+const app  = initializeApp(firebaseConfig);
+const db   = getFirestore(app);
+const auth = getAuth(app);
+
+// OTP state
+let _otpConfirmationResult = null;
+let _otpPendingPhone       = null;
+let _otpPendingName        = null;
+let _otpPendingUpi         = null;
+let _recaptchaVerifier     = null;
 
 const PAYMESH_UPI = "utkarshkk@yesfam";
 
@@ -633,6 +646,7 @@ function buildUPILink() {
 // LOGIN
 // ═══════════════════════════════════════════
 
+// ─── STEP 1: Send OTP ───────────────────────────────────────────────────────
 window.loginUser = async function() {
   const phone = document.getElementById('login-phone').value.trim();
   const msg   = document.getElementById('login-msg');
@@ -643,20 +657,68 @@ window.loginUser = async function() {
   const knownPhones   = JSON.parse(localStorage.getItem('pm_known_phones') || '[]');
   const isKnownDevice = knownPhones.includes(phone);
 
-  let nameInput, upiInput;
+  let nameInput = '', upiInput = '';
   if (!isKnownDevice) {
     nameInput = document.getElementById('login-name').value.trim();
     upiInput  = document.getElementById('login-upi').value.trim();
-    if (!nameInput)              { showMsg(msg,'error','Enter your name'); return; }
-    if (!upiInput)               { showMsg(msg,'error','Enter your UPI ID'); return; }
+    if (!nameInput)               { showMsg(msg,'error','Enter your name'); return; }
+    if (!upiInput)                { showMsg(msg,'error','Enter your UPI ID'); return; }
     if (!UPI_REGEX.test(upiInput)){ showMsg(msg,'error','Invalid UPI ID. Use format like name@ybl'); return; }
   }
 
-  if (btn) { btn.disabled = true; btn.querySelector('span').textContent = 'Please wait…'; }
-  showMsg(msg,'success','Verifying account...');
+  if (btn) { btn.disabled = true; btn.querySelector('span').textContent = 'Sending OTP…'; }
+  showMsg(msg, 'success', 'Sending OTP to +91 ' + phone + '...');
 
   try {
-    const userRef  = doc(db, "users", phone);
+    // Destroy old verifier if it exists
+    if (_recaptchaVerifier) { try { _recaptchaVerifier.clear(); } catch(e){} }
+    _recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', { size: 'invisible' });
+
+    _otpPendingPhone = phone;
+    _otpPendingName  = nameInput;
+    _otpPendingUpi   = upiInput;
+
+    _otpConfirmationResult = await signInWithPhoneNumber(auth, '+91' + phone, _recaptchaVerifier);
+
+    // Switch to OTP screen
+    document.getElementById('otp-phone-display').textContent = '+91 ' + phone;
+    showScreen('screen-otp');
+    if (btn) { btn.disabled = false; btn.querySelector('span').textContent = isKnownDevice ? 'Sign In' : 'Get Started'; }
+
+  } catch(e) {
+    console.error('OTP send error:', e);
+    if (btn) { btn.disabled = false; btn.querySelector('span').textContent = isKnownDevice ? 'Sign In' : 'Get Started'; }
+    let errMsg = 'Failed to send OTP. Try again.';
+    if (e.code === 'auth/too-many-requests') errMsg = 'Too many attempts. Try again later.';
+    if (e.code === 'auth/invalid-phone-number') errMsg = 'Invalid phone number.';
+    showMsg(msg, 'error', errMsg);
+    if (_recaptchaVerifier) { try { _recaptchaVerifier.clear(); } catch(e2){} _recaptchaVerifier = null; }
+  }
+}
+
+// ─── STEP 2: Verify OTP & complete login ────────────────────────────────────
+window.verifyOTP = async function() {
+  const otpVal = document.getElementById('otp-input').value.trim();
+  const msg    = document.getElementById('otp-msg');
+  const btn    = document.getElementById('otp-verify-btn');
+
+  if (!/^\d{6}$/.test(otpVal)) { showMsg(msg,'error','Enter the 6-digit OTP'); return; }
+  if (!_otpConfirmationResult)  { showMsg(msg,'error','Session expired. Go back and retry.'); return; }
+
+  if (btn) { btn.disabled = true; btn.querySelector('span').textContent = 'Verifying…'; }
+  showMsg(msg, 'success', 'Verifying OTP…');
+
+  try {
+    await _otpConfirmationResult.confirm(otpVal);
+    // OTP confirmed ✓ — now handle Firestore account
+    const phone = _otpPendingPhone;
+    const nameInput = _otpPendingName;
+    const upiInput  = _otpPendingUpi;
+
+    const knownPhones   = JSON.parse(localStorage.getItem('pm_known_phones') || '[]');
+    const isKnownDevice = knownPhones.includes(phone);
+
+    const userRef  = doc(db, 'users', phone);
     const userSnap = await getDocFromServer(userRef);
     let finalName, finalUpi;
 
@@ -664,19 +726,17 @@ window.loginUser = async function() {
       const data = userSnap.data();
       finalName = data.name;
       finalUpi  = data.upi;
-      // Sync PIN cache from Firestore
       syncPinCache(data);
       showMsg(msg, 'success', `Welcome back, ${finalName}!`);
     } else {
-      // Brand new account — only allow creation from new-device form
       if (isKnownDevice) {
-        // Edge case: account was deleted but phone is still in pm_known_phones
-        // Remove stale entry and show full form
+        // Stale known-phone — remove and force full form
         const known = JSON.parse(localStorage.getItem('pm_known_phones') || '[]');
         localStorage.setItem('pm_known_phones', JSON.stringify(known.filter(p => p !== phone)));
+        if (btn) { btn.disabled = false; btn.querySelector('span').textContent = 'Verify OTP'; }
+        showScreen('screen-login');
         _applyLoginMode(false);
-        if (btn) { btn.disabled = false; btn.querySelector('span').textContent = 'Get Started'; }
-        showMsg(msg, 'error', 'Account not found. Please fill in all details to register.');
+        showMsg(document.getElementById('login-msg'), 'error', 'Account not found. Fill in your details to register.');
         return;
       }
       finalName = nameInput;
@@ -690,24 +750,26 @@ window.loginUser = async function() {
     }
 
     addKnownPhone(phone);
-    // Write to localStorage so session survives tab close / app reopen (original behavior)
     localStorage.setItem('pm_name', finalName);
     localStorage.setItem('pm_phone', phone);
     localStorage.setItem('pm_upi', finalUpi);
     const _fp = generateDeviceToken();
     localStorage.setItem('pm_fp', _fp);
-    // Mirror to sessionStorage for fast in-session reads
     sessionStorage.setItem('pm_name', finalName);
     sessionStorage.setItem('pm_phone', phone);
     sessionStorage.setItem('pm_upi', finalUpi);
     sessionStorage.setItem('pm_fp', _fp);
 
-
     CURRENT_USER.name  = finalName;
     CURRENT_USER.phone = phone;
     CURRENT_USER.upi   = finalUpi;
 
-    if (btn) { btn.disabled = false; btn.querySelector('span').textContent = isKnownDevice ? 'Sign In' : 'Get Started'; }
+    _otpConfirmationResult = null;
+    _otpPendingPhone = null;
+    _otpPendingName  = null;
+    _otpPendingUpi   = null;
+
+    if (btn) { btn.disabled = false; btn.querySelector('span').textContent = 'Verify OTP'; }
 
     setTimeout(() => {
       refreshPinSettingsUI();
@@ -715,10 +777,36 @@ window.loginUser = async function() {
     }, 800);
 
   } catch(e) {
-    if (btn) { btn.disabled = false; btn.querySelector('span').textContent = isKnownDevice ? 'Sign In' : 'Get Started'; }
-    showMsg(msg, 'error', 'Error. Check internet and try again.');
-    console.error(e);
+    console.error('OTP verify error:', e);
+    if (btn) { btn.disabled = false; btn.querySelector('span').textContent = 'Verify OTP'; }
+    let errMsg = 'Wrong OTP. Try again.';
+    if (e.code === 'auth/code-expired')        errMsg = 'OTP expired. Go back and resend.';
+    if (e.code === 'auth/invalid-verification-code') errMsg = 'Incorrect OTP. Check and retry.';
+    showMsg(msg, 'error', errMsg);
   }
+}
+
+window.otpBack = function() {
+  _otpConfirmationResult = null;
+  if (_recaptchaVerifier) { try { _recaptchaVerifier.clear(); } catch(e){} _recaptchaVerifier = null; }
+  showScreen('screen-login');
+}
+
+window.resendOTP = async function() {
+  const msg = document.getElementById('otp-msg');
+  const btn = document.getElementById('otp-resend-btn');
+  if (!_otpPendingPhone) { showMsg(msg,'error','Session lost. Go back and start over.'); return; }
+  btn.disabled = true;
+  showMsg(msg,'success','Resending OTP…');
+  try {
+    if (_recaptchaVerifier) { try { _recaptchaVerifier.clear(); } catch(e){} }
+    _recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', { size: 'invisible' });
+    _otpConfirmationResult = await signInWithPhoneNumber(auth, '+91' + _otpPendingPhone, _recaptchaVerifier);
+    showMsg(msg,'success','OTP resent!');
+  } catch(e) {
+    showMsg(msg,'error','Failed to resend. Wait a moment and try again.');
+  }
+  setTimeout(() => { btn.disabled = false; }, 30000); // 30s cooldown
 }
 
 // ═══════════════════════════════════════════
@@ -787,17 +875,10 @@ function forceRelogin(reason) {
 
 let _homeListenersActive = false;
 async function loadHomeData() {
-  // Fallback: read from localStorage (persisted) or sessionStorage if CURRENT_USER not set yet
+  // STRICT: If CURRENT_USER not set (e.g. no OTP done this session), go to login
   if (!CURRENT_USER.phone) {
-    const savedPhone = localStorage.getItem('pm_phone') || sessionStorage.getItem('pm_phone');
-    if (savedPhone) {
-      CURRENT_USER.phone = savedPhone;
-      CURRENT_USER.name  = localStorage.getItem('pm_name')  || sessionStorage.getItem('pm_name')  || '';
-      CURRENT_USER.upi   = localStorage.getItem('pm_upi')   || sessionStorage.getItem('pm_upi')   || '';
-    } else {
-      showScreen('screen-login');
-      return;
-    }
+    showScreen('screen-login');
+    return;
   }
 
   const displayName = CURRENT_USER.name ? `Hi, ${CURRENT_USER.name} 👋` : 'Welcome 👋';
@@ -1967,8 +2048,11 @@ window.startScan = async function() {
       }
     }, 300);
   } catch(e) {
-    alert('Camera permission needed. Please allow camera access.');
-    showScreen('screen-home');
+    if (scannerInterval) { clearInterval(scannerInterval); scannerInterval = null; }
+    if (scannerStream)   { scannerStream.getTracks().forEach(t => t.stop()); scannerStream = null; }
+    const scanMsg2 = document.getElementById('scan-msg');
+    if (scanMsg2) { scanMsg2.className = 'msg msg-error'; scanMsg2.textContent = 'Camera access denied. Please allow camera and try again.'; }
+    // Back button still works — scanner is on screen-scan; user can tap Back
   }
 }
 
@@ -2080,8 +2164,12 @@ window.redeemVoucher = async function() {
 }
 
 window.stopScan = function() {
-  if (scannerInterval) { clearInterval(scannerInterval); scannerInterval = null; }
-  if (scannerStream)   { scannerStream.getTracks().forEach(t => t.stop()); scannerStream = null; }
+  try { if (scannerInterval) { clearInterval(scannerInterval); scannerInterval = null; } } catch(e) {}
+  try { if (scannerStream)   { scannerStream.getTracks().forEach(t => t.stop()); scannerStream = null; } } catch(e) {}
+  try {
+    const video = document.getElementById('scanner-video');
+    if (video) { video.srcObject = null; }
+  } catch(e) {}
   detectedQR = null;
   showScreen('screen-home');
 }
@@ -2092,25 +2180,17 @@ window.stopScan = function() {
 
 (function init() {
   function run() {
-    // Read from localStorage first (persists across tab close/app reopen),
-    // fall back to sessionStorage for any legacy in-session-only writes.
-    const phone = localStorage.getItem('pm_phone') || sessionStorage.getItem('pm_phone');
-    const name  = localStorage.getItem('pm_name')  || sessionStorage.getItem('pm_name')  || '';
-    const upi   = localStorage.getItem('pm_upi')   || sessionStorage.getItem('pm_upi')   || '';
-
-    if (!phone) {
-      showScreen('screen-login');
-      return;
+    // STRICT LOGIN: Always require OTP verification — no localStorage auto-login.
+    // We pre-fill the phone for convenience but user MUST verify via OTP every session.
+    const savedPhone = localStorage.getItem('pm_phone') || '';
+    const phoneEl = document.getElementById('login-phone');
+    if (phoneEl && savedPhone) {
+      phoneEl.value = savedPhone;
+      detectExistingUser(savedPhone);
     }
-
-    CURRENT_USER.phone = phone;
-    CURRENT_USER.name  = name;
-    CURRENT_USER.upi   = upi;
-    refreshPinSettingsUI();
-    showScreen('screen-home');
+    showScreen('screen-login');
   }
 
-  // Small delay ensures sessionStorage is fully readable in PWA standalone mode
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', function() { setTimeout(run, 100); });
   } else {
