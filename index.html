@@ -677,36 +677,91 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
   <div style="margin-top:8px;padding:10px 20px;border:1px solid rgba(255,77,106,0.25);border-radius:12px;background:rgba(255,77,106,0.08);font-size:12px;color:#FF4D6A;letter-spacing:0.5px;">ACCESS RESTRICTED</div>
 </div>
 <script>
-// ══ MOBILE-ONLY GATE ══
 (function() {
+
+  // ── STEP 1: CONSOLE WIPE — runs immediately, before anything logs ──
+  var _noop = function(){};
+  var _methods = ['log','warn','info','debug','table','dir','trace','group','groupEnd','groupCollapsed','count','time','timeEnd','assert'];
+  _methods.forEach(function(m){ try{ console[m] = _noop; }catch(e){} });
+  // Also kill console.error on desktop so the "desktop access blocked" error disappears
+  // (we restore it for mobile below)
+  var _origError = console.error;
+  console.error = _noop;
+
+  // ── STEP 2: DESKTOP DETECTION ──
   function isDesktop() {
     var ua = navigator.userAgent || '';
-    // Block known desktop OS signatures
     var desktopUA = /Windows NT|Macintosh|Linux x86_64|Linux i686|CrOS/.test(ua);
-    // Allow Android and iOS even if on Linux kernel
     var isMobileUA = /Android|iPhone|iPad|iPod|Mobile/.test(ua);
     if (desktopUA && !isMobileUA) return true;
-    // Block coarse pointer absent (mouse-driven = desktop)
     if (window.matchMedia && window.matchMedia('(pointer:fine)').matches && !window.matchMedia('(pointer:coarse)').matches) return true;
-    // Block if no touch support at all
     if (!('ontouchstart' in window) && navigator.maxTouchPoints === 0) return true;
-    // Block if screen width >= 1024 AND no touch (tablets at >=1024 have touch)
     if (screen.width >= 1024 && navigator.maxTouchPoints === 0) return true;
     return false;
   }
-  if (isDesktop()) {
-    var block = document.getElementById('pm-device-block');
-    if (block) block.style.display = 'flex';
-    // Prevent any app JS from running by hiding body content
-    document.addEventListener('DOMContentLoaded', function() {
-      document.querySelectorAll('body > *:not(#pm-device-block)').forEach(function(el) {
-        el.style.display = 'none';
-      });
-      block.style.display = 'flex';
-    });
-    // Throw to stop module scripts
-    throw new Error('PayMesh: desktop access blocked.');
+
+  if (!isDesktop()) {
+    // Restore console.error for legitimate mobile crash reporting
+    console.error = _origError;
+    return; // Mobile — let app load normally
   }
+
+  // ── STEP 3: DESKTOP CONFIRMED — lock down everything ──
+
+  var block = document.getElementById('pm-device-block');
+  if (block) block.style.display = 'flex';
+
+  // Nuke all body children except the block screen, now and on DOM ready
+  function destroyDOM() {
+    document.querySelectorAll('body > *').forEach(function(el) {
+      if (el.id !== 'pm-device-block') {
+        try { el.parentNode.removeChild(el); } catch(e){}
+      }
+    });
+    if (block) {
+      document.body.appendChild(block);
+      block.style.display = 'flex';
+    }
+  }
+  document.addEventListener('DOMContentLoaded', destroyDOM);
+
+  // ── STEP 4: DEVTOOLS DETECTION — inline, since app.js never loads on desktop ──
+  var _dtOpen = false;
+  var _dtInterval = setInterval(function() {
+    var wDiff = window.outerWidth  - window.innerWidth;
+    var hDiff = window.outerHeight - window.innerHeight;
+    var open  = wDiff > 160 || hDiff > 160;
+    if (open && !_dtOpen) {
+      _dtOpen = true;
+      // Wipe the block screen content so nothing is readable even in Elements panel
+      if (block) {
+        block.innerHTML = '<div style="color:#FF4D6A;font-family:monospace;font-size:13px;padding:40px;">ACCESS DENIED</div>';
+      }
+      // Nuke localStorage so session tokens can't be read
+      try { localStorage.clear(); } catch(e){}
+      // Reload after short delay to reset state
+      setTimeout(function(){ window.location.reload(); }, 800);
+    }
+    if (!open) { _dtOpen = false; }
+  }, 500);
+
+  // ── STEP 5: KEYBOARD BLOCK — F12, Ctrl+Shift+I, Ctrl+U etc. ──
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'F12') { e.preventDefault(); e.stopImmediatePropagation(); return false; }
+    if ((e.ctrlKey||e.metaKey) && e.shiftKey && 'ijcIJC'.indexOf(e.key) !== -1) { e.preventDefault(); e.stopImmediatePropagation(); return false; }
+    if ((e.ctrlKey||e.metaKey) && (e.key==='u'||e.key==='U')) { e.preventDefault(); e.stopImmediatePropagation(); return false; }
+  }, true);
+
+  // ── STEP 6: RIGHT-CLICK BLOCK ──
+  document.addEventListener('contextmenu', function(e){ e.preventDefault(); return false; }, true);
+
+  // ── STEP 7: OVERRIDE window.onerror to swallow all JS errors silently ──
+  window.onerror = function(){ return true; };
+  window.addEventListener('unhandledrejection', function(e){ e.preventDefault(); }, true);
+
+  // Throw stops all subsequent <script type="module"> tags (app.js etc.)
+  throw new Error('PayMesh: desktop access blocked.');
+
 })();
 </script>
 
