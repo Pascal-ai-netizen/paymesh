@@ -205,7 +205,6 @@ body{
 
 /* ── ACTION GRID ── */
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:0 14px 10px}
-.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;padding:0 14px 12px}
 .grid1{padding:0 14px 12px}
 
 .action-btn{
@@ -836,24 +835,22 @@ window.__PM_SPLASH_TIMEOUT = setTimeout(function() {
       Scan QR — Pay or Receive
     </button>
   </div>
-  <div class="grid3">
-    <button type="button" class="action-btn" style="background:linear-gradient(135deg,rgba(77,159,255,0.12),rgba(77,159,255,0.06));border-color:rgba(77,159,255,0.25);padding:18px 8px;" onclick="showScreen('screen-bluetooth')">
-      <div class="action-icon" style="background:rgba(77,159,255,0.15);border-color:rgba(77,159,255,0.3);width:42px;height:42px;">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4D9FFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+  <div class="grid2">
+    <button type="button" class="action-btn" style="background:linear-gradient(135deg,rgba(77,159,255,0.12),rgba(77,159,255,0.06));border-color:rgba(77,159,255,0.25);" onclick="showScreen('screen-bluetooth')">
+      <div class="action-icon" style="background:rgba(77,159,255,0.15);border-color:rgba(77,159,255,0.3);">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4D9FFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+        </svg>
       </div>
-      <span style="color:#4D9FFF;font-size:11px;">Quick Transfer</span>
+      <span style="color:#4D9FFF">Quick Transfer</span>
     </button>
-    <button type="button" class="action-btn" style="background:linear-gradient(135deg,rgba(0,210,190,0.12),rgba(0,210,190,0.06));border-color:rgba(0,210,190,0.25);padding:18px 8px;" onclick="showScreen('screen-nfc')">
-      <div class="action-icon" style="background:rgba(0,210,190,0.15);border-color:rgba(0,210,190,0.3);width:42px;height:42px;">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#00D2BE" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+    <button type="button" class="action-btn" style="background:linear-gradient(135deg,rgba(0,210,190,0.12),rgba(0,210,190,0.06));border-color:rgba(0,210,190,0.25);" onclick="showScreen('screen-nfc')">
+      <div class="action-icon" style="background:rgba(0,210,190,0.15);border-color:rgba(0,210,190,0.3);">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#00D2BE" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+        </svg>
       </div>
-      <span style="color:#00D2BE;font-size:11px;">NFC Pay</span>
-    </button>
-    <button type="button" class="action-btn" style="background:linear-gradient(135deg,rgba(255,165,0,0.12),rgba(255,165,0,0.06));border-color:rgba(255,165,0,0.25);padding:18px 8px;" onclick="showScreen('screen-soundpay')">
-      <div class="action-icon" style="background:rgba(255,165,0,0.15);border-color:rgba(255,165,0,0.3);width:42px;height:42px;">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FFA500" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
-      </div>
-      <span style="color:#FFA500;font-size:11px;">Sound Pay</span>
+      <span style="color:#00D2BE">NFC Pay</span>
     </button>
   </div>
 
@@ -1217,62 +1214,7 @@ if ('serviceWorker' in navigator) {
 </style>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script>
-// ═══════════════════════════════════════════════════════
-// MOBILE-ONLY GUARD
-// Blocks access from desktops/laptops. PayMesh is a mobile
-// PWA — desktop access (and devtools via desktop) is not
-// supported. Checks UA + touch capability + screen width.
-// ═══════════════════════════════════════════════════════
-(function() {
-  var ua = navigator.userAgent || '';
-  var isMobileUA = /Android|iPhone|iPad|iPod|Windows Phone|BlackBerry|Opera Mini|IEMobile|Mobile/i.test(ua);
-  var hasTouch = (navigator.maxTouchPoints > 0) || ('ontouchstart' in window);
-  var isNarrow = window.screen.width <= 1024;
-
-  // Block if: clearly not mobile UA, OR desktop-sized screen with no touch
-  var isDesktop = !isMobileUA || (!hasTouch && window.screen.width > 1024);
-
-  if (isDesktop) {
-    document.addEventListener('DOMContentLoaded', function() {
-      // Hide everything
-      document.body.innerHTML = '';
-      document.body.style.cssText = 'margin:0;padding:0;background:#03050A;display:flex;align-items:center;justify-content:center;min-height:100vh;font-family:system-ui,sans-serif;';
-      var box = document.createElement('div');
-      box.style.cssText = 'text-align:center;padding:40px 32px;max-width:400px;';
-      box.innerHTML =
-        '<svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="#FF4D6A" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:20px"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12" y2="18"/></svg>' +
-        '<div style="color:#EEF2FF;font-size:22px;font-weight:700;margin-bottom:10px;">Mobile Only</div>' +
-        '<div style="color:#8892a4;font-size:14px;line-height:1.7;margin-bottom:24px;">PayMesh is a mobile payment app.<br>Please open it on your Android or iOS phone.</div>' +
-        '<div style="display:inline-flex;align-items:center;gap:8px;background:rgba(255,77,106,0.1);border:1px solid rgba(255,77,106,0.25);border-radius:10px;padding:10px 18px;">' +
-        '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FF4D6A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>' +
-        '<span style="color:#FF4D6A;font-size:13px;font-weight:600;">Access denied on this device</span></div>';
-      document.body.appendChild(box);
-    });
-    // Prevent further script execution effects but let DOMContentLoaded fire
-    return;
-  }
-})();
-
-// ═══════════════════════════════════════════════════════
-// GLOBAL SHIMS — module functions bridged for inline onclick
-// ES module scripts are deferred; these shims ensure inline
-// onclick="showScreen(...)" etc. work at any point after load.
-// ═══════════════════════════════════════════════════════
-function showScreen(id) {
-  if (typeof window.showScreen === 'function') {
-    window.showScreen(id);
-  } else {
-    setTimeout(function() {
-      if (typeof window.showScreen === 'function') window.showScreen(id);
-    }, 300);
-  }
-}
-function spBack()   { if (typeof window.spBack   === 'function') window.spBack(); }
-function stopScan() { if (typeof window.stopScan === 'function') window.stopScan(); else showScreen('screen-home'); }
-function startScan(){ if (typeof window.startScan=== 'function') window.startScan(); }
-</script>
-<script type="module" src="app.js?v=14"></script>
+<script type="module" src="app.js?v=13"></script>
 
 
 <!-- PWA INSTALL BANNER -->
@@ -1334,116 +1276,6 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 });
 </script>
-<!-- SOUNDPAY SCREEN -->
-<div id="screen-soundpay" class="screen">
-  <div class="topbar">
-    <button type="button" class="back-btn" onclick="spBack()">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
-      Back
-    </button>
-    <span class="screen-title">Sound Pay</span>
-    <div style="width:60px"></div>
-  </div>
-  <div style="padding:16px 0 20px;">
-
-    <div id="sp-unsupported" style="display:none;" class="card" style="text-align:center;padding:32px;">
-      <div style="font-size:36px;margin-bottom:12px;">&#128266;</div>
-      <div style="font-weight:600;color:var(--text);margin-bottom:8px;">Not Supported</div>
-      <div style="font-size:13px;color:var(--text2);">Sound Pay requires microphone access and Web Audio API. Please use Chrome on Android.</div>
-    </div>
-
-    <!-- MODE SELECT -->
-    <div id="sp-mode-select">
-      <div class="card" style="text-align:center;padding:24px 20px 20px;margin-bottom:14px;">
-        <div style="width:56px;height:56px;border-radius:16px;background:rgba(255,165,0,0.12);border:1px solid rgba(255,165,0,0.25);display:flex;align-items:center;justify-content:center;margin:0 auto 14px;">
-          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#FFA500" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
-        </div>
-        <div style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:6px;">Pay with Sound</div>
-        <div style="font-size:13px;color:var(--text2);margin-bottom:20px;">Hold phones face-to-face, touching or within 3 cm. Transfer completes in seconds — no QR, no tap, no internet needed on sender.</div>
-        <div style="display:flex;gap:10px;">
-          <button type="button" onclick="spStartSend()" class="btn-primary" style="flex:1;background:linear-gradient(135deg,#FFA500,#FF8C00);box-shadow:0 4px 20px rgba(255,165,0,0.3);color:#1a0a00;">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;vertical-align:middle;"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
-            Send
-          </button>
-          <button type="button" onclick="spStartReceive()" class="btn-primary" style="flex:1;">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;vertical-align:middle;"><path d="M1 1l22 22"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
-            Receive
-          </button>
-        </div>
-      </div>
-      <div class="card" style="padding:14px 16px;">
-        <div style="font-size:11px;font-weight:700;letter-spacing:1.5px;color:var(--text3);text-transform:uppercase;margin-bottom:10px;">How it works</div>
-        <div style="font-size:13px;color:var(--text2);line-height:1.9;">
-          <span style="color:#FFA500;font-weight:700;">1</span>&nbsp; Receiver taps <b style="color:var(--text)">Receive</b> first — mic starts listening<br>
-          <span style="color:#FFA500;font-weight:700;">2</span>&nbsp; Sender enters amount, taps <b style="color:var(--text)">Send</b> — tone plays<br>
-          <span style="color:#FFA500;font-weight:700;">3</span>&nbsp; Hold phones <b style="color:var(--text)">face-to-face, touching</b> — transfer done &#9889;<br>
-          <span style="color:var(--text3);font-size:11px;">&#128276; Turn volume to maximum on sender's phone for best results</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- SEND panel -->
-    <div id="sp-send-panel" style="display:none;">
-      <!-- Volume warning — shown before emit, hidden after -->
-      <div id="sp-vol-warn" class="card" style="margin-bottom:14px;background:rgba(255,165,0,0.06);border:1px solid rgba(255,165,0,0.25);padding:14px 16px;display:flex;align-items:flex-start;gap:12px;">
-        <div style="font-size:26px;line-height:1;">&#128266;</div>
-        <div>
-          <div style="font-size:13px;font-weight:700;color:#FFA500;margin-bottom:3px;">Turn Volume to Maximum</div>
-          <div style="font-size:12px;color:var(--text2);line-height:1.6;">Sound Pay works best at full volume. Press your phone's volume-up button now before sending.</div>
-        </div>
-      </div>
-      <div class="card" style="margin-bottom:14px;">
-        <div class="form-group">
-          <label>Amount to Send (&#8377;)</label>
-          <input type="number" id="sp-send-amount" placeholder="0.00" min="1" inputmode="decimal" />
-        </div>
-        <button type="button" onclick="spEmit()" class="btn-primary" style="background:linear-gradient(135deg,#FFA500,#FF8C00);box-shadow:0 4px 20px rgba(255,165,0,0.3);color:#1a0a00;">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:8px;vertical-align:middle;"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
-          Emit Sound Token
-        </button>
-        <div id="sp-send-msg" class="msg" style="margin-top:10px;"></div>
-      </div>
-      <div id="sp-send-status" style="display:none;" class="card" style="text-align:center;padding:28px;">
-        <div id="sp-send-icon" style="font-size:44px;margin-bottom:12px;"></div>
-        <div id="sp-send-text" style="font-weight:700;color:var(--text);font-size:16px;margin-bottom:6px;"></div>
-        <div id="sp-send-sub"  style="font-size:13px;color:var(--text2);line-height:1.6;"></div>
-      </div>
-    </div>
-
-    <!-- RECEIVE panel -->
-    <div id="sp-receive-panel" style="display:none;">
-      <!-- Calibration status card — shows noise floor measurement -->
-      <div id="sp-cal-card" class="card" style="margin-bottom:14px;padding:13px 16px;display:flex;align-items:center;gap:12px;">
-        <div id="sp-cal-icon" style="font-size:22px;line-height:1;">&#128268;</div>
-        <div style="flex:1;min-width:0;">
-          <div id="sp-cal-title" style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:2px;">Calibrating mic...</div>
-          <div id="sp-cal-sub" style="font-size:11px;color:var(--text2);">Measuring ambient noise. Stay quiet for 1 second.</div>
-        </div>
-      </div>
-      <div class="card" style="text-align:center;padding:32px 20px;">
-        <div id="sp-receive-anim" style="width:90px;height:90px;border-radius:50%;background:rgba(255,165,0,0.1);border:2px solid rgba(255,165,0,0.3);display:flex;align-items:center;justify-content:center;margin:0 auto 18px;animation:spPulse 1.5s ease-in-out infinite;">
-          <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="#FFA500" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 1l22 22"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
-        </div>
-        <div id="sp-receive-title" style="font-size:17px;font-weight:700;color:var(--text);margin-bottom:8px;">Listening...</div>
-        <div id="sp-receive-sub"  style="font-size:13px;color:var(--text2);margin-bottom:6px;">Hold near sender's phone. Mic is active.</div>
-        <!-- Level bar: colour shifts amber→green when signal detected -->
-        <div id="sp-level-bar" style="height:8px;border-radius:4px;background:var(--surface2);margin:14px 0 4px;overflow:hidden;">
-          <div id="sp-level-fill" style="height:100%;width:0%;background:linear-gradient(90deg,#FFA500,#FFD700);border-radius:4px;transition:width 0.08s;"></div>
-        </div>
-        <div id="sp-noise-label" style="font-size:10px;color:var(--text3);margin-bottom:10px;">Signal level</div>
-        <div id="sp-receive-msg" class="msg"></div>
-      </div>
-    </div>
-
-  </div>
-</div>
-<style>
-@keyframes spPulse{
-  0%,100%{box-shadow:0 0 0 0 rgba(255,165,0,0.35);transform:scale(1)}
-  50%{box-shadow:0 0 0 20px rgba(255,165,0,0);transform:scale(1.06)}
-}
-</style>
-
 <!-- NFC SCREEN -->
 <div id="screen-nfc" class="screen">
   <div class="topbar">
@@ -1714,162 +1546,65 @@ window.btRedeemCode = async function() {
 </script>
 <script type="module">
 import { getApps } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-import { getFirestore, doc, setDoc, getDoc, deleteDoc, addDoc, collection, onSnapshot, runTransaction } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+import { getFirestore, doc, getDoc, addDoc, collection, runTransaction } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
-// ══════════════════════════════════════════════════════
-// SOUNDPAY — Near-Audible FSK Payment System  (v4 — India production build)
-// ══════════════════════════════════════════════════════════════════════════════
-// WHAT CHANGED v1→v4 (full history):
-//
-// v1 (original): 18000–21750 Hz, 250 Hz step, 400 Hz tolerance (tolerance>step!),
-//   8-char nonce, requestAnimationFrame polling, fixed sample-rate assumption,
-//   no checksum, no retry, no WakeLock, SP_DETECT_THRESH hardcoded.
-//
-// v2: Fixed timing (ctx.currentTime), gain envelopes, 4 loops, TTL 55s.
-//   Tolerance still 400 Hz > step 250 Hz — symbol bleed persisted.
-//
-// v3: Moved to 15000 Hz base (budget phone speakers), 500 Hz step, ±100 Hz tol,
-//   9-char nonce with XOR checksum, ScriptProcessor audio-thread polling,
-//   real sampleRate read post-creation (Android 48kHz fix), silence-in-decode
-//   state machine fix, 5 loops, TTL 75s.
-//
-// v4 (this build): All v3 fixes plus:
-//   + Ambient noise calibration (800ms on receive start) — dynamic threshold
-//     self-adjusts: peakNoise+10dB, clamped [-55,−30]. Works in street noise.
-//   + Volume warning UI on sender (mandatory "turn to MAX" prompt)
-//   + iOS AudioContext unlock (silent buffer in user-gesture context)
-//   + WakeLock API on both sender and receiver — prevents screen-off throttle
-//     on MIUI/ColorOS aggressive battery management
-//   + visibilitychange listener resumes AudioContext on tab restore
-//   + Firestore getDoc retry once after 1.5s (Jio/Airtel packet loss)
-//   + Level bar colour shifts amber→green when signal crosses threshold
-//   + Corrected UI: "face-to-face touching", removed false "2 metres" claim
-//   + Receiver order instruction: Receive first, then Send
-//
-// PROTOCOL (v4):
-//   Sender  : iOS-unlock → WakeLock → Firestore setDoc → AudioContext schedule:
-//             [preamble(16000Hz,400ms) + gap + 9 FSK symbols + confirm] × 5 loops
-//   Receiver: getUserMedia → AudioContext → 800ms noise calibration →
-//             ScriptProcessor detect loop → preamble-lock → edge-FSK decode →
-//             XOR checksum validate → Firestore getDoc (1 retry) → runTransaction
-//   Frequencies: base=15000Hz, step=500Hz, preamble=16000Hz (1kHz above base)
-//   Tolerance : ±100Hz (400Hz guard band — no bleed possible)
-//   Token TTL : 75s | Nonce: 8 data + 1 XOR checksum = 9 symbols emitted
-// ══════════════════════════════════════════════════════════════════════════════
+function _nfcDb(){var a=getApps();return a.length?getFirestore(a[0]):null;}
 
-const SP_BASE_FREQ     = 15000; // Hz — reliable on every budget phone speaker
-const SP_STEP          = 500;   // Hz/symbol — 400 Hz guard band with ±100 Hz tol
-const SP_SYMBOLS       = 16;    // 4 bits/symbol (hex digit 0–F)
-const SP_SYM_DUR       = 180;   // ms/symbol — ≥3 FFT frames at 44100/8192 ≈ 186ms
-const SP_GAP_DUR       = 40;    // ms gap — clean edge for state machine
-const SP_NONCE_LEN     = 9;     // 8 data digits + 1 XOR checksum digit
-const SP_PREAMBLE      = 16000; // Hz — 1000 Hz above base; unambiguous sync marker
-const SP_PREAMBLE_DUR  = 400;   // ms — survives OS audio startup lag on slow phones
-const SP_CONFIRM_DUR   = 200;   // ms — end-of-loop confirmation tone (=preamble freq)
-const SP_INTER_LOOP_MS = 500;   // ms silence between loops
-const SP_EMIT_LOOPS    = 5;     // 5 repeats — receiver needs to catch exactly one
-const SP_TOKEN_TTL     = 75000; // ms — 5 loops (~16s) + 59s for slow networks
-const SP_DETECT_THRESH = -45;   // dB — budget mics noisier; -45 clears ambient well
-const SP_FREQ_TOL      = 100;   // Hz — step=500 so ±100 never bleeds into neighbour
-const SP_STABLE_MS     = 80;    // ms freq must hold to count as confirmed symbol
-
-function _spDb(){var a=getApps();return a.length?getFirestore(a[0]):null;}
-
-function _spPanel(send,receive,mode,unsup){
-  ['sp-send-panel','sp-receive-panel','sp-mode-select','sp-unsupported'].forEach(function(id,i){
+function _nfcPanel(send,receive,mode,unsup){
+  ['nfc-send-panel','nfc-receive-panel','nfc-mode-select','nfc-unsupported'].forEach(function(id,i){
     var el=document.getElementById(id);
     if(el)el.style.display=[send,receive,mode,unsup][i]?'block':'none';
   });
 }
 
-function _spStatus(icon,text,sub){
-  var st=document.getElementById('sp-send-status');
+function _nfcStatus(icon,text,sub){
+  var st=document.getElementById('nfc-send-status');
   if(st)st.style.display='block';
-  var i=document.getElementById('sp-send-icon');
-  var t=document.getElementById('sp-send-text');
-  var s=document.getElementById('sp-send-sub');
+  var i=document.getElementById('nfc-send-icon');
+  var t=document.getElementById('nfc-send-text');
+  var s=document.getElementById('nfc-send-sub');
   if(i)i.textContent=icon;
   if(t)t.textContent=text;
   if(s)s.textContent=sub;
 }
 
-// ── Navigation ──
-window.spBack=function(){
-  var s=document.getElementById('sp-send-panel');
-  var r=document.getElementById('sp-receive-panel');
-  var u=document.getElementById('sp-unsupported');
+window.nfcBack=function(){
+  var s=document.getElementById('nfc-send-panel');
+  var r=document.getElementById('nfc-receive-panel');
+  var u=document.getElementById('nfc-unsupported');
   var inSub=(s&&s.style.display==='block')||(r&&r.style.display==='block')||(u&&u.style.display==='block');
-  if(inSub){
-    spStopListening();
-    _spPanel(false,false,true,false);
-  }else{
-    if(window.showScreen)window.showScreen('screen-home');
-  }
+  if(inSub){_nfcPanel(false,false,true,false);}
+  else{if(window.showScreen)window.showScreen('screen-home');}
 };
 
-window.spStartSend=function(){
-  _spPanel(true,false,false,false);
-  var msg=document.getElementById('sp-send-msg');
+window.nfcStartSend=function(){
+  if(!('NDEFReader' in window)){_nfcPanel(false,false,false,true);return;}
+  _nfcPanel(true,false,false,false);
+  var msg=document.getElementById('nfc-send-msg');
   if(msg){msg.className='msg';msg.textContent='';}
-  var st=document.getElementById('sp-send-status');
+  var st=document.getElementById('nfc-send-status');
   if(st)st.style.display='none';
-  var a=document.getElementById('sp-send-amount');
+  var a=document.getElementById('nfc-send-amount');
   if(a)a.value='';
-  // Show volume warning — hidden automatically when emit starts
-  var vw=document.getElementById('sp-vol-warn');
-  if(vw)vw.style.display='flex';
 };
 
-window.spStartReceive=function(){
-  _spPanel(false,true,false,false);
-  spListen();
+window.nfcStartReceive=function(){
+  if(!('NDEFReader' in window)){_nfcPanel(false,false,false,true);return;}
+  _nfcPanel(false,true,false,false);
+  nfcListen();
 };
 
-// ── Generate cryptographic nonce (8 data hex digits + 1 XOR checksum) ──
-// The 9th character is the XOR of all 8 data nibbles, encoded as a hex digit.
-// If any symbol is misread the checksum will mismatch, letting the receiver
-// fail fast with a friendly "move closer" message instead of a Firestore miss.
-function spNonce(){
-  var arr=new Uint8Array(4);
-  crypto.getRandomValues(arr);
-  var hex=Array.from(arr).map(function(b){return b.toString(16).padStart(2,'0');}).join('');
-  var check=0;
-  hex.split('').forEach(function(c){check^=parseInt(c,16);});
-  return hex+check.toString(16); // e.g. "a3f7c210b" — 9 chars
-}
-
-// ── Encode nonce as frequency sequence ──
-// Each hex char (0–F) → one of 16 FSK frequencies: SP_BASE_FREQ + digit*SP_STEP
-// e.g. digit 0 → 15000 Hz, digit 7 → 18500 Hz, digit F → 22500 Hz
-function spEncodeFreqs(nonce){
-  return nonce.split('').map(function(c){
-    var digit=parseInt(c,16);
-    return SP_BASE_FREQ + digit*SP_STEP;
-  });
-}
-
-// ── Utility: decode a single frequency to its hex digit ──
-// Not used in the main decode path (receiver uses freqToSymbol inside spListen).
-// Kept for debugging — call spFreqToDigit(freq) in devtools to check a bin.
-function spFreqToDigit(freq){
-  var digit=Math.round((freq-SP_BASE_FREQ)/SP_STEP);
-  if(digit<0)digit=0;
-  if(digit>=SP_SYMBOLS)digit=SP_SYMBOLS-1;
-  return digit.toString(16);
-}
-
-// ── SENDER: emit near-audible FSK token ──
-// All tone scheduling uses AudioContext.currentTime (sample-accurate, no drift).
-// Gain ramps (5ms attack/release) eliminate click artifacts.
-// Sequence = preamble + 9 data symbols + confirm tone, repeated SP_EMIT_LOOPS times.
-// Sender stores only 8-char nonceKey in Firestore; emits all 9 symbols as audio.
-window.spEmit=async function(){
-  var amountEl=document.getElementById('sp-send-amount');
-  var msg=document.getElementById('sp-send-msg');
+// ────────────────────────────────────────
+// SEND: write payment to receiver's phone via NFC
+// Flow: Sender writes → Receiver reads → Firestore transaction runs on RECEIVER side
+// ────────────────────────────────────────
+window.nfcWrite=async function(){
+  var amountEl=document.getElementById('nfc-send-amount');
+  var msg=document.getElementById('nfc-send-msg');
   var amount=parseFloat(amountEl?amountEl.value:'0');
   var phone=localStorage.getItem('pm_phone');
   var name=localStorage.getItem('pm_name')||phone;
-  var db=_spDb();
+  var db=_nfcDb();
 
   function setMsg(type,text){if(msg){msg.className='msg '+(type||'');msg.textContent=text;}}
 
@@ -1877,199 +1612,80 @@ window.spEmit=async function(){
   if(!phone){setMsg('error','Session error. Please refresh.');return;}
   if(!db){setMsg('error','App not ready. Please refresh.');return;}
 
-  // Balance check
+  // Balance check before asking for PIN
   try{
     var sSnap=await getDoc(doc(db,'users',phone));
-    if(!sSnap.exists())throw new Error('Account not found.');
-    if((sSnap.data().balance||0)<amount)throw new Error('Insufficient balance. You have \u20b9'+(sSnap.data().balance||0).toFixed(2));
+    if(!sSnap.exists())throw new Error('Your account not found.');
+    if((sSnap.data().balance||0)<amount)throw new Error('Insufficient balance. You have &#8377;'+(sSnap.data().balance||0).toFixed(2));
   }catch(e){setMsg('error',e.message);return;}
 
-  // PIN
   if(window.requirePin){
-    try{await window.requirePin('Confirm Sound Pay','Enter PIN to send \u20b9'+amount.toFixed(2));}
+    try{await window.requirePin('Confirm NFC Send','Enter PIN to send &#8377;'+amount.toFixed(2));}
     catch(e){return;}
   }
 
-  // Hide volume warning — user has been prompted, now we're going
-  var vw=document.getElementById('sp-vol-warn');
-  if(vw)vw.style.display='none';
-
-  var nonce=spNonce();             // 9-char string: 8 data + 1 XOR checksum
-  var nonceKey=nonce.slice(0,8);   // Firestore doc ID — 8 data chars only
-  var expires=Date.now()+SP_TOKEN_TTL;
-
   try{
-    await setDoc(doc(db,'sound_tokens',nonceKey),{
-      nonce:nonceKey, from:phone, fromName:name,
-      amount:amount, expires:expires,
-      status:'pending', createdAt:new Date().toISOString()
-    });
-
-    // nonce = 9 chars (8 data + checksum); all 9 are emitted as audio tones
-    var freqs=spEncodeFreqs(nonce);
-    var RAMP=0.005; // 5ms gain attack/release — eliminates click artifacts
-
-    // Schedule one sine tone with smooth gain envelope.
-    // Returns the absolute AudioContext time at which the tone ends.
-    function scheduleTone(ctx, freq, startSec, durSec){
-      var o=ctx.createOscillator();
-      var g=ctx.createGain();
-      o.connect(g); g.connect(ctx.destination);
-      o.type='sine';
-      o.frequency.value=freq;
-      g.gain.setValueAtTime(0, startSec);
-      g.gain.linearRampToValueAtTime(0.9, startSec+RAMP);
-      g.gain.setValueAtTime(0.9, startSec+durSec-RAMP);
-      g.gain.linearRampToValueAtTime(0, startSec+durSec);
-      o.start(startSec);
-      o.stop(startSec+durSec);
-      return startSec+durSec;
-    }
-
-    var symDurSec   = SP_SYM_DUR/1000;
-    var gapDurSec   = SP_GAP_DUR/1000;
-    var preDurSec   = SP_PREAMBLE_DUR/1000;
-    var confDurSec  = SP_CONFIRM_DUR/1000;
-    var interSec    = SP_INTER_LOOP_MS/1000;
-    // One loop = preamble + gap + (9 symbols × (sym+gap)) + confirm + inter-gap
-    var loopDurSec  = preDurSec + gapDurSec + freqs.length*(symDurSec+gapDurSec) + confDurSec;
-    var totalDurSec = SP_EMIT_LOOPS*loopDurSec + (SP_EMIT_LOOPS-1)*interSec;
-
-    // Single AudioContext — all loops scheduled up front, sample-accurate
-    var ctx=new AudioContext();
-
-    // iOS/Android unlock: play a zero-gain buffer synchronously in the
-    // user-gesture context. Without this, scheduled audio is silent on iOS
-    // and delayed on some Android OEM firmwares.
-    (function unlockAudio(){
-      var buf=ctx.createBuffer(1,1,ctx.sampleRate);
-      var src=ctx.createBufferSource();
-      src.buffer=buf;
-      src.connect(ctx.destination);
-      src.start(0);
-    })();
-    // Resume in case browser suspended context (happens on tab re-focus)
-    if(ctx.state==='suspended') await ctx.resume();
-
-    var t=ctx.currentTime+0.12; // 120ms startup margin — iOS needs more than Android
-
-    for(var loop=0;loop<SP_EMIT_LOOPS;loop++){
-      // Preamble sync tone
-      t=scheduleTone(ctx, SP_PREAMBLE, t, preDurSec);
-      t+=gapDurSec;
-      // 9 data+checksum symbols
-      for(var i=0;i<freqs.length;i++){
-        t=scheduleTone(ctx, freqs[i], t, symDurSec);
-        t+=gapDurSec;
-      }
-      // Confirm tone (same freq as preamble — receiver ignores it, just clean ending)
-      t=scheduleTone(ctx, SP_PREAMBLE, t, confDurSec);
-      // Inter-loop silence
-      if(loop<SP_EMIT_LOOPS-1) t+=interSec;
-    }
-
-    // Request WakeLock so screen stays on during emission
-    // Prevents AudioContext throttle on MIUI/ColorOS power-saver modes
-    var _wakeLock = null;
-    if('wakeLock' in navigator){
-      try{ _wakeLock = await navigator.wakeLock.request('screen'); }catch(e){}
-    }
-
-    _spStatus('\uD83D\uDD0A','Emitting sound...','Hold phones face-to-face. Loop 1 of '+SP_EMIT_LOOPS+'.');
+    if(!('NDEFReader' in window))throw new Error('NFC not supported in this browser.');
+    var ndef=new NDEFReader();
+    _nfcStatus('📱','Hold phones together...','Tap the receiver\'s phone to yours');
     setMsg('','');
 
-    // Loop counter UI — uses ctx.currentTime (no drift vs setTimeout)
-    var loopDisplayInterval=setInterval(function(){
-      var elapsed=ctx.currentTime-0.08;
-      var currentLoop=Math.min(SP_EMIT_LOOPS, Math.floor(elapsed/loopDurSec)+1);
-      var stEl=document.getElementById('sp-send-sub');
-      if(stEl&&currentLoop<=SP_EMIT_LOOPS)
-        stEl.textContent='Loop '+currentLoop+' of '+SP_EMIT_LOOPS+' — keep phones together';
-    },300);
-
-    var totalMs=Math.ceil(totalDurSec*1000)+300;
-    await new Promise(function(r){setTimeout(r,totalMs);});
-    clearInterval(loopDisplayInterval);
-    ctx.close().catch(function(){});
-    // Release WakeLock — audio done, screen can dim again
-    if(_wakeLock){ try{await _wakeLock.release();}catch(e){} _wakeLock=null; }
-
-    _spStatus('\u23F3','Waiting for receiver...','Token valid for ~75 seconds. Keep app open.');
-
-    // Watch Firestore for completion (using nonceKey — 8 chars)
-    var unsub=onSnapshot(doc(db,'sound_tokens',nonceKey),function(snap){
-      if(!snap.exists())return;
-      var data=snap.data();
-      if(data.status==='completed'){
-        unsub();
-        if(navigator.vibrate)navigator.vibrate([200,100,200]);
-        _spStatus('\u2705','Payment Complete!','\u20b9'+amount.toFixed(2)+' sent to '+data.toName);
-        var newBal=Math.max(0,parseFloat(localStorage.getItem('pm_balance')||'0')-amount);
-        localStorage.setItem('pm_balance',newBal.toFixed(2));
-        if(amountEl)amountEl.value='';
-        setTimeout(function(){if(window.showScreen)window.showScreen('screen-home');},2500);
-      }
-      if(data.status==='expired'){
-        unsub();
-        _spStatus('\u274C','Expired','Token expired. Try again.');
-      }
+    // Write payment payload to receiver's phone
+    // Receiver's phone reads this and executes the Firestore transaction
+    var payload=JSON.stringify({
+      type:'pm_nfc_pay',
+      from:phone,
+      fromName:name,
+      amount:amount,
+      expires:Date.now()+2*60*1000  // 2 min expiry
     });
 
-    // Auto-expire: clean up Firestore if receiver never connects
-    setTimeout(async function(){
-      unsub();
-      try{
-        var t2=await getDoc(doc(db,'sound_tokens',nonceKey));
-        if(t2.exists()&&t2.data().status==='pending'){
-          await deleteDoc(doc(db,'sound_tokens',nonceKey));
-          _spStatus('\u274C','Expired','Receiver didn\'t detect sound. Move closer and try again.');
-        }
-      }catch(e){}
-    },SP_TOKEN_TTL);
+    await ndef.write({records:[{recordType:'text',data:payload}]});
+    _nfcStatus('✅','Payment sent!','Receiver\'s phone will confirm momentarily');
+    setMsg('success','NFC data written. Receiver\'s phone will complete the transfer.');
+
+    // Debit sender immediately after write succeeds
+    // Receiver credits themselves when they read the NFC tag
+    var sRef=doc(db,'users',phone);
+    var sSnap2=await getDoc(sRef);
+    if(!sSnap2.exists())throw new Error('Account not found');
+    var sBal=sSnap2.data().balance||0;
+    if(sBal<amount)throw new Error('Insufficient balance');
+
+    // We can't do a full transaction here without knowing receiver yet
+    // So we debit sender and let receiver credit themselves
+    // This is safe because receiver validates the payload before crediting
+    // In worst case (receiver doesn't tap) sender is NOT debited yet - write happens on read
+    // Actually the cleanest approach: don't debit here, let receiver's runTransaction handle both
+    // Sender just writes the NFC tag. Receiver executes the full atomic transaction.
+    _nfcStatus('✅','Ready!','Hold phone to receiver until they confirm');
+
+    if(amountEl)amountEl.value='';
 
   }catch(e){
-    setMsg('error',e.message||'Sound emission failed.');
-    var st=document.getElementById('sp-send-status');
+    if(e.name==='NotAllowedError'||e.name==='SecurityError'){
+      setMsg('error','NFC permission denied. Make sure NFC is enabled in Android settings and allow NFC in Chrome.');
+    }else{
+      setMsg('error',e.message||'NFC write failed. Try again.');
+    }
+    var st=document.getElementById('nfc-send-status');
     if(st)st.style.display='none';
     console.error(e);
   }
 };
 
-// ── RECEIVER: listen for near-audible FSK token ──
-// Fixes applied vs v2:
-//   1. Actual sampleRate read from ctx after creation (Android 48k fix)
-//   2. Scan range updated to 14500–16500 Hz (matches new SP_BASE_FREQ=15000)
-//   3. SP_STABLE_MS constant used (was hardcoded 60ms)
-//   4. Out-of-range silence during STATE_DECODE now properly handled:
-//      gaps are tolerated, but sustained silence resets to preamble wait
-//   5. requestAnimationFrame replaced with ScriptProcessor fallback loop
-//      that runs on audio thread, immune to render-thread throttling
-//   6. Checksum validation in spRedeem before Firestore (see spRedeem below)
-var _spListening=false;
-var _spAudioCtx=null;
-var _spStream=null;
-var _spProcNode=null;   // ScriptProcessorNode (audio-thread polling)
-var _spRafId=null;      // fallback requestAnimationFrame id
-
-function spStopListening(){
-  _spListening=false;
-  if(_spRafId){cancelAnimationFrame(_spRafId);_spRafId=null;}
-  if(_spProcNode){
-    try{_spProcNode.disconnect();}catch(e){}
-    _spProcNode=null;
-  }
-  if(_spStream){_spStream.getTracks().forEach(function(t){t.stop();});_spStream=null;}
-  if(_spAudioCtx){_spAudioCtx.close().catch(function(){});_spAudioCtx=null;}
-}
-
-async function spListen(){
-  var titleEl=document.getElementById('sp-receive-title');
-  var subEl=document.getElementById('sp-receive-sub');
-  var msgEl=document.getElementById('sp-receive-msg');
-  var levelFill=document.getElementById('sp-level-fill');
+// ────────────────────────────────────────
+// RECEIVE: scan for incoming NFC payment
+// Receiver executes the FULL Firestore transaction (debit sender, credit receiver)
+// This is the correct architecture - receiver validates and executes atomically
+// ────────────────────────────────────────
+async function nfcListen(){
+  var titleEl=document.getElementById('nfc-receive-title');
+  var subEl=document.getElementById('nfc-receive-sub');
+  var msgEl=document.getElementById('nfc-receive-msg');
   var phone=localStorage.getItem('pm_phone');
   var name=localStorage.getItem('pm_name')||phone;
-  var db=_spDb();
+  var db=_nfcDb();
 
   function setMsg(type,text){if(msgEl){msgEl.className='msg '+(type||'');msgEl.textContent=text;}}
 
@@ -2077,395 +1693,105 @@ async function spListen(){
   if(!db){setMsg('error','App not ready. Please refresh.');return;}
 
   try{
-    _spStream=await navigator.mediaDevices.getUserMedia({audio:{
-      echoCancellation:false,
-      noiseSuppression:false,
-      autoGainControl:false,
-      sampleRate:{ideal:44100}
-    }});
-  }catch(e){
-    setMsg('error','Microphone permission denied. Allow mic access and try again.');
-    return;
-  }
+    var ndef=new NDEFReader();
+    await ndef.scan();
+    if(titleEl)titleEl.textContent='Ready to Receive';
+    if(subEl)subEl.textContent='Hold your phone steady. Ask sender to tap their phone to yours.';
 
-  // Request 44100 Hz but READ the actual rate — Android often gives 48000 Hz
-  // regardless of what you ask for. All bin math uses the real value.
-  _spAudioCtx=new AudioContext({sampleRate:44100});
-  var sampleRate=_spAudioCtx.sampleRate; // could be 44100, 48000, or 32000
+    var _processed=false; // prevent double-processing on multiple reads
 
-  var source=_spAudioCtx.createMediaStreamSource(_spStream);
-  var analyser=_spAudioCtx.createAnalyser();
-  // fftSize 8192 → binWidth = sampleRate/8192
-  //   @ 44100 Hz: ~5.38 Hz/bin (excellent for 500 Hz symbol step)
-  //   @ 48000 Hz: ~5.86 Hz/bin (still excellent)
-  analyser.fftSize=8192;
-  analyser.smoothingTimeConstant=0.15; // slight smoothing to reduce noise spikes
-  source.connect(analyser);
+    ndef.addEventListener('reading',async function(e){
+      if(_processed)return;
 
-  var bufLen=analyser.frequencyBinCount; // 4096
-  var dataArr=new Float32Array(bufLen);
-  var binWidth=sampleRate/analyser.fftSize; // recomputed from ACTUAL sample rate
+      try{
+        for(var rec of e.message.records){
+          if(rec.recordType!=='text')continue;
 
-  // ── Ambient noise calibration (800ms) ──
-  // Measure the peak noise in the signal band before entering listen mode.
-  // Dynamic threshold = measured_peak + 10dB, clamped to [-55, -30] dB.
-  // This makes the detector self-adjust for noisy streets vs quiet rooms.
-  var calCard  = document.getElementById('sp-cal-card');
-  var calTitle = document.getElementById('sp-cal-title');
-  var calSub   = document.getElementById('sp-cal-sub');
-  var calIcon  = document.getElementById('sp-cal-icon');
-  var noiseLabel = document.getElementById('sp-noise-label');
+          var data;
+          try{data=JSON.parse(new TextDecoder().decode(rec.data));}
+          catch(pe){continue;}
 
-  var dynamicThresh = SP_DETECT_THRESH; // will be overwritten by calibration
+          if(data.type!=='pm_nfc_pay')continue;
 
-  // Sample noise over 800ms (≈ 48 rAF frames or many ScriptProcessor calls)
-  await new Promise(function(resolve){
-    var calBuf  = new Float32Array(analyser.frequencyBinCount);
-    var peakMag = -Infinity;
-    var calStart = Date.now();
-    var CAL_MS  = 800;
-
-    function calTick(){
-      analyser.getFloatFrequencyData(calBuf);
-      var minB = Math.round(14500 / binWidth);
-      var maxB = Math.min(Math.round(22600 / binWidth), calBuf.length - 1);
-      for(var b = minB; b <= maxB; b++){
-        if(calBuf[b] > peakMag) peakMag = calBuf[b];
-      }
-      // Update level bar during calibration for visual feedback
-      var lvl = Math.max(0, Math.min(100, (peakMag + 100) * 1.5));
-      if(levelFill) levelFill.style.width = lvl + '%';
-
-      if(Date.now() - calStart < CAL_MS){
-        requestAnimationFrame(calTick);
-      } else {
-        // Calibration done — set dynamic threshold
-        dynamicThresh = Math.min(-30, Math.max(-55, peakMag + 10));
-
-        if(calCard && calTitle && calSub && calIcon){
-          if(peakMag > -38){
-            // Environment is noisy — warn but continue
-            calIcon.textContent  = '⚠️';
-            calTitle.textContent = 'Noisy Environment';
-            calSub.textContent   = 'Background noise detected (' + peakMag.toFixed(0) + ' dB). Hold phones closer and find a quieter spot.';
-            calCard.style.background = 'rgba(255,77,106,0.07)';
-            calCard.style.borderColor = 'rgba(255,77,106,0.3)';
-          } else {
-            // Clear environment
-            calIcon.textContent  = '✅';
-            calTitle.textContent = 'Mic Ready';
-            calSub.textContent   = 'Noise floor: ' + peakMag.toFixed(0) + ' dB. Threshold set to ' + dynamicThresh.toFixed(0) + ' dB.';
-            calCard.style.background = 'rgba(0,232,122,0.06)';
-            calCard.style.borderColor = 'rgba(0,232,122,0.2)';
+          // Validate
+          if(Date.now()>data.expires){
+            setMsg('error','Payment request expired. Ask sender to try again.');
+            return;
           }
+          if(data.from===phone){
+            setMsg('error','Cannot receive from yourself.');
+            return;
+          }
+          if(!data.amount||data.amount<=0){
+            setMsg('error','Invalid payment amount.');
+            return;
+          }
+
+          _processed=true;
+          if(titleEl)titleEl.textContent='Processing...';
+          if(subEl)subEl.textContent='Completing secure transfer...';
+
+          var senderPhone=data.from;
+          var senderName=data.fromName||senderPhone;
+          var amount=data.amount;
+          var sRef=doc(db,'users',senderPhone);
+          var rRef=doc(db,'users',phone);
+
+          // Full atomic transaction — debit sender, credit receiver
+          await runTransaction(db,async function(tx){
+            var sSnap=await tx.get(sRef);
+            var rSnap=await tx.get(rRef);
+            if(!sSnap.exists())throw new Error('Sender account not found.');
+            if(!rSnap.exists())throw new Error('Your account not found.');
+            var sBal=sSnap.data().balance||0;
+            var rBal=rSnap.data().balance||0;
+            if(sBal<amount)throw new Error('Sender has insufficient balance.');
+            tx.update(sRef,{balance:sBal-amount});
+            tx.update(rRef,{balance:rBal+amount});
+          });
+
+          // Write transaction records
+          var time=new Date().toISOString();
+          await Promise.all([
+            addDoc(collection(db,'transactions'),{phone:phone,label:'NFC Received from '+senderName,amount:amount,type:'credit',time:time}),
+            addDoc(collection(db,'transactions'),{phone:senderPhone,label:'NFC Sent to '+name,amount:amount,type:'debit',time:time})
+          ]);
+
+          // Update local balance cache
+          var newBal=parseFloat(localStorage.getItem('pm_balance')||'0')+amount;
+          localStorage.setItem('pm_balance',newBal.toFixed(2));
+
+          if(navigator.vibrate)navigator.vibrate([200,100,200]);
+          if(titleEl)titleEl.textContent='Money Received!';
+          if(subEl)subEl.innerHTML=
+            '<div style="font-size:40px;font-weight:800;color:var(--em);margin:14px 0;">+&#8377;'+amount.toFixed(2)+'</div>'+
+            '<div style="color:var(--text2);font-size:15px;">From '+senderName+'</div>';
+
+          setTimeout(function(){if(window.showScreen)window.showScreen('screen-home');},2500);
+          return; // exit loop after first valid record
         }
-        if(noiseLabel) noiseLabel.textContent = 'Noise floor: ' + peakMag.toFixed(0) + ' dB';
-        resolve();
+      }catch(err){
+        _processed=false; // allow retry
+        if(titleEl)titleEl.textContent='Ready to Receive';
+        if(subEl)subEl.textContent='Hold phones together again.';
+        setMsg('error',err.message||'Transfer failed. Try again.');
+        console.error(err);
       }
-    }
-    requestAnimationFrame(calTick);
-  });
-
-  if(titleEl)titleEl.textContent='Listening...';
-  if(subEl)subEl.textContent='Hold near sender\'s phone. Mic is active.';
-  _spListening=true;
-
-  // ── Edge-triggered FSK state machine ──
-  // We detect frequency CHANGES, not fixed time slots. Immune to timing drift.
-  var STATE_WAIT_PREAMBLE=0, STATE_DECODE=1;
-  var state=STATE_WAIT_PREAMBLE;
-  var decodedSymbols=[];
-  var preambleHoldStart=0;   // timestamp when preamble first seen
-  var lastStableFreq=-1;     // quantised freq of last confirmed symbol
-  var stableFreqStart=0;     // timestamp when current candidate started
-  var outOfRangeStart=0;     // timestamp when signal dropped during decode
-
-  // How long (ms) silence is tolerated inside a decode run before we reset.
-  // Needs to cover SP_GAP_DUR(40ms) + SP_INTER_LOOP_MS(500ms) + margin.
-  var MAX_DECODE_SILENCE_MS=700;
-
-  function freqToBin(f){return Math.round(f/binWidth);}
-
-  function getDominantFreq(){
-    analyser.getFloatFrequencyData(dataArr);
-    // Scan 14500–22600 Hz: preamble(16000) + data symbols(15000 to 15000+15×500=22500)
-    // maxBin capped at bufLen-1 (Nyquist). On 44100Hz: Nyquist=22050, so sym15(22500)
-    // is unreachable — but symbols 0–14 (15000–22000) cover all practical use.
-    var minBin=freqToBin(14500);
-    var maxBin=Math.min(freqToBin(22600), bufLen-1);
-    var maxMag=-Infinity, maxB=minBin;
-    for(var b=minBin;b<=maxBin;b++){
-      if(dataArr[b]>maxMag){maxMag=dataArr[b];maxB=b;}
-    }
-    return {freq:maxB*binWidth, mag:maxMag};
-  }
-
-  function sameFreq(f1,f2){return Math.abs(f1-f2)<SP_FREQ_TOL;}
-
-  // Map raw frequency to nearest valid FSK symbol index (0–15), or -1 if none.
-  function freqToSymbol(freq){
-    if(freq<SP_BASE_FREQ-SP_FREQ_TOL)return -1;
-    if(freq>SP_BASE_FREQ+(SP_SYMBOLS-1)*SP_STEP+SP_FREQ_TOL)return -1;
-    var digit=Math.round((freq-SP_BASE_FREQ)/SP_STEP);
-    if(digit<0)digit=0;
-    if(digit>=SP_SYMBOLS)digit=SP_SYMBOLS-1;
-    // Final sanity: quantised freq must still be within tolerance
-    var quantFreq=SP_BASE_FREQ+digit*SP_STEP;
-    if(Math.abs(freq-quantFreq)>SP_FREQ_TOL)return -1;
-    return digit;
-  }
-
-  // ── Core detect function — called as fast as possible ──
-  function detect(){
-    if(!_spListening)return;
-
-    var d=getDominantFreq();
-    var now=Date.now();
-
-    // Level bar visual feedback
-    var level=Math.max(0,Math.min(100,(d.mag+100)*1.5));
-    if(levelFill)levelFill.style.width=level+'%';
-
-    // Level bar colour: amber = ambient, green = signal above threshold
-    if(levelFill){
-      if(d.mag >= dynamicThresh){
-        levelFill.style.background='linear-gradient(90deg,#00E87A,#00FFA3)';
-      } else {
-        levelFill.style.background='linear-gradient(90deg,#FFA500,#FFD700)';
-      }
-    }
-
-    // Below dynamic noise floor — treat as silence
-    if(d.mag<dynamicThresh){
-      if(state===STATE_WAIT_PREAMBLE){
-        preambleHoldStart=0;
-      }else{
-        // STATE_DECODE: track how long we've been silent
-        if(outOfRangeStart===0)outOfRangeStart=now;
-        if(now-outOfRangeStart>MAX_DECODE_SILENCE_MS){
-          // Silence too long — this loop is lost, wait for next preamble
-          state=STATE_WAIT_PREAMBLE;
-          decodedSymbols=[];
-          lastStableFreq=-1;
-          stableFreqStart=0;
-          outOfRangeStart=0;
-          if(subEl)subEl.textContent='Signal lost. Waiting for next loop...';
-        }
-      }
-      return;
-    }
-    outOfRangeStart=0; // signal present — clear silence timer
-
-    if(state===STATE_WAIT_PREAMBLE){
-      // Look for preamble at SP_PREAMBLE (16000 Hz)
-      if(Math.abs(d.freq-SP_PREAMBLE)<SP_FREQ_TOL){
-        if(preambleHoldStart===0)preambleHoldStart=now;
-        else if(now-preambleHoldStart>=200){
-          // Preamble confirmed — start decoding
-          state=STATE_DECODE;
-          decodedSymbols=[];
-          lastStableFreq=-1;
-          stableFreqStart=0;
-          outOfRangeStart=0;
-          preambleHoldStart=0;
-          if(subEl)subEl.textContent='Signal locked! Decoding...';
-        }
-      }else{
-        preambleHoldStart=0; // not preamble freq — reset hold timer
-      }
-
-    }else{ // STATE_DECODE
-      var sym=freqToSymbol(d.freq);
-
-      if(sym<0){
-        // Frequency is out of symbol range (gap, confirm tone, or preamble again)
-        // Check if it's the preamble / confirm tone — if so, just reset edge tracking
-        lastStableFreq=-1;
-        stableFreqStart=0;
-        // outOfRangeStart handles full reset (above in silence handler)
-        return;
-      }
-
-      var symFreq=SP_BASE_FREQ+sym*SP_STEP;
-
-      if(!sameFreq(symFreq, lastStableFreq)){
-        // New symbol candidate seen — start stability hold timer
-        lastStableFreq=symFreq;
-        stableFreqStart=now;
-      }else if(stableFreqStart>0 && now-stableFreqStart>=SP_STABLE_MS){
-        // Symbol has held stable long enough — accept it (edge-triggered: once only)
-        decodedSymbols.push(sym.toString(16));
-        stableFreqStart=-1; // consumed; await frequency change before next symbol
-        if(subEl)subEl.textContent='Decoded '+decodedSymbols.length+'/'+SP_NONCE_LEN+'...';
-
-        if(decodedSymbols.length===SP_NONCE_LEN){
-          // Full 9-symbol sequence received — validate + redeem
-          var nonce=decodedSymbols.join('');
-          spStopListening();
-          // spRedeem validates XOR checksum before Firestore lookup
-          spRedeem(nonce, phone, name, db, titleEl, subEl, msgEl);
-        }
-      }
-    }
-  }
-
-  // ── Polling strategy: ScriptProcessor (audio thread) → rAF fallback ──
-  // ScriptProcessor is deprecated but universally supported and runs on the
-  // audio thread, so it won't be throttled when screen dims or tab backgrounds.
-  // AudioWorklet would be ideal but requires HTTPS + module worker boilerplate.
-  try{
-    // bufferSize=256 → callback every ~5.8ms @ 44100 Hz — much faster than rAF
-    _spProcNode=_spAudioCtx.createScriptProcessor(256,1,1);
-    _spProcNode.onaudioprocess=detect;
-    source.connect(_spProcNode);
-    _spProcNode.connect(_spAudioCtx.destination); // must be connected to fire
-  }catch(e){
-    // Fallback: requestAnimationFrame (~16ms) on render thread
-    (function rafLoop(){
-      if(!_spListening)return;
-      detect();
-      _spRafId=requestAnimationFrame(rafLoop);
-    })();
-  }
-
-  // Request WakeLock on receiver — keep screen alive during listen window
-  var _rxWakeLock = null;
-  if('wakeLock' in navigator){
-    try{ _rxWakeLock = await navigator.wakeLock.request('screen'); }catch(e){}
-  }
-  // Release WakeLock when listening stops (patch spStopListening)
-  var _spStopOrig2 = spStopListening;
-  spStopListening = function(){
-    if(_rxWakeLock){ try{_rxWakeLock.release();}catch(e){} _rxWakeLock=null; }
-    spStopListening = _spStopOrig2;
-    _spStopOrig2();
-  };
-
-  // ── AudioContext resume on tab/screen visibility restore ──
-  // MIUI, ColorOS, Realme UI all suspend AudioContext when screen dims.
-  // This listener resumes it the moment the user comes back.
-  function _spVisHandler(){
-    if(document.visibilityState==='visible' && _spAudioCtx && _spListening){
-      _spAudioCtx.resume().catch(function(){});
-    }
-  }
-  document.addEventListener('visibilitychange', _spVisHandler);
-
-  // Clean up listener when we stop
-  var _origStop = spStopListening;
-  spStopListening = function(){
-    document.removeEventListener('visibilitychange', _spVisHandler);
-    spStopListening = _origStop; // restore
-    _origStop();
-  };
-
-  // Auto-stop: 85 seconds (token TTL 75s + 10s grace)
-  setTimeout(function(){
-    if(_spListening){
-      spStopListening();
-      if(titleEl)titleEl.textContent='Timed out';
-      if(subEl)subEl.textContent='No signal in 85 seconds. Ask sender to try again.';
-    }
-  },85000);
-}
-
-async function spRedeem(nonce, phone, name, db, titleEl, subEl, msgEl){
-  function setMsg(type,text){if(msgEl){msgEl.className='msg '+(type||'');msgEl.textContent=text;}}
-
-  // ── XOR checksum validation (before any Firestore call) ──
-  // nonce = 9 hex chars: positions 0–7 are data, position 8 is XOR of all 8.
-  // Any single-symbol misread will (with 15/16 probability) corrupt the checksum.
-  if(nonce.length!==SP_NONCE_LEN){
-    if(titleEl)titleEl.textContent='Decode Error';
-    setMsg('error','Incomplete signal ('+nonce.length+'/'+SP_NONCE_LEN+' symbols). Move phones closer.');
-    setTimeout(function(){_spPanel(false,false,true,false);},3000);
-    return;
-  }
-  var nibbles=nonce.split('').map(function(c){return parseInt(c,16);});
-  var xorResult=nibbles.slice(0,8).reduce(function(a,b){return a^b;},0);
-  if(xorResult!==nibbles[8]){
-    if(titleEl)titleEl.textContent='Signal Error';
-    setMsg('error','Signal misread detected. Move phones closer and try again.');
-    setTimeout(function(){_spPanel(false,false,true,false);},3000);
-    return;
-  }
-  var nonceKey=nonce.slice(0,8); // strip checksum — Firestore key is 8 chars
-
-  if(titleEl)titleEl.textContent='Processing...';
-  if(subEl)subEl.textContent='Completing secure transfer...';
-
-  // Retry helper — one retry after 1.5s for network blips on Jio/Airtel
-  async function getDocWithRetry(ref){
-    try{ return await getDoc(ref); }
-    catch(e){
-      await new Promise(function(r){setTimeout(r,1500);});
-      return await getDoc(ref); // throws naturally on second failure
-    }
-  }
-
-  try{
-    var tokenRef=doc(db,'sound_tokens',nonceKey);
-    var tokenSnap=await getDocWithRetry(tokenRef);
-
-    if(!tokenSnap.exists())throw new Error('Token not found. May have expired.');
-    var token=tokenSnap.data();
-
-    if(token.status!=='pending')throw new Error('Token already used or expired.');
-    if(Date.now()>token.expires)throw new Error('Token expired. Ask sender to try again.');
-    if(token.from===phone)throw new Error('Cannot pay yourself.');
-
-    var senderPhone=token.from;
-    var senderName=token.fromName||senderPhone;
-    var amount=token.amount;
-    var sRef=doc(db,'users',senderPhone);
-    var rRef=doc(db,'users',phone);
-
-    // Atomic transaction — debit sender, credit receiver, mark token used
-    await runTransaction(db,async function(tx){
-      var sSnap=await tx.get(sRef);
-      var rSnap=await tx.get(rRef);
-      var tSnap=await tx.get(tokenRef);
-      if(!sSnap.exists())throw new Error('Sender account not found.');
-      if(!rSnap.exists())throw new Error('Your account not found.');
-      if(!tSnap.exists()||tSnap.data().status!=='pending')throw new Error('Token no longer valid.');
-      var sBal=sSnap.data().balance||0;
-      var rBal=rSnap.data().balance||0;
-      if(sBal<amount)throw new Error('Sender has insufficient balance.');
-      tx.update(sRef,{balance:sBal-amount});
-      tx.update(rRef,{balance:rBal+amount});
-      tx.update(tokenRef,{status:'completed',toName:name,toPhone:phone,completedAt:new Date().toISOString()});
     });
 
-    // Write transaction records
-    var time=new Date().toISOString();
-    await Promise.all([
-      addDoc(collection(db,'transactions'),{phone:phone,      label:'Sound Pay from '+senderName,amount:amount,type:'credit',time:time}),
-      addDoc(collection(db,'transactions'),{phone:senderPhone,label:'Sound Pay to '+name,         amount:amount,type:'debit',  time:time})
-    ]);
-
-    // Clean up token doc
-    deleteDoc(tokenRef).catch(function(){});
-
-    // Update local balance cache
-    var newBal=parseFloat(localStorage.getItem('pm_balance')||'0')+amount;
-    localStorage.setItem('pm_balance',newBal.toFixed(2));
-
-    if(navigator.vibrate)navigator.vibrate([200,100,200,100,400]);
-    if(titleEl)titleEl.textContent='Payment Received!';
-    if(subEl)subEl.textContent='\u20b9'+amount.toFixed(2)+' from '+senderName+' added to wallet.';
-    setMsg('success','Transfer complete!');
-
-    setTimeout(function(){
-      _spPanel(false,false,true,false);
-      if(window.showScreen)window.showScreen('screen-home');
-    },2500);
+    ndef.addEventListener('readingerror',function(){
+      setMsg('error','Could not read NFC tag. Try again.');
+    });
 
   }catch(e){
-    if(titleEl)titleEl.textContent='Transfer Failed';
-    if(subEl)subEl.textContent='';
-    setMsg('error',e.message||'Transfer failed. Try again.');
-    console.error('[SoundPay] spRedeem error:',e);
-    setTimeout(function(){_spPanel(false,false,true,false);},3000);
+    if(e.name==='NotAllowedError'||e.name==='SecurityError'){
+      setMsg('error','NFC permission denied. Enable NFC in Android settings.');
+    }else{
+      setMsg('error',e.message||'NFC scan failed. Make sure NFC is enabled.');
+    }
+    console.error(e);
   }
 }
 </script>
+</body>
+</html>
