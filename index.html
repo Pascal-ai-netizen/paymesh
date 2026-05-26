@@ -668,6 +668,48 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
 </style>
 </head>
 <body>
+
+<!-- ══ SECURITY: MOBILE-ONLY GATE ══ -->
+<div id="pm-device-block" style="display:none;position:fixed;inset:0;z-index:2147483647;background:#03050A;flex-direction:column;align-items:center;justify-content:center;gap:20px;padding:40px;text-align:center;font-family:'Space Grotesk',system-ui,sans-serif;">
+  <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="#FF4D6A" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+  <div style="font-size:22px;font-weight:700;color:#EEF2FF;">Mobile Only</div>
+  <div style="font-size:14px;color:#7A8BAA;max-width:320px;line-height:1.7;">PayMesh is a mobile app and is not available on desktop or laptop browsers.<br><br>Please open this on your <strong style="color:#00E87A;">Android or iOS device</strong>.</div>
+  <div style="margin-top:8px;padding:10px 20px;border:1px solid rgba(255,77,106,0.25);border-radius:12px;background:rgba(255,77,106,0.08);font-size:12px;color:#FF4D6A;letter-spacing:0.5px;">ACCESS RESTRICTED</div>
+</div>
+<script>
+// ══ MOBILE-ONLY GATE ══
+(function() {
+  function isDesktop() {
+    var ua = navigator.userAgent || '';
+    // Block known desktop OS signatures
+    var desktopUA = /Windows NT|Macintosh|Linux x86_64|Linux i686|CrOS/.test(ua);
+    // Allow Android and iOS even if on Linux kernel
+    var isMobileUA = /Android|iPhone|iPad|iPod|Mobile/.test(ua);
+    if (desktopUA && !isMobileUA) return true;
+    // Block coarse pointer absent (mouse-driven = desktop)
+    if (window.matchMedia && window.matchMedia('(pointer:fine)').matches && !window.matchMedia('(pointer:coarse)').matches) return true;
+    // Block if no touch support at all
+    if (!('ontouchstart' in window) && navigator.maxTouchPoints === 0) return true;
+    // Block if screen width >= 1024 AND no touch (tablets at >=1024 have touch)
+    if (screen.width >= 1024 && navigator.maxTouchPoints === 0) return true;
+    return false;
+  }
+  if (isDesktop()) {
+    var block = document.getElementById('pm-device-block');
+    if (block) block.style.display = 'flex';
+    // Prevent any app JS from running by hiding body content
+    document.addEventListener('DOMContentLoaded', function() {
+      document.querySelectorAll('body > *:not(#pm-device-block)').forEach(function(el) {
+        el.style.display = 'none';
+      });
+      block.style.display = 'flex';
+    });
+    // Throw to stop module scripts
+    throw new Error('PayMesh: desktop access blocked.');
+  }
+})();
+</script>
+
 <div class="ambient"></div>
 
 <!-- SPLASH: shown while JS decides login vs home -->

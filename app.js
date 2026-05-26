@@ -1,3 +1,114 @@
+// ═══════════════════════════════════════════
+// PAYMESH SECURITY MODULE
+// Runs immediately — before any Firebase or app logic.
+// ═══════════════════════════════════════════
+
+(function PM_SECURITY() {
+  // ── 1. DEVTOOLS DETECTION (size-based, works on mobile Chrome/Firefox DevTools) ──
+  const DT_THRESHOLD = 160; // px — DevTools panel is almost always >160px
+  let _devToolsOpen  = false;
+
+  function checkDevTools() {
+    const widthDiff  = window.outerWidth  - window.innerWidth;
+    const heightDiff = window.outerHeight - window.innerHeight;
+    const open = widthDiff > DT_THRESHOLD || heightDiff > DT_THRESHOLD;
+    if (open && !_devToolsOpen) {
+      _devToolsOpen = true;
+      _onDevToolsOpen();
+    } else if (!open) {
+      _devToolsOpen = false;
+    }
+  }
+
+  function _onDevToolsOpen() {
+    // Clear sensitive DOM values
+    try {
+      const balEl = document.getElementById('wallet-balance');
+      if (balEl) balEl.textContent = '••••••';
+      const nameEl = document.getElementById('display-name');
+      if (nameEl) nameEl.textContent = 'Hi 👋';
+    } catch(e) {}
+    // Redirect to login to wipe session view
+    if (typeof showScreen === 'function' && window.CURRENT_USER && window.CURRENT_USER.phone) {
+      showScreen('screen-login');
+    }
+  }
+
+  setInterval(checkDevTools, 1000);
+
+  // ── 2. KEYBOARD SHORTCUTS — block F12, Ctrl+Shift+I/J/C/U, Ctrl+U ──
+  document.addEventListener('keydown', function(e) {
+    // F12
+    if (e.key === 'F12') { e.preventDefault(); e.stopImmediatePropagation(); return false; }
+    // Ctrl/Cmd + Shift + I, J, C
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && ['i','I','j','J','c','C'].includes(e.key)) {
+      e.preventDefault(); e.stopImmediatePropagation(); return false;
+    }
+    // Ctrl + U (view source)
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'u' || e.key === 'U')) {
+      e.preventDefault(); e.stopImmediatePropagation(); return false;
+    }
+    // Ctrl + S (save page)
+    if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
+      e.preventDefault(); e.stopImmediatePropagation(); return false;
+    }
+  }, true);
+
+  // ── 3. RIGHT-CLICK DISABLE ──
+  document.addEventListener('contextmenu', function(e) {
+    e.preventDefault(); return false;
+  }, true);
+
+  // ── 4. PRINT / SCREENSHOT DETECTION — blank the page ──
+  const _printStyle = document.createElement('style');
+  _printStyle.textContent = '@media print { body * { visibility: hidden !important; } body::after { content: "PayMesh content cannot be printed."; visibility: visible !important; position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%); font-size: 18px; color: #333; } }';
+  document.head.appendChild(_printStyle);
+
+  window.addEventListener('beforeprint', function() {
+    document.body.style.filter = 'blur(20px)';
+  });
+  window.addEventListener('afterprint', function() {
+    document.body.style.filter = '';
+  });
+
+  // ── 5. CONSOLE WIPE — clear any logged sensitive data ──
+  // Override console methods to suppress accidental data leaks in prod
+  const _noop = function() {};
+  ['log','warn','info','debug','table','dir'].forEach(function(m) {
+    try { console[m] = _noop; } catch(e) {}
+  });
+  // Keep console.error for critical crash visibility
+
+  // ── 6. CLIPBOARD HIJACK PROTECTION ──
+  // Intercept copy — if user somehow selects sensitive text, sanitize it
+  document.addEventListener('copy', function(e) {
+    const sel = window.getSelection ? window.getSelection().toString() : '';
+    // Block copying of anything that looks like a UPI ID or balance amount
+    if (/[@]\w+/.test(sel) || /₹[\d,]+/.test(sel)) {
+      e.preventDefault();
+      e.clipboardData && e.clipboardData.setData('text/plain', '');
+    }
+  }, true);
+
+  // ── 7. IFRAME EMBEDDING BLOCK (Clickjacking) ──
+  if (window.top !== window.self) {
+    window.top.location = window.self.location;
+  }
+
+  // ── 8. SCREENSHOT API DETECTION (Visibility + focus loss) ──
+  // When user switches away (possible screenshot tool), mask balance
+  document.addEventListener('visibilitychange', function() {
+    if (document.hidden) {
+      const balEl = document.getElementById('wallet-balance');
+      if (balEl) { balEl.dataset._pmBal = balEl.textContent; balEl.textContent = '••••'; }
+    } else {
+      const balEl = document.getElementById('wallet-balance');
+      if (balEl && balEl.dataset._pmBal) { balEl.textContent = balEl.dataset._pmBal; }
+    }
+  });
+
+})(); // END PM_SECURITY
+
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import {
   getFirestore,
