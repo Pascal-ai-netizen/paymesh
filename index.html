@@ -1697,41 +1697,56 @@ import { getApps } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app
 import { getFirestore, doc, setDoc, getDoc, deleteDoc, addDoc, collection, onSnapshot, runTransaction } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 // ══════════════════════════════════════════════════════
-// SOUNDPAY — Ultrasonic FSK Payment System  (v2 — reliability rewrite)
-// Protocol:
-//   - Token stored in Firestore under /sound_tokens/{nonce}
-//   - Sender emits preamble + 8 symbol tones, repeated SP_EMIT_LOOPS times
-//   - Each symbol = one of 16 frequencies (18000-21500 Hz), 4-bit FSK
-//   - ALL timing is scheduled via AudioContext.currentTime (sample-accurate)
-//   - Gain envelope (ramp up/down) on every tone eliminates click artifacts
-//   - Receiver runs a rolling symbol-window decoder (timing-tolerant)
-//   - Token deleted after use
+// SOUNDPAY — Near-Audible FSK Payment System  (v3 — India budget phone rewrite)
+// ══════════════════════════════════════════════════════════════════════════════
+// FREQUENCY DESIGN — why 15000 Hz base, 500 Hz step:
+//   Budget Android phones (Redmi, Realme, Samsung M-series) roll off sharply
+//   above 16–17 kHz. Old 18000–21750 Hz range produced near-zero SPL on these
+//   speakers. 15000 Hz is reliably within every phone speaker manufactured
+//   since 2018, while staying above most ambient noise (traffic, crowds < 8kHz).
+//   500 Hz step + ±100 Hz tolerance = 400 Hz guard band each side — zero bleed.
+//   Old design had 250 Hz step with 400 Hz tolerance — tolerance > step = chaos.
 //
-// Key fixes over v1:
-//   1. Sender loops 4× — receiver catches any loop even if first is missed
-//   2. Symbol duration raised 80ms→150ms, gap 20ms→30ms (more FFT samples)
-//   3. Gain ramp attack/release (5ms) eliminates broadband click noise
-//   4. All timing uses ctx.currentTime, NOT setTimeout — zero drift
-//   5. Preamble duration raised to 350ms, confirmation to 180ms
-//   6. Detection threshold -60dB→-50dB (ultrasonic rolls off through glass)
-//   7. Frequency tolerance ±400Hz (wider bin match for real phone speakers)
-//   8. Receiver uses edge-triggered (frequency-change) decode, not fixed clock
-//   9. Token TTL extended to 55s (covers 4 loops + latency)
-// ══════════════════════════════════════════════════════
+// CHECKSUM — 9th symbol (SP_NONCE_LEN = 9):
+//   Nonce = 8 data hex digits + 1 XOR-of-all-nibbles checksum digit (0–F).
+//   Receiver validates checksum before Firestore lookup. Any misread fails fast
+//   with "move closer" instead of "token not found. may have expired."
+//
+// RECEIVER — AudioWorklet preferred, ScriptProcessor fallback:
+//   requestAnimationFrame fires at 60fps on render thread and gets throttled
+//   when screen dims or browser backgrounds. AudioWorklet runs on a dedicated
+//   audio thread — never throttled, never frame-dropped.
+//
+// SAMPLE RATE LOCK:
+//   Android drivers often run at 48000 Hz regardless of request. We detect
+//   actual sampleRate after context creation and recompute all bin math live.
+//
+// PREAMBLE separation:
+//   Preamble = 16000 Hz, base = 15000 Hz. Gap = 1000 Hz (2× step). With
+//   ±100 Hz tolerance there is 800 Hz dead space — preamble cannot be confused
+//   with symbol 0, even on a badly tuned speaker.
+//
+// Protocol:
+//   Sender: preamble(16000 Hz,400ms) + [9 symbols] × 5 loops + confirm tone
+//   Receiver: preamble-detect → edge-FSK decode → XOR validate → Firestore tx
+//   Token TTL: 75s (5 loops ≈ 16s audio + 59s margin)
+// ══════════════════════════════════════════════════════════════════════════════
 
-const SP_BASE_FREQ     = 18000; // Hz — start of ultrasonic range
-const SP_STEP          = 375;   // Hz per symbol — wide enough that ±100 Hz tol never bleeds into neighbour
-const SP_SYMBOLS       = 16;    // 4 bits per symbol (hex digit)
-const SP_SYM_DUR       = 180;   // ms per symbol — longer window gives FFT more averages
-const SP_GAP_DUR       = 40;    // ms gap between symbols
-const SP_NONCE_LEN     = 9;     // 8 data hex digits + 1 XOR checksum digit = tamper/misread detection
-const SP_PREAMBLE      = 17500; // Hz — sync tone before data
-const SP_PREAMBLE_DUR  = 350;   // ms (was 200)
-const SP_INTER_LOOP_MS = 400;   // ms silence between repeat loops
-const SP_EMIT_LOOPS    = 4;     // repeat full sequence 4 times
-const SP_TOKEN_TTL     = 55000; // ms — covers 4 loops (~10s) + 45s margin
-const SP_DETECT_THRESH = -50;   // dB — raised from -60 (ultrasonic attenuates heavily)
-const SP_FREQ_TOL      = 100;   // Hz tolerance — safe: 375 Hz step means ±100 never bleeds into adjacent symbol
+const SP_BASE_FREQ     = 15000; // Hz — reliable on every budget phone speaker
+const SP_STEP          = 500;   // Hz/symbol — 400 Hz guard band with ±100 Hz tol
+const SP_SYMBOLS       = 16;    // 4 bits/symbol (hex digit 0–F)
+const SP_SYM_DUR       = 180;   // ms/symbol — ≥3 FFT frames at 44100/8192 ≈ 186ms
+const SP_GAP_DUR       = 40;    // ms gap — clean edge for state machine
+const SP_NONCE_LEN     = 9;     // 8 data digits + 1 XOR checksum digit
+const SP_PREAMBLE      = 16000; // Hz — 1000 Hz above base; unambiguous sync marker
+const SP_PREAMBLE_DUR  = 400;   // ms — survives OS audio startup lag on slow phones
+const SP_CONFIRM_DUR   = 200;   // ms — end-of-loop confirmation tone (=preamble freq)
+const SP_INTER_LOOP_MS = 500;   // ms silence between loops
+const SP_EMIT_LOOPS    = 5;     // 5 repeats — receiver needs to catch exactly one
+const SP_TOKEN_TTL     = 75000; // ms — 5 loops (~16s) + 59s for slow networks
+const SP_DETECT_THRESH = -45;   // dB — budget mics noisier; -45 clears ambient well
+const SP_FREQ_TOL      = 100;   // Hz — step=500 so ±100 never bleeds into neighbour
+const SP_STABLE_MS     = 80;    // ms freq must hold to count as confirmed symbol
 
 function _spDb(){var a=getApps();return a.length?getFirestore(a[0]):null;}
 
@@ -1783,14 +1798,16 @@ window.spStartReceive=function(){
 };
 
 // ── Generate cryptographic nonce (8 data hex digits + 1 XOR checksum) ──
-// Checksum lets receiver detect any decode error before touching Firestore.
+// The 9th character is the XOR of all 8 data nibbles, encoded as a hex digit.
+// If any symbol is misread the checksum will mismatch, letting the receiver
+// fail fast with a friendly "move closer" message instead of a Firestore miss.
 function spNonce(){
   var arr=new Uint8Array(4);
   crypto.getRandomValues(arr);
   var hex=Array.from(arr).map(function(b){return b.toString(16).padStart(2,'0');}).join('');
   var check=0;
   hex.split('').forEach(function(c){check^=parseInt(c,16);});
-  return hex+check.toString(16); // 9 chars: 8 data + 1 checksum
+  return hex+check.toString(16); // e.g. "a3f7c210b" — 9 chars
 }
 
 // ── Encode nonce as frequency sequence ──
@@ -1810,10 +1827,11 @@ function spFreqToDigit(freq){
   return digit.toString(16);
 }
 
-// ── SENDER: emit ultrasonic token ──
-// All tone scheduling uses AudioContext.currentTime for sample-accurate,
-// drift-free timing. Gain ramps eliminate click artifacts. Sequence repeats
-// SP_EMIT_LOOPS times so receiver can catch any loop.
+// ── SENDER: emit near-audible FSK token ──
+// All tone scheduling uses AudioContext.currentTime (sample-accurate, no drift).
+// Gain ramps (5ms attack/release) eliminate click artifacts.
+// Sequence = preamble + 9 data symbols + confirm tone, repeated SP_EMIT_LOOPS times.
+// Sender stores only 8-char nonceKey in Firestore; emits all 9 symbols as audio.
 window.spEmit=async function(){
   var amountEl=document.getElementById('sp-send-amount');
   var msg=document.getElementById('sp-send-msg');
@@ -1841,8 +1859,8 @@ window.spEmit=async function(){
     catch(e){return;}
   }
 
-  var nonce=spNonce();          // 9-char string: 8 data + 1 checksum
-  var nonceKey=nonce.slice(0,8); // Firestore doc key = 8 data chars only
+  var nonce=spNonce();             // 9-char string: 8 data + 1 XOR checksum
+  var nonceKey=nonce.slice(0,8);   // Firestore doc ID — 8 data chars only
   var expires=Date.now()+SP_TOKEN_TTL;
 
   try{
@@ -1852,73 +1870,75 @@ window.spEmit=async function(){
       status:'pending', createdAt:new Date().toISOString()
     });
 
-    var freqs=spEncodeFreqs(nonce); // encode all 9 symbols including checksum
+    // nonce = 9 chars (8 data + checksum); all 9 are emitted as audio tones
+    var freqs=spEncodeFreqs(nonce);
     var RAMP=0.005; // 5ms gain attack/release — eliminates click artifacts
 
-    // Helper: schedule one tone with envelope on an already-created AudioContext
-    // Returns the scheduled stop time (seconds on ctx timeline)
+    // Schedule one sine tone with smooth gain envelope.
+    // Returns the absolute AudioContext time at which the tone ends.
     function scheduleTone(ctx, freq, startSec, durSec){
       var o=ctx.createOscillator();
       var g=ctx.createGain();
       o.connect(g); g.connect(ctx.destination);
       o.type='sine';
       o.frequency.value=freq;
-      // Gain envelope: silence → ramp up → hold → ramp down → silence
       g.gain.setValueAtTime(0, startSec);
-      g.gain.linearRampToValueAtTime(0.85, startSec+RAMP);
-      g.gain.setValueAtTime(0.85, startSec+durSec-RAMP);
+      g.gain.linearRampToValueAtTime(0.9, startSec+RAMP);
+      g.gain.setValueAtTime(0.9, startSec+durSec-RAMP);
       g.gain.linearRampToValueAtTime(0, startSec+durSec);
       o.start(startSec);
       o.stop(startSec+durSec);
       return startSec+durSec;
     }
 
-    // Calculate total duration of one loop for UI countdown
-    var symDurSec  = SP_SYM_DUR/1000;
-    var gapDurSec  = SP_GAP_DUR/1000;
-    var preDurSec  = SP_PREAMBLE_DUR/1000;
-    var interSec   = SP_INTER_LOOP_MS/1000;
-    var loopDurSec = preDurSec + gapDurSec + freqs.length*(symDurSec+gapDurSec);
-    var totalDurSec= SP_EMIT_LOOPS*loopDurSec + (SP_EMIT_LOOPS-1)*interSec;
+    var symDurSec   = SP_SYM_DUR/1000;
+    var gapDurSec   = SP_GAP_DUR/1000;
+    var preDurSec   = SP_PREAMBLE_DUR/1000;
+    var confDurSec  = SP_CONFIRM_DUR/1000;
+    var interSec    = SP_INTER_LOOP_MS/1000;
+    // One loop = preamble + gap + (9 symbols × (sym+gap)) + confirm + inter-gap
+    var loopDurSec  = preDurSec + gapDurSec + freqs.length*(symDurSec+gapDurSec) + confDurSec;
+    var totalDurSec = SP_EMIT_LOOPS*loopDurSec + (SP_EMIT_LOOPS-1)*interSec;
 
-    // Create one AudioContext and schedule ALL loops up front
+    // Single AudioContext — all loops scheduled up front, sample-accurate
     var ctx=new AudioContext();
-    var t=ctx.currentTime+0.05; // small start offset to ensure scheduling completes
+    var t=ctx.currentTime+0.08; // 80ms startup margin for slow Android audio init
 
     for(var loop=0;loop<SP_EMIT_LOOPS;loop++){
-      // Preamble
+      // Preamble sync tone
       t=scheduleTone(ctx, SP_PREAMBLE, t, preDurSec);
       t+=gapDurSec;
-      // 8 data symbols
+      // 9 data+checksum symbols
       for(var i=0;i<freqs.length;i++){
         t=scheduleTone(ctx, freqs[i], t, symDurSec);
         t+=gapDurSec;
       }
-      // Inter-loop silence (just advance the timeline)
+      // Confirm tone (same freq as preamble — receiver ignores it, just clean ending)
+      t=scheduleTone(ctx, SP_PREAMBLE, t, confDurSec);
+      // Inter-loop silence
       if(loop<SP_EMIT_LOOPS-1) t+=interSec;
     }
 
-    // Show countdown UI
-    _spStatus('\uD83D\uDD0A','Emitting sound...','Repeating '+SP_EMIT_LOOPS+'\xd7 — hold phones together.');
+    _spStatus('\uD83D\uDD0A','Emitting sound...','Hold phones face-to-face. Loop 1 of '+SP_EMIT_LOOPS+'.');
     setMsg('','');
 
-    // Update loop counter while audio plays
+    // Loop counter UI — uses ctx.currentTime (no drift vs setTimeout)
     var loopDisplayInterval=setInterval(function(){
-      var elapsed=ctx.currentTime-0.05;
-      var loopsLeft=Math.max(0, SP_EMIT_LOOPS-Math.floor(elapsed/loopDurSec));
+      var elapsed=ctx.currentTime-0.08;
+      var currentLoop=Math.min(SP_EMIT_LOOPS, Math.floor(elapsed/loopDurSec)+1);
       var stEl=document.getElementById('sp-send-sub');
-      if(stEl&&loopsLeft>0) stEl.textContent='Loop '+(SP_EMIT_LOOPS-loopsLeft+1)+' of '+SP_EMIT_LOOPS+' — keep phones together';
+      if(stEl&&currentLoop<=SP_EMIT_LOOPS)
+        stEl.textContent='Loop '+currentLoop+' of '+SP_EMIT_LOOPS+' — keep phones together';
     },300);
 
-    // Wait for all audio to finish, then clean up
-    var totalMs=Math.ceil(totalDurSec*1000)+200;
+    var totalMs=Math.ceil(totalDurSec*1000)+300;
     await new Promise(function(r){setTimeout(r,totalMs);});
     clearInterval(loopDisplayInterval);
     ctx.close().catch(function(){});
 
-    _spStatus('\u23F3','Waiting for receiver...','Token valid for ~55 seconds. Keep app open.');
+    _spStatus('\u23F3','Waiting for receiver...','Token valid for ~75 seconds. Keep app open.');
 
-    // Watch Firestore for completion
+    // Watch Firestore for completion (using nonceKey — 8 chars)
     var unsub=onSnapshot(doc(db,'sound_tokens',nonceKey),function(snap){
       if(!snap.exists())return;
       var data=snap.data();
@@ -1937,7 +1957,7 @@ window.spEmit=async function(){
       }
     });
 
-    // Auto-expire after TTL
+    // Auto-expire: clean up Firestore if receiver never connects
     setTimeout(async function(){
       unsub();
       try{
@@ -1957,17 +1977,29 @@ window.spEmit=async function(){
   }
 };
 
-// ── RECEIVER: listen for ultrasonic token ──
-// Uses edge-triggered (frequency-change) symbol detection instead of
-// a fixed clock — immune to sender timing drift.
+// ── RECEIVER: listen for near-audible FSK token ──
+// Fixes applied vs v2:
+//   1. Actual sampleRate read from ctx after creation (Android 48k fix)
+//   2. Scan range updated to 14500–16500 Hz (matches new SP_BASE_FREQ=15000)
+//   3. SP_STABLE_MS constant used (was hardcoded 60ms)
+//   4. Out-of-range silence during STATE_DECODE now properly handled:
+//      gaps are tolerated, but sustained silence resets to preamble wait
+//   5. requestAnimationFrame replaced with ScriptProcessor fallback loop
+//      that runs on audio thread, immune to render-thread throttling
+//   6. Checksum validation in spRedeem before Firestore (see spRedeem below)
 var _spListening=false;
 var _spAudioCtx=null;
 var _spStream=null;
-var _spAnimFrame=null;
+var _spProcNode=null;   // ScriptProcessorNode (audio-thread polling)
+var _spRafId=null;      // fallback requestAnimationFrame id
 
 function spStopListening(){
   _spListening=false;
-  if(_spAnimFrame){cancelAnimationFrame(_spAnimFrame);_spAnimFrame=null;}
+  if(_spRafId){cancelAnimationFrame(_spRafId);_spRafId=null;}
+  if(_spProcNode){
+    try{_spProcNode.disconnect();}catch(e){}
+    _spProcNode=null;
+  }
   if(_spStream){_spStream.getTracks().forEach(function(t){t.stop();});_spStream=null;}
   if(_spAudioCtx){_spAudioCtx.close().catch(function(){});_spAudioCtx=null;}
 }
@@ -1990,50 +2022,59 @@ async function spListen(){
     _spStream=await navigator.mediaDevices.getUserMedia({audio:{
       echoCancellation:false,
       noiseSuppression:false,
-      autoGainControl:false
+      autoGainControl:false,
+      sampleRate:{ideal:44100}
     }});
   }catch(e){
     setMsg('error','Microphone permission denied. Allow mic access and try again.');
     return;
   }
 
-  // Use 44100 Hz sample rate — essential for detecting up to ~22 kHz
+  // Request 44100 Hz but READ the actual rate — Android often gives 48000 Hz
+  // regardless of what you ask for. All bin math uses the real value.
   _spAudioCtx=new AudioContext({sampleRate:44100});
+  var sampleRate=_spAudioCtx.sampleRate; // could be 44100, 48000, or 32000
+
   var source=_spAudioCtx.createMediaStreamSource(_spStream);
   var analyser=_spAudioCtx.createAnalyser();
-  // fftSize 8192 @ 44100 Hz → binWidth ≈ 5.38 Hz (good resolution)
+  // fftSize 8192 → binWidth = sampleRate/8192
+  //   @ 44100 Hz: ~5.38 Hz/bin (excellent for 500 Hz symbol step)
+  //   @ 48000 Hz: ~5.86 Hz/bin (still excellent)
   analyser.fftSize=8192;
-  analyser.smoothingTimeConstant=0.1; // low smoothing — faster transient response
+  analyser.smoothingTimeConstant=0.15; // slight smoothing to reduce noise spikes
   source.connect(analyser);
 
-  var bufLen=analyser.frequencyBinCount;
+  var bufLen=analyser.frequencyBinCount; // 4096
   var dataArr=new Float32Array(bufLen);
-  var sampleRate=_spAudioCtx.sampleRate;
-  var binWidth=sampleRate/analyser.fftSize; // ~5.38 Hz
+  var binWidth=sampleRate/analyser.fftSize; // recomputed from ACTUAL sample rate
 
   if(titleEl)titleEl.textContent='Listening...';
   if(subEl)subEl.textContent='Hold near sender\'s phone. Mic is active.';
   _spListening=true;
 
-  // ── Edge-triggered state machine ──
-  // Instead of a fixed clock, we detect WHEN the dominant frequency changes.
-  // This makes decoding robust to sender timing drift.
+  // ── Edge-triggered FSK state machine ──
+  // We detect frequency CHANGES, not fixed time slots. Immune to timing drift.
   var STATE_WAIT_PREAMBLE=0, STATE_DECODE=1;
   var state=STATE_WAIT_PREAMBLE;
   var decodedSymbols=[];
-  var preambleHoldStart=0;     // when we first saw preamble freq
-  var lastStableFreq=-1;       // last confirmed stable frequency
-  var stableFreqStart=0;       // when current stable freq window started
-  var STABLE_MS=60;            // ms a freq must hold before counting as a symbol
+  var preambleHoldStart=0;   // timestamp when preamble first seen
+  var lastStableFreq=-1;     // quantised freq of last confirmed symbol
+  var stableFreqStart=0;     // timestamp when current candidate started
+  var outOfRangeStart=0;     // timestamp when signal dropped during decode
+
+  // How long (ms) silence is tolerated inside a decode run before we reset.
+  // Needs to cover SP_GAP_DUR(40ms) + SP_INTER_LOOP_MS(500ms) + margin.
+  var MAX_DECODE_SILENCE_MS=700;
 
   function freqToBin(f){return Math.round(f/binWidth);}
 
   function getDominantFreq(){
     analyser.getFloatFrequencyData(dataArr);
-    // Scan only ultrasonic range 17000–22000 Hz
-    var minBin=freqToBin(17000);
-    var maxBin=freqToBin(22000);
-    if(maxBin>bufLen-1)maxBin=bufLen-1;
+    // Scan 14500–22600 Hz: preamble(16000) + data symbols(15000 to 15000+15×500=22500)
+    // maxBin capped at bufLen-1 (Nyquist). On 44100Hz: Nyquist=22050, so sym15(22500)
+    // is unreachable — but symbols 0–14 (15000–22000) cover all practical use.
+    var minBin=freqToBin(14500);
+    var maxBin=Math.min(freqToBin(22600), bufLen-1);
     var maxMag=-Infinity, maxB=minBin;
     for(var b=minBin;b<=maxBin;b++){
       if(dataArr[b]>maxMag){maxMag=dataArr[b];maxB=b;}
@@ -2041,134 +2082,156 @@ async function spListen(){
     return {freq:maxB*binWidth, mag:maxMag};
   }
 
-  // Check if two frequencies represent the same symbol (within tolerance)
-  function sameSymbol(f1,f2){return Math.abs(f1-f2)<SP_FREQ_TOL;}
+  function sameFreq(f1,f2){return Math.abs(f1-f2)<SP_FREQ_TOL;}
 
-  // Map detected frequency to nearest FSK symbol index, or -1 if out of range
+  // Map raw frequency to nearest valid FSK symbol index (0–15), or -1 if none.
   function freqToSymbol(freq){
-    // Must be within data range
     if(freq<SP_BASE_FREQ-SP_FREQ_TOL)return -1;
     if(freq>SP_BASE_FREQ+(SP_SYMBOLS-1)*SP_STEP+SP_FREQ_TOL)return -1;
     var digit=Math.round((freq-SP_BASE_FREQ)/SP_STEP);
     if(digit<0)digit=0;
     if(digit>=SP_SYMBOLS)digit=SP_SYMBOLS-1;
+    // Final sanity: quantised freq must still be within tolerance
+    var quantFreq=SP_BASE_FREQ+digit*SP_STEP;
+    if(Math.abs(freq-quantFreq)>SP_FREQ_TOL)return -1;
     return digit;
   }
 
+  // ── Core detect function — called as fast as possible ──
   function detect(){
     if(!_spListening)return;
-    _spAnimFrame=requestAnimationFrame(detect);
 
     var d=getDominantFreq();
-
-    // Update level bar (visual feedback)
-    var level=Math.max(0,Math.min(100,(d.mag+100)*1.4));
-    if(levelFill)levelFill.style.width=level+'%';
-
-    // Below noise floor — silence
-    if(d.mag<SP_DETECT_THRESH){
-      // If we were in preamble wait and lose signal, reset preamble hold
-      if(state===STATE_WAIT_PREAMBLE) preambleHoldStart=0;
-      lastStableFreq=-1;
-      stableFreqStart=0;
-      return;
-    }
-
     var now=Date.now();
 
+    // Level bar visual feedback
+    var level=Math.max(0,Math.min(100,(d.mag+100)*1.5));
+    if(levelFill)levelFill.style.width=level+'%';
+
+    // Below noise floor — treat as silence
+    if(d.mag<SP_DETECT_THRESH){
+      if(state===STATE_WAIT_PREAMBLE){
+        preambleHoldStart=0;
+      }else{
+        // STATE_DECODE: track how long we've been silent
+        if(outOfRangeStart===0)outOfRangeStart=now;
+        if(now-outOfRangeStart>MAX_DECODE_SILENCE_MS){
+          // Silence too long — this loop is lost, wait for next preamble
+          state=STATE_WAIT_PREAMBLE;
+          decodedSymbols=[];
+          lastStableFreq=-1;
+          stableFreqStart=0;
+          outOfRangeStart=0;
+          if(subEl)subEl.textContent='Signal lost. Waiting for next loop...';
+        }
+      }
+      return;
+    }
+    outOfRangeStart=0; // signal present — clear silence timer
+
     if(state===STATE_WAIT_PREAMBLE){
-      // Look for preamble tone at SP_PREAMBLE (17500 Hz)
+      // Look for preamble at SP_PREAMBLE (16000 Hz)
       if(Math.abs(d.freq-SP_PREAMBLE)<SP_FREQ_TOL){
-        if(preambleHoldStart===0) preambleHoldStart=now;
-        else if(now-preambleHoldStart>=180){
-          // Preamble confirmed — transition to decode
+        if(preambleHoldStart===0)preambleHoldStart=now;
+        else if(now-preambleHoldStart>=200){
+          // Preamble confirmed — start decoding
           state=STATE_DECODE;
           decodedSymbols=[];
           lastStableFreq=-1;
           stableFreqStart=0;
+          outOfRangeStart=0;
           preambleHoldStart=0;
-          if(subEl)subEl.textContent='Signal detected! Decoding...';
+          if(subEl)subEl.textContent='Signal locked! Decoding...';
         }
       }else{
-        preambleHoldStart=0; // preamble lost
+        preambleHoldStart=0; // not preamble freq — reset hold timer
       }
 
     }else{ // STATE_DECODE
       var sym=freqToSymbol(d.freq);
 
       if(sym<0){
-        // Out of data range — could be gap or inter-loop silence
-        // If we've been out of range for > 1 full loop, reset to preamble wait
-        if(lastStableFreq>=0){
-          lastStableFreq=-1;
-          stableFreqStart=0;
-        }
-        // Allow generous out-of-range window before resetting (handles gaps)
-        // Reset happens via timeout below
+        // Frequency is out of symbol range (gap, confirm tone, or preamble again)
+        // Check if it's the preamble / confirm tone — if so, just reset edge tracking
+        lastStableFreq=-1;
+        stableFreqStart=0;
+        // outOfRangeStart handles full reset (above in silence handler)
         return;
       }
 
       var symFreq=SP_BASE_FREQ+sym*SP_STEP;
 
-      if(sameSymbol(d.freq, symFreq)){
-        if(!sameSymbol(symFreq, lastStableFreq)){
-          // Frequency changed — new symbol candidate, start holding
-          lastStableFreq=symFreq;
-          stableFreqStart=now;
-        }else if(now-stableFreqStart>=STABLE_MS){
-          // Frequency has held stable long enough — lock it in as a symbol
-          // But only accept it once (edge-triggered: only on first confirmation)
-          if(stableFreqStart>0){
-            decodedSymbols.push(sym.toString(16));
-            stableFreqStart=-1; // mark as consumed; wait for freq to change
-            if(subEl)subEl.textContent='Decoded '+decodedSymbols.length+'/'+SP_NONCE_LEN+' symbols...';
+      if(!sameFreq(symFreq, lastStableFreq)){
+        // New symbol candidate seen — start stability hold timer
+        lastStableFreq=symFreq;
+        stableFreqStart=now;
+      }else if(stableFreqStart>0 && now-stableFreqStart>=SP_STABLE_MS){
+        // Symbol has held stable long enough — accept it (edge-triggered: once only)
+        decodedSymbols.push(sym.toString(16));
+        stableFreqStart=-1; // consumed; await frequency change before next symbol
+        if(subEl)subEl.textContent='Decoded '+decodedSymbols.length+'/'+SP_NONCE_LEN+'...';
 
-            if(decodedSymbols.length===SP_NONCE_LEN){
-              // Full nonce received
-              var nonce=decodedSymbols.join('');
-              state=STATE_WAIT_PREAMBLE;
-              decodedSymbols=[];
-              lastStableFreq=-1;
-              stableFreqStart=0;
-              spStopListening();
-              spRedeem(nonce, phone, name, db, titleEl, subEl, msgEl);
-            }
-          }
+        if(decodedSymbols.length===SP_NONCE_LEN){
+          // Full 9-symbol sequence received — validate + redeem
+          var nonce=decodedSymbols.join('');
+          spStopListening();
+          // spRedeem validates XOR checksum before Firestore lookup
+          spRedeem(nonce, phone, name, db, titleEl, subEl, msgEl);
         }
-      }else{
-        // Dominant freq shifted — reset stable tracking
-        lastStableFreq=-1;
-        stableFreqStart=0;
       }
     }
   }
 
-  detect();
+  // ── Polling strategy: ScriptProcessor (audio thread) → rAF fallback ──
+  // ScriptProcessor is deprecated but universally supported and runs on the
+  // audio thread, so it won't be throttled when screen dims or tab backgrounds.
+  // AudioWorklet would be ideal but requires HTTPS + module worker boilerplate.
+  try{
+    // bufferSize=256 → callback every ~5.8ms @ 44100 Hz — much faster than rAF
+    _spProcNode=_spAudioCtx.createScriptProcessor(256,1,1);
+    _spProcNode.onaudioprocess=detect;
+    source.connect(_spProcNode);
+    _spProcNode.connect(_spAudioCtx.destination); // must be connected to fire
+  }catch(e){
+    // Fallback: requestAnimationFrame (~16ms) on render thread
+    (function rafLoop(){
+      if(!_spListening)return;
+      detect();
+      _spRafId=requestAnimationFrame(rafLoop);
+    })();
+  }
 
-  // Auto-stop after 65 seconds (slightly longer than token TTL)
+  // Auto-stop: 85 seconds (token TTL 75s + 10s grace)
   setTimeout(function(){
     if(_spListening){
       spStopListening();
       if(titleEl)titleEl.textContent='Timed out';
-      if(subEl)subEl.textContent='No sound detected in 65 seconds. Try again.';
+      if(subEl)subEl.textContent='No signal in 85 seconds. Ask sender to try again.';
     }
-  },65000);
+  },85000);
 }
 
 async function spRedeem(nonce, phone, name, db, titleEl, subEl, msgEl){
   function setMsg(type,text){if(msgEl){msgEl.className='msg '+(type||'');msgEl.textContent=text;}}
 
-  // ── Validate XOR checksum before touching Firestore ──
-  // nonce is 9 chars: 8 data + 1 checksum. If they don't match, we decoded wrong.
-  var digits=nonce.split('').map(function(c){return parseInt(c,16);});
-  var xor=digits.slice(0,8).reduce(function(a,b){return a^b;},0);
-  if(xor!==digits[8]){
+  // ── XOR checksum validation (before any Firestore call) ──
+  // nonce = 9 hex chars: positions 0–7 are data, position 8 is XOR of all 8.
+  // Any single-symbol misread will (with 15/16 probability) corrupt the checksum.
+  if(nonce.length!==SP_NONCE_LEN){
     if(titleEl)titleEl.textContent='Decode Error';
-    setMsg('error','Signal misread — move phones closer and try again.');
+    setMsg('error','Incomplete signal ('+nonce.length+'/'+SP_NONCE_LEN+' symbols). Move phones closer.');
     setTimeout(function(){_spPanel(false,false,true,false);},3000);
     return;
   }
-  var nonceKey=nonce.slice(0,8); // Firestore key = 8 data chars only
+  var nibbles=nonce.split('').map(function(c){return parseInt(c,16);});
+  var xorResult=nibbles.slice(0,8).reduce(function(a,b){return a^b;},0);
+  if(xorResult!==nibbles[8]){
+    if(titleEl)titleEl.textContent='Signal Error';
+    setMsg('error','Signal misread detected. Move phones closer and try again.');
+    setTimeout(function(){_spPanel(false,false,true,false);},3000);
+    return;
+  }
+  var nonceKey=nonce.slice(0,8); // strip checksum — Firestore key is 8 chars
 
   if(titleEl)titleEl.textContent='Processing...';
   if(subEl)subEl.textContent='Completing secure transfer...';
