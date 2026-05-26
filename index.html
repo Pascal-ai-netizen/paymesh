@@ -665,6 +665,155 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
 #screen-pin .card{animation:slideUp .35s var(--ease) both}
 
 ::selection{background:rgba(0,232,122,.22);color:var(--em2)}
+
+/* ── FRAUD COPILOT ── */
+:root{
+  --shield:#FFB830;
+  --shield-dim:rgba(255,184,48,0.10);
+  --shield-border:rgba(255,184,48,0.22);
+  --danger:#FF4D6A;
+  --danger-dim:rgba(255,77,106,0.10);
+  --danger-border:rgba(255,77,106,0.22);
+  --safe:#00E87A;
+  --safe-dim:rgba(0,232,122,0.08);
+}
+
+/* Fraud status badge in send topbar */
+.fraud-badge{
+  display:flex;align-items:center;gap:5px;
+  padding:4px 10px;border-radius:20px;
+  font-size:10px;font-weight:800;letter-spacing:.6px;
+  border:1px solid transparent;
+  transition:all .3s var(--ease);
+  opacity:0;pointer-events:none;
+}
+.fraud-badge.visible{opacity:1;pointer-events:auto}
+.fraud-badge.green{background:var(--safe-dim);border-color:rgba(0,232,122,.2);color:var(--safe)}
+.fraud-badge.amber{background:var(--shield-dim);border-color:var(--shield-border);color:var(--shield);animation:badgePulse 2s ease-in-out infinite}
+.fraud-badge.red{background:var(--danger-dim);border-color:var(--danger-border);color:var(--danger);animation:badgePulse 1.4s ease-in-out infinite}
+.fraud-badge.blocked{background:rgba(255,77,106,.18);border-color:var(--danger);color:var(--danger);animation:badgePulse 1s ease-in-out infinite}
+@keyframes badgePulse{0%,100%{box-shadow:0 0 0 0 currentColor}50%{box-shadow:0 0 0 4px rgba(255,184,48,0)}}
+
+/* Fraud Copilot warning panel */
+.fraud-panel{
+  margin:0 14px 12px;border-radius:var(--r2);
+  border:1px solid transparent;
+  overflow:hidden;
+  transition:all .35s var(--ease);
+  max-height:0;opacity:0;
+  pointer-events:none;
+}
+.fraud-panel.show{
+  max-height:500px;opacity:1;pointer-events:auto;
+  animation:fraudSlide .38s var(--ease) both;
+}
+@keyframes fraudSlide{from{opacity:0;transform:translateY(-10px) scale(.98)}to{opacity:1;transform:none}}
+
+.fraud-panel.amber{
+  background:linear-gradient(135deg,rgba(255,184,48,.09),rgba(255,184,48,.04));
+  border-color:var(--shield-border);
+  box-shadow:0 8px 28px rgba(255,184,48,.08);
+}
+.fraud-panel.red{
+  background:linear-gradient(135deg,rgba(255,77,106,.11),rgba(255,77,106,.05));
+  border-color:var(--danger-border);
+  box-shadow:0 8px 28px rgba(255,77,106,.1);
+}
+.fraud-panel.blocked{
+  background:linear-gradient(135deg,rgba(255,77,106,.18),rgba(255,77,106,.08));
+  border-color:var(--danger);
+  box-shadow:0 8px 32px rgba(255,77,106,.18);
+}
+
+.fraud-panel-inner{padding:18px 18px 16px}
+
+.fraud-header{
+  display:flex;align-items:center;gap:10px;margin-bottom:12px;
+}
+.fraud-shield-icon{
+  width:36px;height:36px;border-radius:10px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;font-size:18px;
+}
+.fraud-panel.amber .fraud-shield-icon{background:rgba(255,184,48,.15);border:1px solid rgba(255,184,48,.25)}
+.fraud-panel.red    .fraud-shield-icon{background:rgba(255,77,106,.15);border:1px solid rgba(255,77,106,.25)}
+.fraud-panel.blocked .fraud-shield-icon{background:rgba(255,77,106,.22);border:1px solid var(--danger)}
+
+.fraud-title{
+  font-size:14px;font-weight:800;letter-spacing:-.2px;line-height:1.2;
+}
+.fraud-panel.amber  .fraud-title{color:var(--amber)}
+.fraud-panel.red    .fraud-title{color:var(--red)}
+.fraud-panel.blocked .fraud-title{color:var(--red)}
+
+.fraud-subtitle{font-size:11px;font-weight:500;color:var(--text2);margin-top:2px}
+
+/* Individual signal rows */
+.fraud-signals{display:flex;flex-direction:column;gap:7px;margin-bottom:14px}
+.fraud-signal{
+  display:flex;align-items:flex-start;gap:8px;
+  padding:10px 12px;border-radius:10px;
+  font-size:12px;font-weight:600;line-height:1.5;
+  border:1px solid transparent;
+}
+.fraud-signal-icon{font-size:14px;flex-shrink:0;margin-top:1px}
+.fraud-signal.amber{
+  background:rgba(255,184,48,.08);border-color:rgba(255,184,48,.15);color:rgba(255,212,100,.9)
+}
+.fraud-signal.red{
+  background:rgba(255,77,106,.08);border-color:rgba(255,77,106,.15);color:rgba(255,120,140,.95)
+}
+
+/* Score meter */
+.fraud-score-bar{
+  height:3px;background:var(--surface3);border-radius:99px;
+  margin:0 0 14px;overflow:hidden;
+}
+.fraud-score-fill{
+  height:100%;border-radius:99px;
+  transition:width .6s var(--ease),background .4s;
+}
+.fraud-score-fill.green{background:var(--safe)}
+.fraud-score-fill.amber{background:var(--amber)}
+.fraud-score-fill.red{background:var(--red)}
+.fraud-score-fill.blocked{background:var(--red);box-shadow:0 0 8px rgba(255,77,106,.6)}
+
+/* Action buttons */
+.fraud-actions{display:flex;gap:8px;flex-direction:column}
+.fraud-proceed-btn{
+  width:100%;padding:12px;border-radius:var(--r);
+  font:700 13px/1 var(--sans);letter-spacing:.2px;cursor:pointer;
+  border:1px solid var(--shield-border);
+  background:rgba(255,184,48,.1);color:var(--amber);
+  transition:all .18s var(--ease);
+}
+.fraud-proceed-btn:hover{background:rgba(255,184,48,.18);border-color:rgba(255,184,48,.35)}
+.fraud-proceed-btn:active{transform:scale(.97)}
+
+.fraud-confirm-row{
+  display:flex;gap:8px;align-items:center;margin-top:2px;
+}
+.fraud-confirm-input{
+  flex:1;padding:11px 14px;border-radius:var(--r);
+  background:rgba(0,0,0,.4);border:1px solid var(--border2);
+  color:var(--text);font:700 13px/1 var(--sans);
+  outline:none;caret-color:var(--red);transition:border-color .2s;
+}
+.fraud-confirm-input:focus{border-color:rgba(255,77,106,.5);box-shadow:0 0 0 3px rgba(255,77,106,.1)}
+.fraud-confirm-input::placeholder{color:var(--text3);font-weight:500}
+.fraud-confirm-submit{
+  padding:11px 16px;border-radius:var(--r);flex-shrink:0;
+  font:700 12px/1 var(--sans);letter-spacing:.2px;cursor:pointer;
+  background:rgba(255,77,106,.15);border:1px solid rgba(255,77,106,.3);color:var(--red);
+  transition:all .18s;
+}
+.fraud-confirm-submit:hover{background:rgba(255,77,106,.25);border-color:var(--red)}
+.fraud-confirm-submit:active{transform:scale(.95)}
+
+/* Blocked state — no proceed */
+.fraud-blocked-msg{
+  text-align:center;padding:8px 0;
+  font:700 12px/1.6 var(--sans);color:rgba(255,120,140,.9);
+}
 </style>
 </head>
 <body>
@@ -967,21 +1116,44 @@ window.__PM_SPLASH_TIMEOUT = setTimeout(function() {
       Back
     </button>
     <span class="screen-title">Send Money</span>
-    <div style="width:60px"></div>
+    <div id="fraud-badge" class="fraud-badge">
+      <span id="fraud-badge-icon">🛡️</span>
+      <span id="fraud-badge-label">SAFE</span>
+    </div>
   </div>
   <div style="height:12px"></div>
   <div class="card">
     <div class="form-group">
       <label>Recipient Phone Number</label>
-      <input type="tel" id="send-phone" placeholder="10 digit number" maxlength="10">
+      <input type="tel" id="send-phone" placeholder="10 digit number" maxlength="10" oninput="onSendFieldChange()" onchange="onSendFieldChange()">
     </div>
     <div class="form-group">
       <label>Amount (₹)</label>
-      <input type="number" id="send-amount" placeholder="Enter amount" min="1">
+      <input type="number" id="send-amount" placeholder="Enter amount" min="1" oninput="onSendFieldChange()" onchange="onSendFieldChange()">
     </div>
-    <button type="button" class="btn-primary" onclick="sendMoney()">Send Now</button>
+    <div class="form-group" id="send-note-group" style="display:none">
+      <label>Note <span style="color:var(--text3);font-size:9px;letter-spacing:0;text-transform:none;font-weight:500">(optional)</span></label>
+      <input type="text" id="send-note" placeholder="e.g. rent, dinner, etc." maxlength="80" oninput="onSendFieldChange()" onchange="onSendFieldChange()">
+    </div>
+    <button type="button" class="btn-primary" id="send-submit-btn" onclick="sendMoney()">Send Now</button>
     <div id="send-msg" class="msg"></div>
-</div>
+  </div>
+
+  <!-- ── FRAUD COPILOT PANEL ── -->
+  <div id="fraud-panel" class="fraud-panel">
+    <div class="fraud-panel-inner">
+      <div class="fraud-header">
+        <div class="fraud-shield-icon" id="fraud-panel-icon">🛡️</div>
+        <div>
+          <div class="fraud-title" id="fraud-panel-title">Fraud Copilot</div>
+          <div class="fraud-subtitle" id="fraud-panel-subtitle">Analysing transaction…</div>
+        </div>
+      </div>
+      <div class="fraud-score-bar"><div class="fraud-score-fill" id="fraud-score-fill" style="width:0%"></div></div>
+      <div class="fraud-signals" id="fraud-signals"></div>
+      <div class="fraud-actions" id="fraud-actions"></div>
+    </div>
+  </div>
 </div>
 
 <!-- ══════════════════════════════════════

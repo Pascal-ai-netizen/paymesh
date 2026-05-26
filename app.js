@@ -585,6 +585,12 @@ window.showScreen = function(id) {
   if (id === 'screen-send') {
     const m = document.getElementById('send-msg');
     if (m) { m.className = 'msg'; m.textContent = ''; }
+    _hideFraudPanel();
+    _fraudOverrideGranted = false;
+    const noteGroup = document.getElementById('send-note-group');
+    if (noteGroup) noteGroup.style.display = 'none';
+    const sendBtn = document.getElementById('send-submit-btn');
+    if (sendBtn) { sendBtn.disabled = false; sendBtn.style.opacity = '1'; sendBtn.style.cursor = 'pointer'; sendBtn.textContent = 'Send Now'; }
   }
 }
 
@@ -915,6 +921,290 @@ window.submitLoad = async function() {
 }
 
 // ═══════════════════════════════════════════
+// FRAUD COPILOT — Pattern-matching score engine
+// 7 measurable fraud patterns. No AI — pure math.
+// ═══════════════════════════════════════════
+
+// Note-field keywords (Pattern 6)
+const FRAUD_KEYWORDS_HIGH = ['refund','cashback','prize','won','lottery','verify','otp','registration fee','processing fee','delivery charge','customs'];
+const FRAUD_KEYWORDS_MED  = ['urgent','emergency','help','stuck','stranded','hospital'];
+
+// State: whether user has confirmed past fraud warning in this session
+let _fraudOverrideGranted = false;
+// Track last phone+amount to detect when they change vs just note changing
+let _fraudLastPhone  = '';
+let _fraudLastAmount = 0;
+// Debounce timer for the async Firestore calls
+let _fraudDebounceTimer = null;
+// Sequence counter to discard stale async results
+let _fraudSeq = 0;
+
+// Called on every input change in send form
+window.onSendFieldChange = function() {
+  const phone  = (document.getElementById('send-phone').value  || '').trim();
+  const amount = parseFloat(document.getElementById('send-amount').value) || 0;
+  const note   = (document.getElementById('send-note')?.value  || '').toLowerCase();
+
+  // Show note field once user has a phone and amount
+  const noteGroup = document.getElementById('send-note-group');
+  if (noteGroup) noteGroup.style.display = (phone.length >= 6 || amount > 0) ? '' : 'none';
+
+  if (!phone || phone.length < 10 || !amount || amount <= 0) {
+    _hideFraudPanel();
+    return;
+  }
+
+  // Only reset override when phone or amount changes — not on note edits
+  const coreChanged = (phone !== _fraudLastPhone || amount !== _fraudLastAmount);
+  if (coreChanged) {
+    _fraudOverrideGranted = false;
+    _fraudLastPhone  = phone;
+    _fraudLastAmount = amount;
+  }
+
+  // Don't re-run the heavy async score if override already granted and core unchanged
+  if (_fraudOverrideGranted && !coreChanged) return;
+
+  // Debounce: wait 350ms after last keystroke before firing Firestore reads
+  clearTimeout(_fraudDebounceTimer);
+  _fraudDebounceTimer = setTimeout(() => _runFraudScore(phone, amount, note), 350);
+}
+
+async function _runFraudScore(phone, amount, note) {
+  // Stamp a sequence number; discard result if a newer call has started
+  const seq = ++_fraudSeq;
+
+  const signals = [];
+  let score = 0;
+
+  const currentBal = parseFloat(sessionStorage.getItem('pm_balance') || '0');
+  const hour = new Date().getHours();
+  const isNight = hour >= 20 || hour < 6;
+
+  // ── Pattern 1: First Contact High Value ──
+  // Uses `toPhone` field written by sendMoney on each debit transaction.
+  let isNewContact = true;
+  try {
+    const { getDocs: gd, query: qr, collection: col, where: wh } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
+    const priorSnap = await gd(qr(col(db,'transactions'),
+      wh('phone','==',CURRENT_USER.phone),
+      wh('type','==','debit'),
+      wh('toPhone','==',phone)
+    ));
+    isNewContact = priorSnap.empty;
+  } catch(e) {
+    isNewContact = true; // conservative default on network error
+  }
+
+  if (seq !== _fraudSeq) return; // stale — a newer call is in flight
+
+  if (isNewContact && amount > 500 && isNight) {
+    score += 40;
+    signals.push({ sev:'red', icon:'🌙', text:`You've never paid this number before, the amount is large, and it's nighttime — a high-risk combination.` });
+  } else if (isNewContact && amount > 500) {
+    score += 25;
+    signals.push({ sev:'amber', icon:'👤', text:`You've never sent money to this number before and the amount is above ₹500.` });
+  }
+
+  // ── Pattern 3: Round Number (additive, not multiplicative) ──
+  const isRound = amount > 0 && amount % 500 === 0;
+  if (isRound && isNewContact) {
+    score += 15; // additive bonus on top of Pattern 1, per spec's 1.5x spirit
+    signals.push({ sev:'amber', icon:'🎯', text:`₹${amount.toFixed(0)} is a suspiciously round number — real transactions are rarely this exact.` });
+  } else if (isRound && isNight) {
+    score += 10;
+    signals.push({ sev:'amber', icon:'🎯', text:`Round-number amounts at night are a common scam signal.` });
+  }
+
+  // ── Pattern 4: Balance Drain ──
+  if (currentBal > 0) {
+    const drainRatio = amount / currentBal;
+    if (drainRatio > 0.95 && isNewContact) {
+      score += 55;
+      signals.push({ sev:'red', icon:'💸', text:`You're sending ${Math.round(drainRatio*100)}% of your entire wallet balance to someone you've never paid.` });
+    } else if (drainRatio > 0.8 && isNewContact) {
+      score += 35;
+      signals.push({ sev:'red', icon:'💸', text:`This would drain ${Math.round(drainRatio*100)}% of your wallet in one transaction to a new contact.` });
+    }
+  }
+
+  // ── Pattern 6: Note Field Keywords ──
+  if (note) {
+    const hitHigh = FRAUD_KEYWORDS_HIGH.find(k => note.includes(k));
+    const hitMed  = !hitHigh && FRAUD_KEYWORDS_MED.find(k => note.includes(k));
+    if (hitHigh) {
+      score += 40;
+      signals.push({ sev:'red', icon:'⚠️', text:`Your note contains "${hitHigh}" — legitimate companies never ask you to send money for a ${hitHigh}.` });
+    } else if (hitMed) {
+      score += 20;
+      signals.push({ sev:'amber', icon:'⚠️', text:`Your note says "${hitMed}" — be cautious of urgency-based pressure to send money.` });
+    }
+  }
+
+  // ── Pattern 7: Time-Since-Account ──
+  try {
+    const rSnap = await getDoc(doc(db,'users',phone));
+    if (seq !== _fraudSeq) return; // stale check after second await
+    if (rSnap.exists()) {
+      const created = rSnap.data().createdAt;
+      if (created) {
+        const ageHours = (Date.now() - new Date(created).getTime()) / 3600000;
+        if (ageHours < 24 && amount >= 1000) {
+          score += 45;
+          signals.push({ sev:'red', icon:'🆕', text:`This PayMesh account was created less than 24 hours ago and you're sending ₹${amount.toFixed(0)} to it.` });
+        } else if (ageHours < 168 && isNewContact) {
+          score += 20;
+          signals.push({ sev:'amber', icon:'🆕', text:`This account is less than 7 days old and you've never paid them before.` });
+        }
+      }
+    }
+  } catch(e) { /* ignore — network issue, score proceeds without Pattern 7 */ }
+
+  if (seq !== _fraudSeq) return; // final stale check before rendering
+  _renderFraudPanel(score, signals, amount);
+}
+
+function _renderFraudPanel(score, signals, amount) {
+  const badge    = document.getElementById('fraud-badge');
+  const panel    = document.getElementById('fraud-panel');
+  const fill     = document.getElementById('fraud-score-fill');
+  const sigCont  = document.getElementById('fraud-signals');
+  const actions  = document.getElementById('fraud-actions');
+  const title    = document.getElementById('fraud-panel-title');
+  const subtitle = document.getElementById('fraud-panel-subtitle');
+  const panelIcon= document.getElementById('fraud-panel-icon');
+  const badgeLbl = document.getElementById('fraud-badge-label');
+  const badgeIco = document.getElementById('fraud-badge-icon');
+  const sendBtn  = document.getElementById('send-submit-btn');
+
+  // Determine tier
+  let tier;
+  if      (score >= 80) tier = 'blocked';
+  else if (score >= 55) tier = 'red';
+  else if (score >= 30) tier = 'amber';
+  else                  tier = 'green';
+
+  // Score bar width capped at 100%
+  const pct = Math.min(Math.round(score / 100 * 100), 100);
+
+  // ── Badge ──
+  badge.className = `fraud-badge visible ${tier}`;
+  if      (tier === 'green')   { badgeIco.textContent = '✓'; badgeLbl.textContent = 'SAFE'; }
+  else if (tier === 'amber')   { badgeIco.textContent = '⚠'; badgeLbl.textContent = 'CAUTION'; }
+  else if (tier === 'red')     { badgeIco.textContent = '🛡'; badgeLbl.textContent = 'WARNING'; }
+  else                         { badgeIco.textContent = '🚫'; badgeLbl.textContent = 'HIGH RISK'; }
+
+  if (tier === 'green') {
+    panel.className = 'fraud-panel'; // hide
+    if (sendBtn) {
+      sendBtn.disabled = false;
+      sendBtn.style.opacity = '1';
+      sendBtn.style.cursor  = 'pointer';
+      sendBtn.textContent = 'Send Now';
+    }
+    return;
+  }
+
+  // ── Panel ──
+  panel.className = `fraud-panel show ${tier}`;
+
+  fill.style.width = pct + '%';
+  fill.className = `fraud-score-fill ${tier}`;
+
+  // Panel title + icon
+  if (tier === 'amber') {
+    panelIcon.textContent = '⚠️';
+    title.textContent = 'Fraud Copilot — Caution';
+    subtitle.textContent = 'Some risk signals detected. Review before sending.';
+  } else if (tier === 'red') {
+    panelIcon.textContent = '🛡️';
+    title.textContent = 'Fraud Copilot — Strong Warning';
+    subtitle.textContent = 'Multiple fraud patterns detected. Proceed carefully.';
+  } else {
+    panelIcon.textContent = '🚫';
+    title.textContent = 'Fraud Copilot — Transaction Blocked';
+    subtitle.textContent = 'This transaction matches high-risk scam patterns.';
+  }
+
+  // Signal rows
+  sigCont.innerHTML = signals.map(s => `
+    <div class="fraud-signal ${s.sev}">
+      <span class="fraud-signal-icon">${s.icon}</span>
+      <span>${s.text}</span>
+    </div>`).join('');
+
+  // Action area
+  actions.innerHTML = '';
+  if (tier === 'blocked') {
+    // No proceed option
+    if (sendBtn) { sendBtn.disabled = true; sendBtn.style.opacity = '.4'; sendBtn.style.cursor = 'not-allowed'; }
+    const msg = document.createElement('div');
+    msg.className = 'fraud-blocked-msg';
+    msg.textContent = 'This transaction has been frozen. Edit the details or return home.';
+    actions.appendChild(msg);
+  } else if (tier === 'red') {
+    // Must type CONFIRM
+    if (sendBtn) sendBtn.disabled = true;
+    const row = document.createElement('div');
+    row.className = 'fraud-confirm-row';
+    row.innerHTML = `
+      <input type="text" class="fraud-confirm-input" id="fraud-confirm-input"
+        placeholder='Type "CONFIRM" to proceed' maxlength="10"
+        oninput="_fraudCheckConfirm(this.value)">
+      <button type="button" class="fraud-confirm-submit" id="fraud-confirm-submit"
+        disabled onclick="_fraudUnlock()">Proceed</button>`;
+    actions.appendChild(row);
+    // Re-enable send btn via unlock
+    if (sendBtn) { sendBtn.style.opacity = '.4'; sendBtn.style.cursor = 'not-allowed'; }
+  } else {
+    // Amber: one-tap proceed
+    if (sendBtn) sendBtn.disabled = false;
+    const proceedBtn = document.createElement('button');
+    proceedBtn.type = 'button';
+    proceedBtn.className = 'fraud-proceed-btn';
+    proceedBtn.textContent = 'I understand the risks — proceed anyway';
+    proceedBtn.onclick = () => {
+      _fraudOverrideGranted = true;
+      panel.className = 'fraud-panel'; // hide panel
+      badge.className = 'fraud-badge visible amber';
+      badgeLbl.textContent = 'OVERRIDDEN';
+    };
+    actions.appendChild(proceedBtn);
+  }
+}
+
+window._fraudCheckConfirm = function(val) {
+  const btn = document.getElementById('fraud-confirm-submit');
+  if (btn) btn.disabled = val.toUpperCase() !== 'CONFIRM';
+}
+
+window._fraudUnlock = function() {
+  _fraudOverrideGranted = true;
+  const panel  = document.getElementById('fraud-panel');
+  const sendBtn = document.getElementById('send-submit-btn');
+  panel.className = 'fraud-panel';
+  if (sendBtn) {
+    sendBtn.disabled = false;
+    sendBtn.style.opacity = '1';
+    sendBtn.style.cursor  = 'pointer';
+    sendBtn.textContent = 'Send Now';
+  }
+  const badge = document.getElementById('fraud-badge');
+  if (badge) {
+    badge.className = 'fraud-badge visible red';
+    document.getElementById('fraud-badge-label').textContent = 'OVERRIDDEN';
+  }
+}
+
+function _hideFraudPanel() {
+  const badge = document.getElementById('fraud-badge');
+  const panel = document.getElementById('fraud-panel');
+  if (badge) badge.className = 'fraud-badge';
+  if (panel) panel.className = 'fraud-panel';
+  _fraudOverrideGranted = false;
+}
+
+// ═══════════════════════════════════════════
 // SEND MONEY
 // ═══════════════════════════════════════════
 
@@ -935,6 +1225,13 @@ window.sendMoney = async function() {
   if (!amount || amount <= 0)  { showMsg(msg,'error','Enter a valid amount'); return; }
   if (!CURRENT_USER.phone)     { showMsg(msg,'error','Session error — please log out and log in again.'); return; }
   if (phone === CURRENT_USER.phone) { showMsg(msg,'error','Cannot send to yourself'); return; }
+
+  // ── Fraud Copilot gate ──
+  const sendBtn = document.getElementById('send-submit-btn');
+  if (sendBtn && sendBtn.disabled) {
+    showMsg(msg,'error','Fraud Copilot has flagged this transaction. Review the warning above.');
+    return;
+  }
 
   // Rate limit: enforce 30-second cooldown between sends
   const now = Date.now();
@@ -969,7 +1266,7 @@ window.sendMoney = async function() {
 
     const time = new Date().toISOString();
     await Promise.all([
-      addDoc(collection(db,"transactions"), { phone: CURRENT_USER.phone, label:`Sent to ${receiverName}`,   amount, type:"debit",  time }),
+      addDoc(collection(db,"transactions"), { phone: CURRENT_USER.phone, label:`Sent to ${receiverName}`,   amount, type:"debit",  time, toPhone: phone }),
       addDoc(collection(db,"transactions"), { phone,                     label:`From ${CURRENT_USER.name}`, amount, type:"credit", time })
     ]);
 
@@ -1236,8 +1533,19 @@ function showVoucherResult(data) {
 window.proceedToSend = function() {
   if (scannerInterval) { clearInterval(scannerInterval); scannerInterval = null; }
   if (scannerStream)   { scannerStream.getTracks().forEach(t => t.stop()); scannerStream = null; }
+  // Capture phone before detectedQR is cleared — showScreen resets the send form
+  const prefilledPhone = detectedQR && detectedQR.kind === 'person' ? detectedQR.phone : null;
   detectedQR = null;
   showScreen('screen-send');
+  // Re-fill the phone field (showScreen reset it) and trigger fraud analysis
+  if (prefilledPhone) {
+    const phoneEl = document.getElementById('send-phone');
+    if (phoneEl) {
+      phoneEl.value = prefilledPhone;
+      // Manually trigger so fraud copilot runs on the pre-filled value
+      if (window.onSendFieldChange) window.onSendFieldChange();
+    }
+  }
 }
 
 // ═══════════════════════════════════════════
