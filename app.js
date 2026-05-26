@@ -123,11 +123,7 @@ import {
   onSnapshot,
   getDocFromServer
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-import {
-  getAuth,
-  RecaptchaVerifier,
-  signInWithPhoneNumber
-} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+// Firebase Auth removed — OTP handled via Fast2SMS
 
 const firebaseConfig = {
   apiKey: "AIzaSyDKs_5eQADpVoFgoRhTJea-SGW0205C9Wc",
@@ -138,16 +134,19 @@ const firebaseConfig = {
   appId: "1:64830673482:web:5722735cf616109b500cb3"
 };
 
-const app  = initializeApp(firebaseConfig);
-const db   = getFirestore(app);
-const auth = getAuth(app);
+const app = initializeApp(firebaseConfig);
+const db  = getFirestore(app);
+
+// ─── Fast2SMS config ─────────────────────────────────────────────────────────
+// *** PASTE YOUR FAST2SMS API KEY BELOW (line 144) ***
+const FAST2SMS_API_KEY = "YOUR_FAST2SMS_API_KEY_HERE";
+// ─────────────────────────────────────────────────────────────────────────────
 
 // OTP state
-let _otpConfirmationResult = null;
-let _otpPendingPhone       = null;
-let _otpPendingName        = null;
-let _otpPendingUpi         = null;
-let _recaptchaVerifier     = null;
+let _otpPendingPhone = null;
+let _otpPendingName  = null;
+let _otpPendingUpi   = null;
+let _generatedOTP    = null;   // 6-digit OTP generated client-side
 
 const PAYMESH_UPI = "utkarshkk@yesfam";
 
@@ -670,15 +669,20 @@ window.loginUser = async function() {
   showMsg(msg, 'success', 'Sending OTP to +91 ' + phone + '...');
 
   try {
-    // Destroy old verifier if it exists
-    if (_recaptchaVerifier) { try { _recaptchaVerifier.clear(); } catch(e){} }
-    _recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', { size: 'invisible' });
-
     _otpPendingPhone = phone;
     _otpPendingName  = nameInput;
     _otpPendingUpi   = upiInput;
 
-    _otpConfirmationResult = await signInWithPhoneNumber(auth, '+91' + phone, _recaptchaVerifier);
+    // Generate a 6-digit OTP
+    _generatedOTP = String(Math.floor(100000 + Math.random() * 900000));
+
+    // Send via Fast2SMS
+    const f2sRes = await fetch(
+      `https://www.fast2sms.com/dev/bulkV2?authorization=${FAST2SMS_API_KEY}&route=otp&variables_values=${_generatedOTP}&flash=0&numbers=${phone}`,
+      { method: 'GET' }
+    );
+    const f2sData = await f2sRes.json();
+    if (!f2sData.return) throw new Error(f2sData.message || 'Fast2SMS error');
 
     // Switch to OTP screen
     document.getElementById('otp-phone-display').textContent = '+91 ' + phone;
@@ -688,11 +692,7 @@ window.loginUser = async function() {
   } catch(e) {
     console.error('OTP send error:', e);
     if (btn) { btn.disabled = false; btn.querySelector('span').textContent = isKnownDevice ? 'Sign In' : 'Get Started'; }
-    let errMsg = 'Failed to send OTP. Try again.';
-    if (e.code === 'auth/too-many-requests') errMsg = 'Too many attempts. Try again later.';
-    if (e.code === 'auth/invalid-phone-number') errMsg = 'Invalid phone number.';
-    showMsg(msg, 'error', errMsg);
-    if (_recaptchaVerifier) { try { _recaptchaVerifier.clear(); } catch(e2){} _recaptchaVerifier = null; }
+    showMsg(msg, 'error', e.message || 'Failed to send OTP. Try again.');
   }
 }
 
@@ -703,13 +703,13 @@ window.verifyOTP = async function() {
   const btn    = document.getElementById('otp-verify-btn');
 
   if (!/^\d{6}$/.test(otpVal)) { showMsg(msg,'error','Enter the 6-digit OTP'); return; }
-  if (!_otpConfirmationResult)  { showMsg(msg,'error','Session expired. Go back and retry.'); return; }
+  if (!_generatedOTP)           { showMsg(msg,'error','Session expired. Go back and retry.'); return; }
 
   if (btn) { btn.disabled = true; btn.querySelector('span').textContent = 'Verifying…'; }
   showMsg(msg, 'success', 'Verifying OTP…');
 
   try {
-    await _otpConfirmationResult.confirm(otpVal);
+    if (otpVal !== _generatedOTP) throw Object.assign(new Error('Incorrect OTP. Check and retry.'), { code: 'otp/invalid' });
     // OTP confirmed ✓ — now handle Firestore account
     const phone = _otpPendingPhone;
     const nameInput = _otpPendingName;
@@ -764,7 +764,7 @@ window.verifyOTP = async function() {
     CURRENT_USER.phone = phone;
     CURRENT_USER.upi   = finalUpi;
 
-    _otpConfirmationResult = null;
+    _generatedOTP    = null;
     _otpPendingPhone = null;
     _otpPendingName  = null;
     _otpPendingUpi   = null;
@@ -779,16 +779,13 @@ window.verifyOTP = async function() {
   } catch(e) {
     console.error('OTP verify error:', e);
     if (btn) { btn.disabled = false; btn.querySelector('span').textContent = 'Verify OTP'; }
-    let errMsg = 'Wrong OTP. Try again.';
-    if (e.code === 'auth/code-expired')        errMsg = 'OTP expired. Go back and resend.';
-    if (e.code === 'auth/invalid-verification-code') errMsg = 'Incorrect OTP. Check and retry.';
-    showMsg(msg, 'error', errMsg);
+    showMsg(msg, 'error', e.message || 'Wrong OTP. Try again.');
   }
 }
 
 window.otpBack = function() {
-  _otpConfirmationResult = null;
-  if (_recaptchaVerifier) { try { _recaptchaVerifier.clear(); } catch(e){} _recaptchaVerifier = null; }
+  _generatedOTP    = null;
+  _otpPendingPhone = null;
   showScreen('screen-login');
 }
 
@@ -799,12 +796,16 @@ window.resendOTP = async function() {
   btn.disabled = true;
   showMsg(msg,'success','Resending OTP…');
   try {
-    if (_recaptchaVerifier) { try { _recaptchaVerifier.clear(); } catch(e){} }
-    _recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', { size: 'invisible' });
-    _otpConfirmationResult = await signInWithPhoneNumber(auth, '+91' + _otpPendingPhone, _recaptchaVerifier);
+    _generatedOTP = String(Math.floor(100000 + Math.random() * 900000));
+    const f2sRes = await fetch(
+      `https://www.fast2sms.com/dev/bulkV2?authorization=${FAST2SMS_API_KEY}&route=otp&variables_values=${_generatedOTP}&flash=0&numbers=${_otpPendingPhone}`,
+      { method: 'GET' }
+    );
+    const f2sData = await f2sRes.json();
+    if (!f2sData.return) throw new Error(f2sData.message || 'Fast2SMS error');
     showMsg(msg,'success','OTP resent!');
   } catch(e) {
-    showMsg(msg,'error','Failed to resend. Wait a moment and try again.');
+    showMsg(msg,'error', e.message || 'Failed to resend. Wait a moment and try again.');
   }
   setTimeout(() => { btn.disabled = false; }, 30000); // 30s cooldown
 }
