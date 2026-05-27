@@ -549,6 +549,7 @@ function showOverlay(icon, title, sub) {
   document.getElementById('overlay-sub').textContent   = sub;
   document.getElementById('success-overlay').classList.remove('hidden');
 }
+window.showOverlay = showOverlay;
 
 window.closeOverlay = function() {
   document.getElementById('success-overlay').classList.add('hidden');
@@ -571,6 +572,7 @@ window.showScreen = function(id) {
   target.scrollTop = 0;
 
   if (id === 'screen-home')    loadHomeData();
+  if (id !== 'screen-home')    _homeListenersActive = false;
   if (id === 'screen-receive') generateReceiveQR();
   if (id === 'screen-pin')     refreshPinSettingsUI();
   if (id === 'screen-copilot') ariaLoadDashboard();
@@ -810,8 +812,11 @@ async function loadHomeData() {
 
   // Only attach listeners once per session -- prevent stacking
   if (_homeListenersActive) return;
-  _homeListenersActive = true;
   teardownListeners();
+  _homeListenersActive = true;
+
+  // Replay any offline vouchers that were queued while network was down
+  replayPendingVouchers().catch(() => {});
 
   unsubBalance = onSnapshot(
     doc(db, "users", CURRENT_USER.phone),
@@ -2058,7 +2063,7 @@ window.redeemVoucher = async function() {
 
     const newBal = parseFloat(sessionStorage.getItem('pm_balance')||'0') + amount;
     sessionStorage.setItem('pm_balance', newBal.toFixed(2));
-    stopScan();
+    window.stopScan();
     launchConfetti(80);
     if (navigator.vibrate) navigator.vibrate([200,100,200,100,400]);
     showOverlay('', 'Received!', `₹${amount.toFixed(2)} from ${fromName} added to wallet`);
@@ -2070,7 +2075,7 @@ window.redeemVoucher = async function() {
       localStorage.setItem('pending_vouchers', JSON.stringify(pending));
       const lb = parseFloat(sessionStorage.getItem('pm_balance') || '0');
       sessionStorage.setItem('pm_balance', (lb + amount).toFixed(2));
-      stopScan();
+      window.stopScan();
       showOverlay('', 'Saved Offline!', `₹${amount.toFixed(2)} saved — syncs when internet returns`);
     } else {
       showMsg(msg,'error', e.message || 'Error. Try again.');
@@ -2134,4 +2139,9 @@ document.addEventListener('DOMContentLoaded', () => {
     phoneEl.addEventListener('change', handler);
     phoneEl.addEventListener('paste',  () => setTimeout(handler, 0));
   }
+
+  // Replay any pending offline vouchers when the device comes back online
+  window.addEventListener('online', () => {
+    if (CURRENT_USER.phone) replayPendingVouchers().catch(() => {});
+  });
 });

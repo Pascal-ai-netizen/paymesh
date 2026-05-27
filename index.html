@@ -1127,6 +1127,12 @@ window.__PM_SPLASH_TIMEOUT = setTimeout(function() {
         <label>Phone Number</label>
         <input type="tel" id="login-phone" placeholder="10 digit number" maxlength="10">
       </div>
+      <div id="login-remember-row" class="remember-row hidden" onclick="toggleRemember()">
+        <div class="toggle-track" id="remember-track">
+          <div class="toggle-knob"></div>
+        </div>
+        <span class="remember-label">Remember me on this device</span>
+      </div>
       <!-- FIX: type=button prevents accidental form submit -->
       <button type="button" class="btn-primary" id="login-btn" onclick="loginUser()">
         <span>Get Started</span>
@@ -1953,7 +1959,8 @@ async function btAdvertise() {
         if(subEl) subEl.innerHTML =
           '<div style="font-size:36px;font-weight:800;color:var(--em);margin:12px 0;">+&#8377;' + data.amount.toFixed(2) + '</div>' +
           '<div style="color:var(--text2);font-size:14px;">From ' + data.senderName + '</div>';
-        var bal = parseFloat(localStorage.getItem('pm_balance')||'0') + data.amount;
+        var bal = parseFloat(sessionStorage.getItem('pm_balance')||localStorage.getItem('pm_balance')||'0') + data.amount;
+        sessionStorage.setItem('pm_balance', bal.toFixed(2));
         localStorage.setItem('pm_balance', bal.toFixed(2));
         setTimeout(function(){ if(window.showScreen) window.showScreen('screen-home'); }, 2500);
       }
@@ -2047,7 +2054,8 @@ window.btRedeemCode = async function() {
       addDoc(collection(db,'transactions'),{phone:phone,label:'Quick Transfer to '+receiverName,amount:amount,type:'debit',time:time}),
       addDoc(collection(db,'transactions'),{phone:receiverPhone,label:'Quick Transfer from '+name,amount:amount,type:'credit',time:time})
     ]);
-    var newBal = Math.max(0,parseFloat(localStorage.getItem('pm_balance')||'0')-amount);
+    var newBal = Math.max(0,parseFloat(sessionStorage.getItem('pm_balance')||localStorage.getItem('pm_balance')||'0')-amount);
+    sessionStorage.setItem('pm_balance',newBal.toFixed(2));
     localStorage.setItem('pm_balance',newBal.toFixed(2));
     if(navigator.vibrate) navigator.vibrate([100,50,200]);
     if(window.showOverlay) window.showOverlay('','Sent!','&#8377;'+amount.toFixed(2)+' sent to '+receiverName);
@@ -2130,7 +2138,7 @@ window.nfcWrite=async function(){
 
   // Quick local balance check from cache — no Firestore read needed here.
   // The receiver's atomic runTransaction is the authoritative guard against overdraft.
-  var cachedBal=parseFloat(localStorage.getItem('pm_balance')||sessionStorage.getItem('pm_balance')||'0');
+  var cachedBal=parseFloat(sessionStorage.getItem('pm_balance')||localStorage.getItem('pm_balance')||'0');
   if(cachedBal<amount){setMsg('error','Insufficient balance. You have &#8377;'+cachedBal.toFixed(2));return;}
 
   if(window.requirePin){
@@ -2272,7 +2280,8 @@ async function nfcListen(){
           ]);
 
           // Update local balance cache
-          var newBal=parseFloat(localStorage.getItem('pm_balance')||'0')+amount;
+          var newBal=parseFloat(sessionStorage.getItem('pm_balance')||localStorage.getItem('pm_balance')||'0')+amount;
+          sessionStorage.setItem('pm_balance',newBal.toFixed(2));
           localStorage.setItem('pm_balance',newBal.toFixed(2));
 
           if(navigator.vibrate)navigator.vibrate([200,100,200]);
