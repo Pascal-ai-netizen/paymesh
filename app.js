@@ -545,6 +545,15 @@ function addRipple(e) {
 // ═══════════════════════════════════════════
 
 function showOverlay(icon, title, sub) {
+  if (typeof window.showPaymentSuccess === 'function') {
+    window.showPaymentSuccess(title, sub).then(function() {
+      document.getElementById('overlay-title').textContent = title;
+      document.getElementById('overlay-sub').textContent   = sub;
+      document.getElementById('success-overlay').classList.remove('hidden');
+      launchConfetti(70);
+    });
+    return;
+  }
   document.getElementById('overlay-title').textContent = title;
   document.getElementById('overlay-sub').textContent   = sub;
   document.getElementById('success-overlay').classList.remove('hidden');
@@ -1677,7 +1686,14 @@ window.sendMoney = async function() {
   try { await requirePin('Confirm Send', `Enter PIN to send ₹${amount.toFixed(2)}`); }
   catch(e) { return; }
 
-  showMsg(msg,'success','Processing...');
+  // ── PAYMENT ANIMATION START ──
+  const _sendAmtVal = amount;
+  const _sendPhoneVal = phone;
+  if (typeof window.showPaymentAnim === 'function') {
+    await window.showPaymentAnim(_sendAmtVal, _sendPhoneVal);
+  } else {
+    showMsg(msg,'success','Processing...');
+  }
 
   try {
     const senderRef   = doc(db,"users",CURRENT_USER.phone);
