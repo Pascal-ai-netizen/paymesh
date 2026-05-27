@@ -489,6 +489,7 @@ let detectedQR      = null;
 
 let unsubBalance = null;
 let unsubTxns    = null;
+let unsubLoadNotif = null; // watches pending UTR requests for admin approval
 
 // ═══════════════════════════════════════════
 // HELPERS
@@ -608,6 +609,29 @@ window.showScreen = function(id) {
     if (noteGroup) noteGroup.style.display = 'none';
     const sendBtn = document.getElementById('send-submit-btn');
     if (sendBtn) { sendBtn.disabled = false; sendBtn.style.opacity = '1'; sendBtn.style.cursor = 'pointer'; sendBtn.textContent = 'Send Now'; }
+
+    // §6: Proactive late-night advisory
+    const sendAdvisory = document.getElementById('aria-send-advisory');
+    if (sendAdvisory) {
+      const hour = new Date().getHours();
+      const isNightNow = hour >= 22 || hour < 5;
+      const ariaData = ariaGetData();
+      const recentRed = (ariaData.log || []).filter(e =>
+        (e.tier === 'red' || e.tier === 'blocked') &&
+        (Date.now() - new Date(e.time).getTime()) < 86400000
+      ).length;
+      if (isNightNow) {
+        sendAdvisory.style.display = '';
+        sendAdvisory.innerHTML = `<span>🌙</span> Late-night transactions are higher risk. Aria is watching closely.`;
+        sendAdvisory.className = 'aria-send-advisory night';
+      } else if (recentRed > 0) {
+        sendAdvisory.style.display = '';
+        sendAdvisory.innerHTML = `<span>⚠️</span> Aria flagged a transaction recently. Stay alert.`;
+        sendAdvisory.className = 'aria-send-advisory warning';
+      } else {
+        sendAdvisory.style.display = 'none';
+      }
+    }
   }
 }
 
@@ -768,8 +792,9 @@ window.logoutUser = function() {
 // ═══════════════════════════════════════════
 
 function teardownListeners() {
-  if (unsubBalance) { unsubBalance(); unsubBalance = null; }
-  if (unsubTxns)    { unsubTxns();    unsubTxns    = null; }
+  if (unsubBalance)   { unsubBalance();   unsubBalance   = null; }
+  if (unsubTxns)      { unsubTxns();      unsubTxns      = null; }
+  if (unsubLoadNotif) { unsubLoadNotif(); unsubLoadNotif = null; }
   _homeListenersActive = false;
 }
 
@@ -871,6 +896,26 @@ async function loadHomeData() {
     (snap) => renderTransactions(snap),
     (err)  => console.warn('Tx listener error:', err.message)
   );
+
+  // ── LOAD APPROVAL NOTIFICATION ──
+  // Watch user's pending UTR submissions. When admin approves one, notify the user immediately.
+  const _notifiedUTRs = new Set(JSON.parse(sessionStorage.getItem('pm_notified_utrs') || '[]'));
+  const utrQuery = query(
+    collection(db, "utrs"),
+    where("phone", "==", CURRENT_USER.phone),
+    where("status", "==", "approved")
+  );
+  unsubLoadNotif = onSnapshot(utrQuery, (snap) => {
+    snap.forEach(d => {
+      const data = d.data();
+      const utr  = data.utr;
+      if (!utr || _notifiedUTRs.has(utr)) return;
+      _notifiedUTRs.add(utr);
+      sessionStorage.setItem('pm_notified_utrs', JSON.stringify([..._notifiedUTRs]));
+      // Show an in-app toast notification
+      _showLoadApprovedToast(data.amount, utr);
+    });
+  }, (err) => console.warn('Load notif listener error:', err.message));
 }
 
 function renderTransactions(snap) {
@@ -979,8 +1024,29 @@ window.onSendFieldChange = function() {
 
   if (!phone || phone.length < 10 || !amount || amount <= 0) {
     _hideFraudPanel();
+    // §4: Show prior warning banner even without amount if phone is 10 digits
+    if (phone && phone.length === 10) {
+      const priorEl = document.getElementById('aria-prior-warning');
+      if (priorEl) {
+        const aData = ariaGetData();
+        const pw = (aData.log || []).filter(e => e.toPhone === phone && (e.tier === 'amber' || e.tier === 'red' || e.tier === 'blocked'));
+        if (pw.length > 0) {
+          priorEl.style.display = '';
+          priorEl.textContent = `⚠ Aria warned you about this number ${pw.length} time${pw.length>1?'s':''} before.`;
+        } else {
+          priorEl.style.display = 'none';
+        }
+      }
+    } else {
+      const priorEl = document.getElementById('aria-prior-warning');
+      if (priorEl) priorEl.style.display = 'none';
+    }
     return;
   }
+
+  // §4: Hide prior warning once fraud panel takes over
+  const priorEl = document.getElementById('aria-prior-warning');
+  if (priorEl) priorEl.style.display = 'none';
 
   // Only reset override when phone or amount changes — not on note edits
   const coreChanged = (phone !== _fraudLastPhone || amount !== _fraudLastAmount);
@@ -1038,9 +1104,18 @@ async function _runFraudScore(phone, amount, note) {
   const hour = new Date().getHours();
   const isNight = hour >= 20 || hour < 6;
 
+  // §4: Per-contact prior warning check — check Aria log for past warnings about this phone
+  try {
+    const ariaData = ariaGetData();
+    const priorWarnings = (ariaData.log || []).filter(e => e.toPhone === phone && (e.tier === 'amber' || e.tier === 'red' || e.tier === 'blocked'));
+    if (priorWarnings.length > 0) {
+      signals.push({ sev:'amber', icon:'📋', text:`Aria warned you about this number ${priorWarnings.length} time${priorWarnings.length>1?'s':''} before. Review carefully.` });
+      score += 15;
+    }
+  } catch(e) {}
+
   // ── Pattern 1: First Contact High Value ──
   // Uses `toPhone` field written by sendMoney on each debit transaction.
-  // Cache result in sessionStorage — once we know it's 'known' or 'new', no need to re-query.
   let isNewContact = true;
   const cachedFc = _getFcCache(phone);
   if (cachedFc !== null) {
@@ -1054,8 +1129,6 @@ async function _runFraudScore(phone, amount, note) {
         wh('toPhone','==',phone)
       ));
       isNewContact = priorSnap.empty;
-      // Cache: if NOT new contact, it stays 'known' forever this session.
-      // If new, we'll re-check after a successful send (cache gets cleared).
       _setFcCache(phone, isNewContact ? 'new' : 'known');
     } catch(e) {
       isNewContact = true; // conservative default on network error
@@ -1063,6 +1136,9 @@ async function _runFraudScore(phone, amount, note) {
   }
 
   if (seq !== _fraudSeq) return; // stale — a newer call is in flight
+
+  // §2 Fix: weight by contact familiarity — known-contact non-drain cap
+  const isKnownContact = !isNewContact;
 
   if (isNewContact && amount > 500 && isNight) {
     score += 40;
@@ -1072,18 +1148,63 @@ async function _runFraudScore(phone, amount, note) {
     signals.push({ sev:'amber', icon:'👤', text:`You've never sent money to this number before and the amount is above ₹500.` });
   }
 
-  // ── Pattern 3: Round Number (additive, not multiplicative) ──
+  // §1: New pattern — known contact sudden spike (>3x their average receive amount)
+  if (isKnownContact) {
+    try {
+      const { getDocs: gd2, query: qr2, collection: col2, where: wh2, limit: lim2, orderBy: ob2 } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
+      const recentSnap = await gd2(qr2(col2(db,'transactions'),
+        wh2('phone','==',CURRENT_USER.phone),
+        wh2('type','==','debit'),
+        wh2('toPhone','==',phone),
+        ob2('time','desc'), lim2(5)
+      ));
+      if (!recentSnap.empty) {
+        const amounts = [];
+        recentSnap.forEach(d => amounts.push(d.data().amount || 0));
+        const avg = amounts.reduce((s,a) => s+a, 0) / amounts.length;
+        if (avg > 0 && amount > avg * 3) {
+          score += 30;
+          signals.push({ sev:'red', icon:'📈', text:`This amount is ${Math.round(amount/avg)}× your usual send to this contact — possible account takeover scenario.` });
+        }
+      }
+    } catch(e) {}
+    if (seq !== _fraudSeq) return;
+  }
+
+  // §1: Velocity check — >3 sends in last 10 minutes (from Aria log)
+  try {
+    const vData = ariaGetData();
+    const recentSends = (vData.log || []).filter(e =>
+      e.context === 'send' &&
+      Date.now() - new Date(e.time).getTime() < 10 * 60 * 1000
+    );
+    if (recentSends.length >= 3) {
+      score += 35;
+      signals.push({ sev:'red', icon:'⚡', text:`You've made ${recentSends.length} send attempts in the last 10 minutes — rapid drain is a scammer script pattern.` });
+    }
+  } catch(e) {}
+
+  // ── Pattern 3: Round Number ──
   const isRound = amount > 0 && amount % 500 === 0;
   if (isRound && isNewContact) {
-    score += 15; // additive bonus on top of Pattern 1, per spec's 1.5x spirit
+    score += 15;
     signals.push({ sev:'amber', icon:'🎯', text:`₹${amount.toFixed(0)} is a suspiciously round number — real transactions are rarely this exact.` });
   } else if (isRound && isNight) {
     score += 10;
     signals.push({ sev:'amber', icon:'🎯', text:`Round-number amounts at night are a common scam signal.` });
   }
 
+  // §1 + §2 Fix: Synthesized stacked-signal row for new-contact + night + round
+  const nightFlag  = isNight && signals.some(s => s.icon === '🌙');
+  const roundFlag  = isRound && signals.some(s => s.icon === '🎯');
+  if (isNewContact && nightFlag && roundFlag) {
+    signals.push({ sev:'red', icon:'🚨', text:`Three risk factors detected simultaneously: new contact + nighttime + round amount.` });
+    score += 10; // stacking bonus
+  }
+
   // ── Pattern 4: Balance Drain ──
-  if (currentBal > 0) {
+  // §2 Fix: don't fire drain if balance is under ₹200 (draining ₹190 of ₹190 isn't meaningful)
+  if (currentBal >= 200) {
     const drainRatio = amount / currentBal;
     if (drainRatio > 0.95 && isNewContact) {
       score += 55;
@@ -1092,6 +1213,13 @@ async function _runFraudScore(phone, amount, note) {
       score += 35;
       signals.push({ sev:'red', icon:'💸', text:`This would drain ${Math.round(drainRatio*100)}% of your wallet in one transaction to a new contact.` });
     }
+  }
+
+  // §2 Fix: for known contacts cap non-drain pattern contribution at 20 to cut false positives
+  if (isKnownContact) {
+    const drainScore = signals.filter(s => s.icon === '💸').length > 0 ? score : 0;
+    const nonDrainScore = score - drainScore;
+    if (nonDrainScore > 20) score = drainScore + 20;
   }
 
   // ── Pattern 6: Note Field Keywords ──
@@ -1107,16 +1235,19 @@ async function _runFraudScore(phone, amount, note) {
     }
   }
 
-  // ── Pattern 7: Time-Since-Account ──
-  // Cache the recipient's user doc for 5 minutes to avoid a read on every debounce tick.
+  // ── Pattern 7: Time-Since-Account + extended recipient intelligence ──
   try {
     let recipData = _getUdCache(phone);
     if (!recipData) {
       const rSnap = await getDoc(doc(db,'users',phone));
-      if (seq !== _fraudSeq) return; // stale check after second await
+      if (seq !== _fraudSeq) return;
       if (rSnap.exists()) {
         recipData = rSnap.data();
         _setUdCache(phone, recipData);
+      } else {
+        // §1: Recipient has no PayMesh account at all — weak signal
+        score += 8;
+        signals.push({ sev:'amber', icon:'❓', text:`This phone number is not registered on PayMesh. Double-check who you're paying.` });
       }
     } else {
       if (seq !== _fraudSeq) return;
@@ -1133,14 +1264,28 @@ async function _runFraudScore(phone, amount, note) {
           signals.push({ sev:'amber', icon:'🆕', text:`This account is less than 7 days old and you've never paid them before.` });
         }
       }
+      // §3: Check if recipient's UPI looks synthetic (numeric-heavy)
+      if (recipData.upi) {
+        const upiHandle = recipData.upi.split('@')[0] || '';
+        const numericRatio = (upiHandle.replace(/\D/g,'').length) / (upiHandle.length || 1);
+        if (numericRatio > 0.7 && upiHandle.length > 6) {
+          score += 12;
+          signals.push({ sev:'amber', icon:'🔢', text:`Recipient's UPI handle is mostly numbers — mule accounts often have auto-generated numeric IDs.` });
+        }
+      }
+      // §3: Check flagged field (admin-settable)
+      if (recipData.flagged === true) {
+        score += 60;
+        signals.push({ sev:'red', icon:'🚩', text:`This account has been flagged by PayMesh. Do not proceed with this transfer.` });
+      }
     }
-  } catch(e) { /* ignore — network issue, score proceeds without Pattern 7 */ }
+  } catch(e) { /* ignore — network issue */ }
 
-  if (seq !== _fraudSeq) return; // final stale check before rendering
-  _renderFraudPanel(score, signals, amount);
+  if (seq !== _fraudSeq) return;
+  _renderFraudPanel(score, signals, amount, phone);
 }
 
-function _renderFraudPanel(score, signals, amount) {
+function _renderFraudPanel(score, signals, amount, toPhone) {
   const badge    = document.getElementById('fraud-badge');
   const panel    = document.getElementById('fraud-panel');
   const fill     = document.getElementById('fraud-score-fill');
@@ -1179,12 +1324,12 @@ function _renderFraudPanel(score, signals, amount) {
       sendBtn.textContent = 'Send Now';
     }
     // Log safe send to Aria
-    if (typeof ariaLogEvent === 'function') ariaLogEvent('green', 'send', [], amount);
+    if (typeof ariaLogEvent === 'function') ariaLogEvent('green', 'send', [], amount, toPhone);
     return;
   }
 
   // Log to Aria
-  if (typeof ariaLogEvent === 'function') ariaLogEvent(tier, 'send', signals, amount);
+  if (typeof ariaLogEvent === 'function') ariaLogEvent(tier, 'send', signals, amount, toPhone);
 
   // ── Panel ──
   if (panel) panel.className = `fraud-panel show ${tier}`;
@@ -1325,7 +1470,7 @@ function ariaSaveData(data) {
   } catch(e) {}
 }
 
-function ariaLogEvent(tier, context, signals, amount) {
+function ariaLogEvent(tier, context, signals, amount, toPhone) {
   const data = ariaGetData();
   if (tier === 'green') { data.safe = (data.safe || 0) + 1; }
   else if (tier === 'amber') { data.warned = (data.warned || 0) + 1; }
@@ -1334,18 +1479,29 @@ function ariaLogEvent(tier, context, signals, amount) {
   // Recalculate rolling risk score (weighted average of last 10 events)
   const logEntry = {
     tier,
-    context, // 'send' | 'voucher'
+    context, // 'send' | 'voucher' | 'quick_transfer'
     amount,
     signals: signals.map(s => s.text),
     time: new Date().toISOString()
   };
+  // Fix §8: store toPhone so per-contact history works
+  if (toPhone) logEntry.toPhone = toPhone;
   data.log = data.log || [];
   data.log.push(logEntry);
 
-  // Risk score: average severity of last 10 events (blocked=100,red=70,amber=30,green=0)
+  // Fix §8 (time-decay): events >7d contribute at 25%, events >30d contribute 0%
   const tierWeights = { blocked: 100, red: 70, amber: 30, green: 0 };
+  const now = Date.now();
   const recent = data.log.slice(-10);
-  const avgRisk = recent.reduce((sum, e) => sum + (tierWeights[e.tier] || 0), 0) / recent.length;
+  let weightedSum = 0, weightTotal = 0;
+  recent.forEach(e => {
+    const ageMs = now - new Date(e.time).getTime();
+    const ageDays = ageMs / 86400000;
+    let w = ageDays > 30 ? 0 : ageDays > 7 ? 0.25 : 1;
+    weightedSum += (tierWeights[e.tier] || 0) * w;
+    weightTotal += w;
+  });
+  const avgRisk = weightTotal > 0 ? weightedSum / weightTotal : 0;
   data.riskScore = Math.round(avgRisk);
 
   ariaSaveData(data);
@@ -1403,6 +1559,28 @@ function ariaLoadDashboard() {
     else                      greeting.textContent = `Hey ${name}! All good here — your account is looking clean. I'm monitoring every transaction and voucher in real-time. Stay safe!`;
   }
 
+  // §4: Aria Insights — dynamic sentences from log data
+  const insightsEl = document.getElementById('aria-insights');
+  if (insightsEl) {
+    const log = data.log || [];
+    const now = Date.now();
+    const last7 = log.filter(e => (now - new Date(e.time).getTime()) < 7 * 86400000);
+    const last24 = log.filter(e => (now - new Date(e.time).getTime()) < 86400000);
+    const newContactSends = last7.filter(e => e.context === 'send' && e.tier !== 'green' && e.signals && e.signals.some(s => s.toLowerCase().includes("never")));
+    const roundNightCount = log.slice(-10).filter(e => e.signals && e.signals.some(s => s.toLowerCase().includes("round"))).length;
+    const noWarningsWeek = last7.filter(e => e.tier !== 'green').length === 0;
+    const highRisk24 = last24.filter(e => e.tier === 'red' || e.tier === 'blocked').length;
+
+    const insights = [];
+    if (highRisk24 > 0) insights.push(`⚠️ Aria flagged ${highRisk24} high-risk transaction${highRisk24>1?'s':''} in the last 24 hours. Stay alert.`);
+    if (newContactSends.length >= 4) insights.push(`🆕 You've sent money to ${newContactSends.length} new contacts this week. Consider verifying them before your next transfer.`);
+    if (roundNightCount >= 3) insights.push(`🌙 Your last ${roundNightCount} flagged transactions were round amounts at night — a common scam pattern.`);
+    if (noWarningsWeek) insights.push(`✅ No warnings in the last 7 days. Your account looks clean.`);
+    if (!insights.length) insights.push(`🛡️ Aria is actively monitoring your transactions in real-time.`);
+
+    insightsEl.innerHTML = insights.map(i => `<div class="aria-insight-row">${i}</div>`).join('');
+  }
+
   // Tip of the day (rotates daily)
   const tipEl = document.getElementById('aria-tip-text');
   if (tipEl) {
@@ -1423,7 +1601,7 @@ function _ariaRenderLog(log) {
   }
   const tierIcon  = { green: '✅', amber: '⚠️', red: '🚨', blocked: '🚫' };
   const tierLabel = { green: 'Safe', amber: 'Warning', red: 'High Risk', blocked: 'Blocked' };
-  const ctxLabel  = { send: 'Send Money', voucher: 'Voucher' };
+  const ctxLabel  = { send: 'Send Money', voucher: 'Voucher', quick_transfer: 'Quick Transfer' };
   function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
   listEl.innerHTML = [...log].reverse().map(e => {
     let displayTime = e.time || '';
@@ -1684,7 +1862,12 @@ window.sendMoney = async function() {
   }
 
   try { await requirePin('Confirm Send', `Enter PIN to send ₹${amount.toFixed(2)}`); }
-  catch(e) { return; }
+  catch(e) {
+    if (e && e.message && e.message.startsWith('PIN locked')) {
+      showMsg(msg, 'error', e.message);
+    }
+    return;
+  }
 
   // ── PAYMENT ANIMATION START ──
   const _sendAmtVal = amount;
@@ -1753,7 +1936,12 @@ window.generateVoucher = async function() {
   }
 
   try { await requirePin('Confirm Voucher', `Enter PIN to create ₹${amount.toFixed(2)} voucher`); }
-  catch(e) { return; }
+  catch(e) {
+    if (e && e.message && e.message.startsWith('PIN locked')) {
+      showMsg(msg, 'error', e.message);
+    }
+    return;
+  }
 
   showMsg(msg,'success','Creating voucher...');
 
@@ -1975,11 +2163,13 @@ window.startScan = async function() {
             const data = JSON.parse(code.data);
             if (data.type === 'person' && data.phone && data.name) {
               clearInterval(scannerInterval); scannerInterval = null;
+              if (scannerStream) { scannerStream.getTracks().forEach(t => t.stop()); scannerStream = null; }
               detectedQR = { kind:'person', ...data };
               showPersonResult(data); return;
             }
             if (data.code && data.amount && data.from) {
               clearInterval(scannerInterval); scannerInterval = null;
+              if (scannerStream) { scannerStream.getTracks().forEach(t => t.stop()); scannerStream = null; }
               detectedQR = { kind:'voucher', ...data };
               showVoucherResult(data);
             }
@@ -2047,9 +2237,46 @@ window.redeemVoucher = async function() {
   const fromName = voucher.from;
 
   try { await requirePin('Confirm Redeem', `Enter PIN to redeem ₹${amount.toFixed(2)} voucher`); }
-  catch(e) { msg.className = 'msg'; msg.textContent = ''; return; }
+  catch(e) {
+    if (e && e.message && e.message.startsWith('PIN locked')) {
+      showMsg(msg, 'error', e.message);
+    }
+    msg.className = 'msg'; msg.textContent = ''; return;
+  }
 
   showMsg(msg,'success','Verifying...');
+
+  // §5: Voucher redeem-side Aria checks (runs before the Firestore transaction)
+  try {
+    const currentBal = parseFloat(sessionStorage.getItem('pm_balance') || '0');
+    const redeemSignals = [];
+    let redeemScore = 0;
+
+    // V4: Large redeem vs redeemer's current balance
+    if (currentBal > 0 && amount / currentBal > 0.5) {
+      redeemScore += 30;
+      redeemSignals.push({ sev:'amber', icon:'💸', text:`This voucher is worth ${Math.round(amount/currentBal*100)}% of your current balance — verify you recognise the sender.` });
+    }
+
+    // V5: Time-between-create-and-redeem (< 60 seconds = suspicious)
+    if (voucher.createdAt) {
+      const createAge = Date.now() - new Date(voucher.createdAt).getTime();
+      if (createAge < 60 * 1000) {
+        redeemScore += 40;
+        redeemSignals.push({ sev:'red', icon:'⏱️', text:`This voucher was created less than 60 seconds ago — be very cautious, this could be a social engineering attack.` });
+      }
+    }
+
+    if (redeemSignals.length > 0) {
+      const redeemTier = redeemScore >= 55 ? 'red' : 'amber';
+      ariaLogEvent(redeemTier, 'voucher', redeemSignals, amount);
+      // For high-risk, require confirmation
+      if (redeemTier === 'red') {
+        const ok = confirm(`⚠️ Aria Warning: ${redeemSignals[0].text}\n\nDo you still want to redeem this voucher?`);
+        if (!ok) { msg.className = 'msg'; msg.textContent = ''; return; }
+      }
+    }
+  } catch(vErr) { /* non-blocking */ }
 
   try {
     const vRef        = doc(db,"vouchers",voucher.code);
@@ -2118,6 +2345,9 @@ window.stopScan = function() {
     const phone = localStorage.getItem('pm_phone') || sessionStorage.getItem('pm_phone');
     const name  = localStorage.getItem('pm_name')  || sessionStorage.getItem('pm_name')  || '';
     const upi   = localStorage.getItem('pm_upi')   || sessionStorage.getItem('pm_upi')   || '';
+
+    // Preload QRCode lib eagerly so "My QR" screen renders instantly
+    loadScript('https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js').catch(() => {});
 
     if (!phone) {
       showScreen('screen-login');

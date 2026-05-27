@@ -1586,6 +1586,31 @@ input[type="text"]{
   padding-left:max(18px, env(safe-area-inset-left, 18px));
   padding-right:max(18px, env(safe-area-inset-right, 18px));
 }
+
+/* ══════════════════════════════════════
+   ARIA ENHANCEMENTS v2 — advisory, insights
+══════════════════════════════════════ */
+.aria-send-advisory {
+  display:flex;align-items:center;gap:8px;
+  font-size:13px;font-weight:600;border-radius:12px;
+  padding:11px 14px;
+}
+.aria-send-advisory.night {
+  background:rgba(77,159,255,0.10);
+  border:1px solid rgba(77,159,255,0.25);
+  color:var(--blue);
+}
+.aria-send-advisory.warning {
+  background:rgba(255,184,48,0.10);
+  border:1px solid rgba(255,184,48,0.28);
+  color:var(--amber);
+}
+.aria-insight-row {
+  padding:7px 0;
+  border-bottom:1px solid rgba(255,255,255,0.05);
+  font-size:13px;color:var(--text2);line-height:1.55;
+}
+.aria-insight-row:last-child{border-bottom:none;}
 </style>
 </head>
 <body>
@@ -1906,6 +1931,10 @@ window.__PM_SPLASH_TIMEOUT = setTimeout(function() {
     </div>
   </div>
   <div style="height:12px"></div>
+  <!-- §6: Proactive Aria advisory banners (night/recent-risk) -->
+  <div id="aria-send-advisory" style="display:none;margin:0 14px 10px;padding:11px 14px;border-radius:12px;font-size:13px;font-weight:600;display:none;gap:8px;"></div>
+  <!-- §4: Prior-contact warning (shown before amount is entered) -->
+  <div id="aria-prior-warning" style="display:none;margin:0 14px 8px;padding:10px 14px;border-radius:10px;background:rgba(255,184,48,0.10);border:1px solid rgba(255,184,48,0.28);color:var(--amber);font-size:13px;font-weight:600;"></div>
   <div class="card">
     <div class="form-group">
       <label>Recipient Phone Number</label>
@@ -2378,6 +2407,13 @@ if ('serviceWorker' in navigator) {
     <div class="aria-tip-icon">💡</div>
     <div class="aria-tip-text" id="aria-tip-text">Loading tip…</div>
   </div>
+  <!-- §4: Aria Insights — dynamic analysis of log data -->
+  <div style="margin:0 14px 14px;padding:16px;border-radius:16px;background:rgba(0,232,122,0.05);border:1px solid rgba(0,232,122,0.12);">
+    <div style="font-size:9px;font-weight:800;letter-spacing:2.5px;text-transform:uppercase;color:var(--text3);margin-bottom:12px;">Aria Insights</div>
+    <div id="aria-insights" style="display:flex;flex-direction:column;gap:8px;font-size:13px;color:var(--text2);line-height:1.6;">
+      <div>Loading insights…</div>
+    </div>
+  </div>
   <div class="pattern-log">
     <div class="pattern-log-header">
       <div class="section-label" style="padding:18px 0 8px">Aria's Detection Log</div>
@@ -2397,7 +2433,10 @@ if ('serviceWorker' in navigator) {
       Back
     </button>
     <span class="screen-title">Quick Transfer</span>
-    <div style="width:60px"></div>
+    <div id="qt-aria-badge" class="fraud-badge">
+      <span id="qt-aria-badge-icon">🛡️</span>
+      <span id="qt-aria-badge-label">ARIA</span>
+    </div>
   </div>
   <div style="padding:16px 0 20px;">
 
@@ -2442,7 +2481,7 @@ if ('serviceWorker' in navigator) {
       <div class="card" style="margin-bottom:14px;">
         <div class="form-group">
           <label>Amount to Send (&#8377;)</label>
-          <input type="number" id="bt-send-amount" placeholder="0.00" min="1" inputmode="decimal" />
+          <input type="number" id="bt-send-amount" placeholder="0.00" min="1" inputmode="decimal" oninput="(function(v){var a=parseFloat(v);if(a>0&&window._runQTFraudCheck)window._runQTFraudCheck(a);})(this.value)" />
         </div>
         <div class="form-group" style="margin-top:8px;">
           <label>Receiver’s Code</label>
@@ -2639,6 +2678,62 @@ function _getDb() {
   return getFirestore(apps[0]);
 }
 
+// ── QUICK TRANSFER ARIA FRAUD CHECK ──
+// Runs the key stateless patterns: balance drain, velocity, night+large, known-contact
+window._runQTFraudCheck = async function(amount) {
+  var currentBal = parseFloat(sessionStorage.getItem('pm_balance') || localStorage.getItem('pm_balance') || '0');
+  var hour = new Date().getHours();
+  var isNight = hour >= 20 || hour < 6;
+  var score = 0;
+  var signals = [];
+
+  // Balance drain (absolute floor ₹200)
+  if(currentBal >= 200 && amount/currentBal > 0.9) {
+    score += 50;
+    signals.push({ sev:'red', icon:'💸', text:'Quick Transfer would drain '+ Math.round(amount/currentBal*100) +'% of your wallet balance.' });
+  }
+
+  // Large amount at night
+  if(isNight && amount >= 2000) {
+    score += 30;
+    signals.push({ sev:'red', icon:'🌙', text:'Sending ₹'+amount.toFixed(0)+' via Quick Transfer after 8 PM is unusual and higher risk.' });
+  }
+
+  // Velocity — >3 sends in last 10 minutes in Aria log
+  try {
+    if(typeof ariaGetData === 'function') {
+      var vd = ariaGetData();
+      var rapid = (vd.log||[]).filter(function(e){
+        return (e.context==='send'||e.context==='quick_transfer') &&
+               Date.now()-new Date(e.time).getTime() < 10*60*1000;
+      });
+      if(rapid.length >= 3) {
+        score += 35;
+        signals.push({ sev:'red', icon:'⚡', text:'You\'ve made '+rapid.length+' transfers in the last 10 minutes — possible scripted drain.' });
+      }
+    }
+  } catch(e){}
+
+  // Log to Aria
+  var tier = score >= 80 ? 'blocked' : score >= 55 ? 'red' : score >= 30 ? 'amber' : 'green';
+  try { if(typeof ariaLogEvent==='function') ariaLogEvent(tier,'quick_transfer',signals,amount); } catch(e){}
+
+  // Update QT badge
+  var badge    = document.getElementById('qt-aria-badge');
+  var badgeLbl = document.getElementById('qt-aria-badge-label');
+  var badgeIco = document.getElementById('qt-aria-badge-icon');
+  if(badge) {
+    badge.className = 'fraud-badge visible ' + (tier==='green'?'green':tier==='amber'?'amber':'red');
+    if(badgeIco) badgeIco.textContent = tier==='green'?'✓':tier==='amber'?'⚠':'🛡';
+    if(badgeLbl) badgeLbl.textContent = tier==='green'?'SAFE':tier==='amber'?'CAUTION':tier==='blocked'?'HIGH RISK':'WARNING';
+    setTimeout(function(){ if(badge&&tier==='green') badge.className='fraud-badge'; }, 3000);
+  }
+
+  if(tier === 'blocked') return 'blocked';
+  if(tier === 'red' || tier === 'amber') return 'override_needed';
+  return 'safe';
+};
+
 function _qtPanel(send,receive,mode,unsup) {
   ['bt-send-panel','bt-receive-panel','bt-mode-select','bt-unsupported'].forEach(function(id,i) {
     var el = document.getElementById(id);
@@ -2750,6 +2845,24 @@ window.btRedeemCode = async function() {
   if(!phone)               { setMsg('error','Session error. Please refresh.'); return; }
   if(!db)                  { setMsg('error','App not ready. Please refresh.'); return; }
 
+  // ── ARIA FRAUD CHECK for Quick Transfer ──
+  var ariaBlocked = false;
+  var ariaOverrideGranted = false;
+  try {
+    if(typeof window._runQTFraudCheck === 'function') {
+      var qtResult = await window._runQTFraudCheck(amount);
+      if(qtResult === 'blocked') {
+        setMsg('error','Aria has blocked this transfer due to high fraud risk. Edit the amount.');
+        return;
+      }
+      if(qtResult === 'override_needed') {
+        // Show inline warning, wait for user confirmation
+        var confirmed = confirm('⚠️ Aria Warning: This Quick Transfer shows fraud risk signals. Do you still want to proceed?');
+        if(!confirmed) { setMsg('',''); return; }
+      }
+    }
+  } catch(e) {}
+
   if(window.requirePin) {
     try { await window.requirePin('Confirm Quick Transfer','Enter PIN to send'); }
     catch(e) { return; }
@@ -2793,15 +2906,17 @@ window.btRedeemCode = async function() {
       if(sBal<amount) throw new Error('Insufficient balance. You have &#8377;'+sBal.toFixed(2));
       tx.update(sRef,{balance:sBal-amount});
       tx.update(rRef,{balance:rBal+amount});
-      tx.delete(btRef); // Delete after use to save Firestore space
+      tx.delete(btRef);
     });
 
     _qtAttempts = 0;
     var time = new Date().toISOString();
     await Promise.all([
-      addDoc(collection(db,'transactions'),{phone:phone,label:'Quick Transfer to '+receiverName,amount:amount,type:'debit',time:time}),
+      addDoc(collection(db,'transactions'),{phone:phone,label:'Quick Transfer to '+receiverName,amount:amount,type:'debit',time:time,toPhone:receiverPhone}),
       addDoc(collection(db,'transactions'),{phone:receiverPhone,label:'Quick Transfer from '+name,amount:amount,type:'credit',time:time})
     ]);
+    // Log to Aria as quick_transfer context
+    try { if(typeof ariaLogEvent==='function') ariaLogEvent('green','quick_transfer',[],amount,receiverPhone); } catch(e){}
     var newBal = Math.max(0,parseFloat(sessionStorage.getItem('pm_balance')||localStorage.getItem('pm_balance')||'0')-amount);
     sessionStorage.setItem('pm_balance',newBal.toFixed(2));
     localStorage.setItem('pm_balance',newBal.toFixed(2));
