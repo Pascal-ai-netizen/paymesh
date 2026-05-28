@@ -175,7 +175,7 @@ body{
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import {
-  getFirestore, doc, getDoc, updateDoc, addDoc, collection
+  getFirestore, doc, getDoc, updateDoc, addDoc, collection, runTransaction
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -233,12 +233,24 @@ async function init() {
     }
 
     // ── Guard: already claimed / paid? ──
+    if (v.status === 'completed') {
+      renderAlreadyClaimed(v);
+      return;
+    }
+    if (v.status === 'needs_payout') {
+      renderAlreadyClaimed(v);
+      return;
+    }
     if (v.status === 'claimed') {
       renderAlreadyClaimed(v);
       return;
     }
     if (v.status === 'paid') {
       renderAlreadyPaid(v);
+      return;
+    }
+    if (v.status === 'locked') {
+      renderError('Link Locked', 'Too many incorrect code attempts. This voucher has been permanently locked. Contact the sender for a new one.');
       return;
     }
     if (v.status === 'USED' || v.status === 'expired') {
@@ -255,7 +267,14 @@ async function init() {
   }
 }
 
-// ── Render the claim form ──
+// ── Hash OTP for comparison ──
+async function hashOtp(plainOtp, tokenId) {
+  const buf  = new TextEncoder().encode(plainOtp + ':paymesh:' + tokenId);
+  const hash = await crypto.subtle.digest('SHA-256', buf);
+  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+
+// ── Render the claim form — Step 1: PayMesh or not? ──
 function renderClaimForm(v) {
   const senderName = v.createdByName || 'Someone';
   const amount     = Number(v.amount || 0);
@@ -286,74 +305,229 @@ function renderClaimForm(v) {
 
     <div class="divider"></div>
 
+    <div style="text-align:center;margin-bottom:18px;">
+      <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px;">Do you have a PayMesh account?</div>
+      <div style="font-size:12px;color:var(--text2);font-weight:500;">This determines how you'll receive the money.</div>
+    </div>
+    <div style="display:flex;gap:10px;margin-bottom:8px;">
+      <button type="button" id="btn-yes-paymesh"
+        style="flex:1;padding:15px;background:rgba(0,232,122,.12);border:1.5px solid rgba(0,232,122,.3);border-radius:var(--r);color:var(--em);font:700 14px/1 var(--sans);cursor:pointer;transition:all .2s;"
+        onclick="window._showPaymeshForm()">
+        ✅ Yes, I have PayMesh
+      </button>
+      <button type="button" id="btn-no-paymesh"
+        style="flex:1;padding:15px;background:rgba(77,159,255,.10);border:1.5px solid rgba(77,159,255,.25);border-radius:var(--r);color:var(--blue);font:700 14px/1 var(--sans);cursor:pointer;transition:all .2s;"
+        onclick="window._showExternalForm()">
+        ❌ No, use my UPI ID
+      </button>
+    </div>
+    <div id="claim-form-step2" style="margin-top:16px;"></div>
+    <div id="claim-msg" class="msg"></div>
+  `);
+
+  // Store voucher data for submit handlers
+  window._claimVoucher = v;
+}
+
+// ── Step 2a: PayMesh receiver ──
+window._showPaymeshForm = function() {
+  const step2 = document.getElementById('claim-form-step2');
+  if (!step2) return;
+  const amount = Number((window._claimVoucher || {}).amount || 0);
+  step2.innerHTML = `
+    <div class="form-group">
+      <label>Your PayMesh Phone Number</label>
+      <input type="tel" id="pm-phone-input" placeholder="10-digit phone number" inputmode="numeric"
+        maxlength="10" autocomplete="off" spellcheck="false"
+        oninput="document.getElementById('claim-submit-pm') && (document.getElementById('claim-submit-pm').disabled = this.value.trim().length !== 10 || document.getElementById('otp-input-pm').value.trim().length !== 6)">
+    </div>
+    <div class="form-group">
+      <label>6-Digit Code (from sender)</label>
+      <input type="text" id="otp-input-pm" placeholder="Enter 6-digit code" inputmode="numeric"
+        maxlength="6" autocomplete="off" spellcheck="false"
+        oninput="document.getElementById('claim-submit-pm') && (document.getElementById('claim-submit-pm').disabled = this.value.trim().length !== 6 || document.getElementById('pm-phone-input').value.trim().length !== 10)">
+    </div>
+    <button type="button" class="btn-claim" id="claim-submit-pm" disabled onclick="window._submitClaimPaymesh()">
+      Claim ₹${amount.toFixed(2)} → Wallet
+    </button>`;
+};
+
+// ── Step 2b: External receiver ──
+window._showExternalForm = function() {
+  const step2 = document.getElementById('claim-form-step2');
+  if (!step2) return;
+  const amount = Number((window._claimVoucher || {}).amount || 0);
+  step2.innerHTML = `
     <div class="form-group">
       <label>Your UPI ID</label>
       <input type="text" id="upi-input" placeholder="yourname@ybl" inputmode="email"
         autocomplete="off" spellcheck="false" autocapitalize="none"
-        oninput="document.getElementById('claim-submit').disabled=!this.value.trim()">
+        oninput="document.getElementById('claim-submit-ext') && (document.getElementById('claim-submit-ext').disabled = !this.value.trim() || document.getElementById('otp-input-ext').value.trim().length !== 6)">
+    </div>
+    <div class="form-group">
+      <label>6-Digit Code (from sender)</label>
+      <input type="text" id="otp-input-ext" placeholder="Enter 6-digit code" inputmode="numeric"
+        maxlength="6" autocomplete="off" spellcheck="false"
+        oninput="document.getElementById('claim-submit-ext') && (document.getElementById('claim-submit-ext').disabled = document.getElementById('otp-input-ext').value.trim().length !== 6 || !document.getElementById('upi-input').value.trim())">
     </div>
     <div style="font-size:11px;color:var(--text3);margin-top:-10px;margin-bottom:16px;line-height:1.5;font-weight:500">
-      Enter the UPI ID you want the ₹${amount.toFixed(2)} transferred to. The sender will manually send via GPay / PhonePe.
+      The sender will manually send ₹${amount.toFixed(2)} to your UPI ID via GPay / PhonePe once verified.
     </div>
+    <button type="button" class="btn-claim" id="claim-submit-ext" disabled onclick="window._submitClaimExternal()">
+      Submit UPI ID →
+    </button>`;
+};
 
-    <button type="button" class="btn-claim" id="claim-submit" disabled onclick="window._submitClaim()">
-      Claim ₹${amount.toFixed(2)} →
-    </button>
-    <div id="claim-msg" class="msg"></div>
+// ── Shared OTP verification helper ──
+// Returns { fData, vRef } on success, throws descriptive Error on failure.
+// Atomically increments codeAttempts and locks on 3rd failure.
+async function _verifyOtp(otpVal) {
+  const vRef  = doc(db, 'vouchers', token);
+  const fresh = await getDoc(vRef);
+  if (!fresh.exists()) throw new Error('Voucher not found.');
+  const fData = fresh.data();
+  if (fData.status !== 'pending')                                   throw new Error('This voucher is no longer available.');
+  if (fData.expiresAt && new Date(fData.expiresAt) < new Date())    throw new Error('This voucher has expired.');
+  if ((fData.codeAttempts || 0) >= 3)                               throw new Error('This voucher is locked due to too many attempts. Contact the sender.');
 
-    <div style="font-size:11px;color:var(--text3);margin-top:16px;line-height:1.5;text-align:center">
-      🔒 Your UPI ID is only shared with the sender — we never store payment credentials.
-    </div>
-  `);
-
-  // Expose submit handler globally for onclick
-  window._submitClaim = async function() {
-    const upiEl = document.getElementById('upi-input');
-    const upi   = (upiEl ? upiEl.value.trim() : '').toLowerCase();
-    const btn   = document.getElementById('claim-submit');
-    const voucherAmount = Number(v.amount || 0); // capture for error recovery
-
-    if (!upi) { showMsg('error', 'Enter your UPI ID'); return; }
-    if (!UPI_REGEX.test(upi)) { showMsg('error', 'Invalid UPI ID. Example: yourname@ybl or phone@paytm'); return; }
-
-    if (btn) { btn.disabled = true; btn.textContent = 'Submitting…'; }
-    showMsg('info', 'Registering your UPI ID…');
-
-    try {
-      // Re-read the voucher atomically to prevent double-claim races
-      const vRef  = doc(db, 'vouchers', token);
-      const fresh = await getDoc(vRef);
-      if (!fresh.exists()) throw new Error('Voucher no longer exists.');
-      const fData = fresh.data();
-      if (fData.status !== 'pending') throw new Error('This voucher was already claimed or has expired.');
-      if (fData.expiresAt && new Date(fData.expiresAt) < new Date()) throw new Error('This voucher has expired.');
-
-      // Flip status to claimed, record the UPI ID
-      await updateDoc(vRef, {
-        status:    'claimed',
-        claimedAt: new Date().toISOString(),
-        claimUpi:  upi
-      });
-
-      // Log a transaction record — fire and forget, don't block success on this
-      addDoc(collection(db, 'transactions'), {
-        phone:  upi,
-        label:  `Claimed voucher from ${fData.createdByName || 'PayMesh user'}`,
-        amount: Number(fData.amount),
-        type:   'claim_pending',
-        time:   new Date().toISOString()
-      }).catch(() => {}); // non-critical — don't fail the claim if this write fails
-
-      renderSuccess(Number(fData.amount), fData.createdByName || 'the sender', upi);
-
-    } catch(e) {
-      showMsg('error', e.message || 'Something went wrong. Please try again.');
-      if (btn) { btn.disabled = false; btn.textContent = `Claim ₹${Number(voucherAmount).toFixed(2)} →`; }
-    }
-  };
+  const enteredHash = await hashOtp(otpVal, token);
+  if (enteredHash !== fData.codeHash) {
+    const newAttempts = (fData.codeAttempts || 0) + 1;
+    const newStatus   = newAttempts >= 3 ? 'locked' : 'pending';
+    await updateDoc(vRef, { codeAttempts: newAttempts, status: newStatus });
+    const left = 3 - newAttempts;
+    if (newStatus === 'locked') throw new Error('Incorrect code. Voucher is now permanently locked after 3 failed attempts.');
+    throw new Error(`Incorrect code. ${left} attempt${left !== 1 ? 's' : ''} remaining.`);
+  }
+  return { fData, vRef };
 }
 
-function renderSuccess(amount, senderName, upi) {
+// ── Submit: PayMesh receiver — instant wallet transfer ──
+window._submitClaimPaymesh = async function() {
+  const v = window._claimVoucher;
+  if (!v) return;
+  const phoneEl = document.getElementById('pm-phone-input');
+  const otpEl   = document.getElementById('otp-input-pm');
+  const btn     = document.getElementById('claim-submit-pm');
+  const phone   = (phoneEl ? phoneEl.value.trim() : '');
+  const otpVal  = (otpEl ? otpEl.value.trim() : '');
+  const amount  = Number(v.amount || 0);
+
+  if (!/^\d{10}$/.test(phone)) { showMsg('error', 'Enter a valid 10-digit phone number'); return; }
+  if (!/^\d{6}$/.test(otpVal)) { showMsg('error', 'Enter the 6-digit code'); return; }
+  if (btn) { btn.disabled = true; btn.textContent = 'Verifying…'; }
+  showMsg('info', 'Verifying code…');
+
+  try {
+    // Step 1: verify OTP (increments attempts on failure, throws on any error)
+    const { fData, vRef } = await _verifyOtp(otpVal);
+
+    // Step 2: verify PayMesh account exists
+    const receiverRef  = doc(db, 'users', phone);
+    const receiverSnap = await getDoc(receiverRef);
+    if (!receiverSnap.exists()) throw new Error('No PayMesh account found for this phone number. Try "No, use my UPI ID" instead.');
+
+    // Step 3: atomic wallet credit + voucher status flip
+    showMsg('info', 'Crediting wallet…');
+    await runTransaction(db, async (tx) => {
+      const vSnap = await tx.get(vRef);
+      const rSnap = await tx.get(receiverRef);
+      if (!vSnap.exists())                      throw new Error('Voucher no longer exists.');
+      if (vSnap.data().status !== 'pending')    throw new Error('Voucher is no longer available.');
+      if (!rSnap.exists())                      throw new Error('PayMesh account not found.');
+      const rBal = rSnap.data().balance || 0;
+      tx.update(vRef, {
+        status:       'completed',
+        claimedBy:    phone,
+        claimedAt:    new Date().toISOString(),
+        receiverType: 'paymesh'
+      });
+      tx.update(receiverRef, { balance: rBal + amount });
+    });
+
+    // Step 4: transaction record (fire-and-forget)
+    addDoc(collection(db, 'transactions'), {
+      phone,
+      label:  `Voucher from ${fData.createdByName || 'PayMesh user'}`,
+      amount: Number(fData.amount),
+      type:   'credit',
+      time:   new Date().toISOString()
+    }).catch(() => {});
+
+    renderSuccessPaymesh(amount, fData.createdByName || 'the sender');
+
+  } catch(e) {
+    showMsg('error', e.message || 'Something went wrong. Please try again.');
+    if (btn) { btn.disabled = false; btn.textContent = `Claim ₹${amount.toFixed(2)} → Wallet`; }
+  }
+};
+
+// ── Submit: External receiver — flag for admin payout ──
+window._submitClaimExternal = async function() {
+  const v = window._claimVoucher;
+  if (!v) return;
+  const upiEl  = document.getElementById('upi-input');
+  const otpEl  = document.getElementById('otp-input-ext');
+  const btn    = document.getElementById('claim-submit-ext');
+  const upi    = (upiEl ? upiEl.value.trim().toLowerCase() : '');
+  const otpVal = (otpEl ? otpEl.value.trim() : '');
+  const amount = Number(v.amount || 0);
+
+  if (!upi)                      { showMsg('error', 'Enter your UPI ID'); return; }
+  if (!UPI_REGEX.test(upi))      { showMsg('error', 'Invalid UPI ID. Example: yourname@ybl'); return; }
+  if (!/^\d{6}$/.test(otpVal))   { showMsg('error', 'Enter the 6-digit code'); return; }
+  if (btn) { btn.disabled = true; btn.textContent = 'Verifying…'; }
+  showMsg('info', 'Verifying code…');
+
+  try {
+    // Step 1: verify OTP
+    const { fData, vRef } = await _verifyOtp(otpVal);
+
+    // Step 2: flip status and record UPI
+    await updateDoc(vRef, {
+      status:       'needs_payout',
+      claimUpi:     upi,
+      claimedAt:    new Date().toISOString(),
+      receiverType: 'external'
+    });
+
+    // Step 3: transaction record (fire-and-forget)
+    addDoc(collection(db, 'transactions'), {
+      phone:  upi,
+      label:  `Claim pending payout from ${fData.createdByName || 'PayMesh user'}`,
+      amount: Number(fData.amount),
+      type:   'claim_pending',
+      time:   new Date().toISOString()
+    }).catch(() => {});
+
+    renderSuccessExternal(amount, fData.createdByName || 'the sender', upi);
+
+  } catch(e) {
+    showMsg('error', e.message || 'Something went wrong. Please try again.');
+    if (btn) { btn.disabled = false; btn.textContent = 'Submit UPI ID →'; }
+  }
+};
+
+function renderSuccessPaymesh(amount, senderName) {
+  setCard(`
+    <div class="logo" style="justify-content:center;margin-bottom:20px">
+      <div class="logo-mark"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00E87A" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg></div>
+      <div class="logo-text">Pay<span>Mesh</span></div>
+    </div>
+    <div class="success-state">
+      <div class="success-icon">🎉</div>
+      <div class="success-title">₹${amount.toFixed(2)} Added!</div>
+      <div class="success-sub">
+        <strong>₹${amount.toFixed(2)}</strong> from <strong>${escHtml(senderName)}</strong> has been credited to your PayMesh wallet instantly.
+      </div>
+      <div class="success-note">
+        Open PayMesh and check your wallet balance. The money is already there!
+      </div>
+    </div>
+  `);
+}
+
+function renderSuccessExternal(amount, senderName, upi) {
   setCard(`
     <div class="logo" style="justify-content:center;margin-bottom:20px">
       <div class="logo-mark"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00E87A" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg></div>
@@ -367,7 +541,7 @@ function renderSuccess(amount, senderName, upi) {
       </div>
       <div class="success-note">
         <strong>Your UPI ID:</strong> ${escHtml(upi)}<br><br>
-        The sender will open their UPI app (GPay / PhonePe) and transfer ₹${amount.toFixed(2)} directly to you. This usually takes a few minutes.
+        The sender will open GPay / PhonePe and transfer ₹${amount.toFixed(2)} directly to you. This usually takes a few minutes.
       </div>
     </div>
   `);
