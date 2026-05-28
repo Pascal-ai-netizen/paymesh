@@ -6,7 +6,7 @@
 (function PM_SECURITY() {
   // ── 0. HTTPS ENFORCEMENT ──
   if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
-    location.replace('https:' + location.href.slice(6));
+    location.replace('https:' + location.href.slice(5));
   }
 
   // ── 1. DEVTOOLS DETECTION (size-based, works on mobile Chrome/Firefox DevTools) ──
@@ -599,8 +599,9 @@ window.showScreen = function(id) {
     _voucherFraudOverrideGranted = false;
     _voucherFraudLastAmount = 0; // reset so re-entering same amount fires a fresh analysis
     const vBtn = document.getElementById('voucher-submit-btn');
-    if (vBtn) { vBtn.disabled = false; vBtn.style.opacity = '1'; vBtn.style.cursor = 'pointer'; vBtn.textContent = 'Generate Offline Voucher'; }
+    if (vBtn) { vBtn.disabled = false; vBtn.style.opacity = '1'; vBtn.style.cursor = 'pointer'; vBtn.textContent = 'Generate Payment Link'; }
     loadVouchersFromFirestore();
+    loadClaimedVouchers(); // Phase 1: show any vouchers awaiting your manual UPI send
   }
   if (id === 'screen-send') {
     const m = document.getElementById('send-msg');
@@ -656,14 +657,28 @@ function buildUPILink() {
   btn.style.cssText = `display:flex;align-items:center;justify-content:center;gap:10px;width:100%;padding:14px;margin:12px 0;background:linear-gradient(135deg,rgba(0,232,122,.12),rgba(0,232,122,.06));border:1px solid rgba(0,232,122,.25);border-radius:14px;color:var(--em);font:700 14px/1 var(--sans);text-decoration:none;cursor:pointer;transition:all .2s;`;
   btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>Open GPay / PhonePe to Pay`;
   function updateLink() {
-    const amt = parseFloat(amtInput.value) || '';
-    btn.href = `upi://pay?pa=${PAYMESH_UPI}&pn=PayMesh&am=${amt}&cu=INR&tn=PayMeshLoad`;
+    const amt = parseFloat(amtInput.value);
+    if (amt && amt > 0) {
+      btn.href = `upi://pay?pa=${encodeURIComponent(PAYMESH_UPI)}&pn=${encodeURIComponent('PayMesh')}&am=${amt.toFixed(2)}&cu=INR&tn=${encodeURIComponent('PayMesh Wallet Load')}`;
+      btn.style.opacity = '1';
+      btn.style.pointerEvents = '';
+    } else {
+      // No valid amount — disable link so it doesn't fire with am=NaN or am=
+      btn.removeAttribute('href');
+      btn.style.opacity = '0.45';
+      btn.style.pointerEvents = 'none';
+    }
   }
   amtInput._upiLinkListener = updateLink;
   amtInput.addEventListener('input', updateLink);
   updateLink();
   const upiBox = document.getElementById('display-upi');
-  upiBox.parentNode.insertBefore(btn, upiBox.nextSibling);
+  if (upiBox && upiBox.parentNode) {
+    upiBox.parentNode.insertBefore(btn, upiBox.nextSibling);
+  } else {
+    // Fallback: insert after amount input
+    amtInput.parentNode && amtInput.parentNode.insertBefore(btn, amtInput.nextSibling);
+  }
 }
 
 // ═══════════════════════════════════════════
@@ -853,6 +868,9 @@ async function loadHomeData() {
 
   // Replay any offline vouchers that were queued while network was down
   replayPendingVouchers().catch(() => {});
+
+  // Phase 1: start hourly expiry sweep
+  _scheduleExpirySweep();
 
   unsubBalance = onSnapshot(
     doc(db, "users", CURRENT_USER.phone),
@@ -1986,8 +2004,13 @@ window.generateVoucher = async function() {
 
   try {
     const userRef = doc(db,"users",CURRENT_USER.phone);
-    const code    = 'PM' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).substring(2,6).toUpperCase();
+    // ── Phase 1: UUID token — short but URL-safe ──
+    const token   = 'PM' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).substring(2,7).toUpperCase();
+    const code    = token; // alias for legacy compat
+    const now     = new Date();
+    const expiresAt = new Date(now.getTime() + 48 * 60 * 60 * 1000).toISOString(); // 48hr TTL
 
+    // ── ATOMIC: debit sender immediately on voucher creation ──
     await runTransaction(db, async (tx) => {
       const snap    = await tx.get(userRef);
       if (!snap.exists()) throw new Error('Account not found');
@@ -1996,33 +2019,152 @@ window.generateVoucher = async function() {
       tx.update(userRef, { balance: balance - amount });
     });
 
+    // Build the public claim URL for this voucher
+    const claimUrl = _buildClaimUrl(token);
+
     await Promise.all([
-      setDoc(doc(db,"vouchers",code), {
-        code, amount: Number(amount),
-        createdBy: CURRENT_USER.phone, createdByName: CURRENT_USER.name,
-        status: "UNUSED", createdAt: new Date().toISOString()
+      setDoc(doc(db,"vouchers",token), {
+        code:    token,
+        amount:  Number(amount),
+        createdBy:     CURRENT_USER.phone,
+        createdByName: CURRENT_USER.name,
+        status:    'pending',     // Phase 1: pending → claimed → paid / expired
+        expiresAt: expiresAt,     // TTL: now + 48h
+        claimUrl:  claimUrl,
+        createdAt: now.toISOString()
       }),
       addDoc(collection(db,"transactions"), {
-        phone: CURRENT_USER.phone, label:`Voucher Created · ₹${amount.toFixed(2)}`,
-        amount: Number(amount), type:"debit", time: new Date().toISOString()
+        phone:  CURRENT_USER.phone,
+        label:  `Voucher Created · ₹${amount.toFixed(2)}`,
+        amount: Number(amount),
+        type:   'debit',
+        time:   now.toISOString()
       })
     ]);
 
     const newBal = parseFloat(sessionStorage.getItem('pm_balance')||'0') - amount;
     sessionStorage.setItem('pm_balance', Math.max(0, newBal).toFixed(2));
-    // Invalidate voucher list cache so new voucher appears on next screen open
     try { sessionStorage.removeItem(_VOUCHER_CACHE_KEY()); } catch(e) {}
 
     document.getElementById('voucher-amount').value = '';
-    showMsg(msg,'success',`Voucher for ₹${amount.toFixed(2)} created!`);
+    showMsg(msg,'success',`Voucher created! Share the claim link below.`);
     if (navigator.vibrate) navigator.vibrate([100,50,200]);
 
-    // Render the new voucher immediately without reloading all
-    renderSingleVoucher(code, amount, 'UNUSED');
+    // Render the new voucher card with the open-loop claim link
+    renderSingleVoucher(token, amount, 'pending', claimUrl, expiresAt);
+
+    // Schedule a local expiry sweep (fires after 48h if tab is open)
+    _scheduleExpirySweep();
 
   } catch(e) {
     showMsg(msg,'error', e.message || 'Error. Check internet.');
     console.error(e);
+  }
+}
+
+// ── Build the public /claim/<token> URL ──
+function _buildClaimUrl(token) {
+  return window.location.origin + window.location.pathname.replace(/\/?$/, '') + '/claim.html?t=' + token;
+}
+
+// ═══════════════════════════════════════════
+// PHASE 1 — EXPIRY SWEEP
+// Runs hourly: finds pending vouchers past their expiresAt
+// and refunds the sender. Safe to call multiple times.
+// ═══════════════════════════════════════════
+
+let _expirySweepTimer = null;
+
+function _scheduleExpirySweep() {
+  if (_expirySweepTimer) return; // already scheduled
+  _expirySweepTimer = setInterval(runExpirySweep, 60 * 60 * 1000); // every hour
+  // Also run once after a short delay in case app stays open
+  setTimeout(runExpirySweep, 5 * 60 * 1000);
+}
+
+window.runExpirySweep = async function() {
+  if (!CURRENT_USER.phone) return;
+  try {
+    const { getDocs, writeBatch } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
+    const now = new Date().toISOString();
+    // Fetch all pending vouchers by this user that have expired
+    const q = query(
+      collection(db,"vouchers"),
+      where("createdBy","==", CURRENT_USER.phone),
+      where("status","==","pending")
+    );
+    const snap = await getDocs(q);
+    const expired = [];
+    snap.forEach(d => {
+      const v = d.data();
+      if (v.expiresAt && v.expiresAt < now) expired.push({ ref: d.ref, data: v });
+    });
+    if (!expired.length) return;
+
+    const batch = writeBatch(db);
+    const userRef = doc(db,"users", CURRENT_USER.phone);
+
+    // Read current balance once (not in transaction — acceptable for sweep)
+    const { getDoc } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
+    const userSnap = await getDoc(userRef);
+    const curBal   = userSnap.exists() ? (userSnap.data().balance || 0) : 0;
+    let refundTotal = 0;
+
+    for (const { ref, data } of expired) {
+      batch.update(ref, { status: 'expired', expiredAt: now });
+      refundTotal += Number(data.amount || 0);
+      batch.set(doc(collection(db,"transactions")), {
+        phone:  CURRENT_USER.phone,
+        label:  `Voucher Expired — ₹${Number(data.amount).toFixed(2)} refunded`,
+        amount: Number(data.amount),
+        type:   'credit',
+        time:   now
+      });
+    }
+
+    // Refund balance atomically in a single update
+    if (refundTotal > 0) {
+      batch.update(userRef, { balance: curBal + refundTotal });
+      const newBal = parseFloat(sessionStorage.getItem('pm_balance')||'0') + refundTotal;
+      sessionStorage.setItem('pm_balance', newBal.toFixed(2));
+    }
+
+    await batch.commit();
+    console.info(`[PayMesh] Expired ${expired.length} voucher(s), refunded ₹${refundTotal.toFixed(2)}`);
+
+    // Remove expired cards from UI
+    expired.forEach(({ data }) => {
+      const card = document.querySelector(`[data-voucher-code="${data.code}"]`);
+      if (card) card.remove();
+    });
+    try { sessionStorage.removeItem(_VOUCHER_CACHE_KEY()); } catch(e) {}
+  } catch(e) {
+    console.error('[PayMesh] Expiry sweep failed:', e);
+  }
+}
+
+// ═══════════════════════════════════════════
+// PHASE 1 — MARK AS PAID (Admin action)
+// You manually paid the UPI → flip status to paid
+// ═══════════════════════════════════════════
+
+window.markVoucherPaid = async function(token) {
+  if (!CURRENT_USER.phone) return;
+  if (!confirm(`Mark voucher ${token} as PAID? This confirms you sent the UPI payment.`)) return;
+  try {
+    await updateDoc(doc(db,"vouchers",token), {
+      status: 'paid',
+      paidAt: new Date().toISOString()
+    });
+    // Update UI card status badge
+    const card = document.querySelector(`[data-voucher-code="${token}"]`);
+    if (card) {
+      const badge = card.querySelector('.voucher-status-badge');
+      if (badge) { badge.textContent = '✅ PAID'; badge.style.background = 'rgba(0,232,122,.18)'; badge.style.color = 'var(--em)'; }
+    }
+    alert('Marked as paid.');
+  } catch(e) {
+    alert('Error: ' + (e.message || 'Could not update. Check internet.'));
   }
 }
 
@@ -2049,7 +2191,8 @@ async function loadVouchersFromFirestore() {
 
   display.innerHTML = '<div style="text-align:center;color:var(--text3);padding:20px;font-size:13px">Loading vouchers…</div>';
   try {
-    const q    = query(collection(db,"vouchers"), where("createdBy","==",CURRENT_USER.phone), where("status","==","UNUSED"));
+    // Phase 1: show both legacy UNUSED and new 'pending'/'claimed' vouchers
+    const q    = query(collection(db,"vouchers"), where("createdBy","==",CURRENT_USER.phone), where("status","in",["UNUSED","pending","claimed"]));
     const { getDocs } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
     const vSnap = await getDocs(q);
     const vouchers = [];
@@ -2071,47 +2214,207 @@ function _renderVouchers(vouchers) {
     display.innerHTML = '<div style="text-align:center;color:var(--text3);padding:20px;font-size:13px">No active vouchers</div>';
     return;
   }
-  vouchers.forEach(v => renderSingleVoucher(v.code, v.amount, v.status));
+  vouchers.forEach(v => renderSingleVoucher(v.code, v.amount, v.status, v.claimUrl, v.expiresAt));
 }
 
 window.restoreVoucher = loadVouchersFromFirestore;
 
-function renderSingleVoucher(code, amount, status) {
-  if (status === 'USED') return;
+// ═══════════════════════════════════════════
+// PHASE 1 — CLAIMED VOUCHER ADMIN PANEL
+// Shows vouchers where receiver submitted their UPI ID.
+// Sender sees them here, pays via UPI app, marks as paid.
+// ═══════════════════════════════════════════
+
+async function loadClaimedVouchers() {
+  if (!CURRENT_USER.phone) return;
+  const section = document.getElementById('claimed-vouchers-section');
+  const list    = document.getElementById('claimed-vouchers-list');
+  if (!section || !list) return;
+
+  try {
+    const { getDocs } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
+    const q    = query(collection(db,'vouchers'), where('createdBy','==',CURRENT_USER.phone), where('status','==','claimed'));
+    const snap = await getDocs(q);
+    if (snap.empty) { section.style.display = 'none'; return; }
+
+    section.style.display = 'block';
+    list.innerHTML = '';
+
+    snap.forEach(d => {
+      const v      = d.data();
+      const amount = Number(v.amount || 0);
+      const upi    = v.claimUpi || '—';
+      const claimTime = v.claimedAt ? new Date(v.claimedAt).toLocaleString() : '';
+
+      const row = document.createElement('div');
+      row.style.cssText = 'background:linear-gradient(158deg,rgba(77,159,255,.09),rgba(0,232,122,.06));border:1px solid rgba(77,159,255,.22);border-radius:16px;padding:16px 18px;margin-bottom:10px;';
+      row.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:10px">
+          <div>
+            <div style="font-size:10px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:var(--blue);margin-bottom:4px">Claimed · ₹${amount.toFixed(2)}</div>
+            <div style="font-size:12px;color:var(--text2);font-weight:500">${claimTime}</div>
+          </div>
+          <div style="font-size:9px;color:var(--text3);font-family:var(--mono);word-break:break-all;text-align:right;max-width:60%">${v.code || ''}</div>
+        </div>
+        <div style="background:rgba(0,0,0,.35);border:1px solid var(--border2);border-radius:10px;padding:10px 12px;margin-bottom:12px;">
+          <div style="font-size:9px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:4px">Receiver's UPI ID</div>
+          <div style="font-family:var(--mono);font-size:14px;color:var(--text);font-weight:700;word-break:break-all;user-select:all">${escHtml(upi)}</div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button type="button"
+            onclick="_openUpiApp('${escAttr(upi)}',${amount})"
+            style="flex:1;padding:10px;background:rgba(0,232,122,.12);border:1px solid rgba(0,232,122,.25);border-radius:12px;color:var(--em);font:700 12px/1 var(--sans);cursor:pointer;">
+            📲 Open UPI App
+          </button>
+          <button type="button"
+            onclick="_copyUpi('${escAttr(upi)}')"
+            style="padding:10px 14px;background:var(--surface);border:1px solid var(--border2);border-radius:12px;color:var(--text2);font:700 12px/1 var(--sans);cursor:pointer;">
+            📋 Copy
+          </button>
+          <button type="button"
+            onclick="markVoucherPaid('${escAttr(v.code || '')}')"
+            style="padding:10px 14px;background:rgba(77,159,255,.14);border:1px solid rgba(77,159,255,.28);border-radius:12px;color:var(--blue);font:700 11px/1 var(--sans);cursor:pointer;">
+            ✅ Paid
+          </button>
+        </div>`;
+      list.appendChild(row);
+    });
+  } catch(e) {
+    console.error('[PayMesh] loadClaimedVouchers error:', e);
+    if (section) section.style.display = 'none';
+  }
+}
+
+window._openUpiApp = function(upi, amount) {
+  // Opens default UPI app deep link — works with GPay, PhonePe, Paytm
+  // NOTE: window.open() is blocked for custom schemes on mobile browsers.
+  // location.href is the correct way to trigger UPI deep links on Android/iOS.
+  const link = `upi://pay?pa=${encodeURIComponent(upi)}&pn=${encodeURIComponent('PayMesh Voucher')}&am=${Number(amount).toFixed(2)}&cu=INR&tn=${encodeURIComponent('PayMesh Voucher Payment')}`;
+  location.href = link;
+};
+
+window._copyUpi = function(upi) {
+  navigator.clipboard.writeText(upi).then(() => alert('UPI ID copied: ' + upi)).catch(() => alert('UPI ID: ' + upi));
+};
+
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+function escAttr(s) { return String(s).replace(/'/g,"\\'").replace(/"/g,'&quot;'); }
+
+function renderSingleVoucher(code, amount, status, claimUrl, expiresAt) {
+  // Hide consumed/legacy states
+  if (status === 'USED' || status === 'expired' || status === 'paid') return;
+
   const display = document.getElementById('voucher-display');
-  // Remove loading placeholder if present
   const placeholder = display.querySelector('[data-placeholder]');
   if (placeholder) placeholder.remove();
+
+  // ── Determine display mode ──
+  // Phase 1: new vouchers have status 'pending' or 'claimed' and a claimUrl
+  // Legacy: status === 'UNUSED' — show old QR UI
+  const isPhase1 = (status === 'pending' || status === 'claimed') && claimUrl;
 
   const wrapper = document.createElement('div');
   wrapper.className = 'voucher-entry';
   wrapper.dataset.voucherCode = code;
   wrapper.style.cssText = 'animation:slideUp .35s var(--ease) both;';
-  const qrId = 'vqr-' + code;
-  wrapper.innerHTML = `
-    <div class="voucher-card">
-      <div class="voucher-label">Offline Voucher · PayMesh</div>
-      <div class="voucher-code">${code}</div>
-      <div class="voucher-sub">₹${Number(amount).toFixed(2)} · by ${CURRENT_USER.name}</div>
-    </div>
-    <div class="card center-card">
-      <p class="info-text">Show this QR to pay offline</p>
-      <div id="${qrId}" class="qr-wrap"></div>
-      <p class="hint">Recipient scans with PayMesh → Scan QR</p>
-    </div>`;
-  display.insertBefore(wrapper, display.firstChild);
 
-  function makeQR() {
-    if (typeof QRCode === 'undefined') { setTimeout(makeQR, 200); return; }
+  // ── Status badge text ──
+  let badgeText = '⏳ PENDING';
+  let badgeBg   = 'rgba(255,184,48,.18)';
+  let badgeColor= 'var(--amber)';
+  if (status === 'claimed') { badgeText = '🔔 CLAIMED — PAY NOW'; badgeBg = 'rgba(77,159,255,.18)'; badgeColor = 'var(--blue)'; }
+
+  // ── Expiry display ──
+  let expiryText = '';
+  if (expiresAt) {
     try {
-      new QRCode(document.getElementById(qrId), {
-        text: JSON.stringify({ code, amount: Number(amount), from: CURRENT_USER.name }),
-        width: 200, height: 200, colorDark: "#000000", colorLight: "#ffffff"
-      });
-    } catch(e) { console.warn('QR generation failed:', e); }
+      const exp = new Date(expiresAt);
+      const diffMs = exp - Date.now();
+      const diffH  = Math.floor(diffMs / 3600000);
+      const diffM  = Math.floor((diffMs % 3600000) / 60000);
+      expiryText = diffMs > 0
+        ? `Expires in ${diffH}h ${diffM}m`
+        : 'Expired — awaiting refund';
+    } catch(e) {}
   }
-  makeQR();
+
+  if (isPhase1) {
+    // ── PHASE 1 — Open-loop claim link card ──
+    const shortCode = code.length > 14 ? code.substring(0,14) + '…' : code;
+    wrapper.innerHTML = `
+      <div class="voucher-card" style="background:linear-gradient(158deg,rgba(255,184,48,.10),rgba(0,232,122,.07));border-color:rgba(255,184,48,.22);">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+          <div class="voucher-label" style="margin:0">PayMesh Voucher · Open Link</div>
+          <span class="voucher-status-badge" style="font-size:9px;font-weight:800;letter-spacing:.8px;padding:4px 9px;border-radius:6px;background:${badgeBg};color:${badgeColor};">${badgeText}</span>
+        </div>
+        <div class="voucher-code" style="font-size:13px;word-break:break-all">${shortCode}</div>
+        <div class="voucher-sub" style="margin-top:6px">₹${Number(amount).toFixed(2)} · by ${CURRENT_USER.name}${expiryText ? ' · ' + expiryText : ''}</div>
+      </div>
+      <div class="card" style="margin-top:0">
+        <p class="info-text" style="margin-bottom:12px">Share this link — receiver enters their UPI ID to claim</p>
+        <div style="background:rgba(0,0,0,.4);border:1.5px solid var(--border2);border-radius:var(--r);padding:12px 14px;font:600 11px/1.5 var(--mono);color:var(--text2);word-break:break-all;user-select:all;cursor:text;" onclick="this.focus()">${claimUrl}</div>
+        <div style="display:flex;gap:8px;margin-top:12px;">
+          <button type="button" onclick="_copyClaimLink('${code}','${claimUrl.replace(/'/g,"&#39;")}')" style="flex:1;padding:11px;background:rgba(0,232,122,.12);border:1px solid rgba(0,232,122,.25);border-radius:var(--r);color:var(--em);font:700 12px/1 var(--sans);cursor:pointer;transition:background .2s;" onmouseover="this.style.background='rgba(0,232,122,.2)'" onmouseout="this.style.background='rgba(0,232,122,.12)'">📋 Copy Link</button>
+          <button type="button" onclick="_shareClaimLink('${claimUrl.replace(/'/g,"&#39;")}',${amount})" style="flex:1;padding:11px;background:rgba(77,159,255,.12);border:1px solid rgba(77,159,255,.25);border-radius:var(--r);color:var(--blue);font:700 12px/1 var(--sans);cursor:pointer;transition:background .2s;" onmouseover="this.style.background='rgba(77,159,255,.2)'" onmouseout="this.style.background='rgba(77,159,255,.12)'">↗ Share</button>
+        </div>
+        ${status === 'claimed' ? `
+        <div style="margin-top:10px;padding:10px 12px;background:rgba(77,159,255,.10);border:1px solid rgba(77,159,255,.22);border-radius:var(--r);font-size:12px;color:var(--blue);font-weight:600;line-height:1.5;">
+          🔔 Receiver has entered their UPI ID. Check the <strong>PayMesh Admin</strong> panel to view it, send payment manually, then mark as paid.
+        </div>
+        <button type="button" onclick="markVoucherPaid('${code}')" style="width:100%;margin-top:10px;padding:12px;background:linear-gradient(135deg,rgba(0,232,122,.18),rgba(0,232,122,.08));border:1px solid rgba(0,232,122,.28);border-radius:var(--r);color:var(--em);font:800 13px/1 var(--sans);cursor:pointer;">✅ I've Sent the UPI — Mark as Paid</button>
+        ` : ''}
+      </div>`;
+  } else {
+    // ── LEGACY — QR scan-based voucher ──
+    const qrId = 'vqr-' + code;
+    wrapper.innerHTML = `
+      <div class="voucher-card">
+        <div class="voucher-label">Offline Voucher · PayMesh</div>
+        <div class="voucher-code">${code}</div>
+        <div class="voucher-sub">₹${Number(amount).toFixed(2)} · by ${CURRENT_USER.name}</div>
+      </div>
+      <div class="card center-card">
+        <p class="info-text">Show this QR to pay offline</p>
+        <div id="${qrId}" class="qr-wrap"></div>
+        <p class="hint">Recipient scans with PayMesh → Scan QR</p>
+      </div>`;
+    display.insertBefore(wrapper, display.firstChild);
+    function makeQR() {
+      if (typeof QRCode === 'undefined') { setTimeout(makeQR, 200); return; }
+      try {
+        new QRCode(document.getElementById(qrId), {
+          text: JSON.stringify({ code, amount: Number(amount), from: CURRENT_USER.name }),
+          width: 200, height: 200, colorDark: "#000000", colorLight: "#ffffff"
+        });
+      } catch(e) { console.warn('QR generation failed:', e); }
+    }
+    makeQR();
+    return;
+  }
+
+  display.insertBefore(wrapper, display.firstChild);
 }
+
+// ── Claim link helpers ──
+window._copyClaimLink = function(code, url) {
+  navigator.clipboard.writeText(url).then(() => {
+    const btn = document.querySelector(`[data-voucher-code="${code}"] button`);
+    if (btn) { const orig = btn.textContent; btn.textContent = '✓ Copied!'; setTimeout(() => btn.textContent = orig, 2000); }
+  }).catch(() => { alert('Copy this link:\n' + url); });
+};
+
+window._shareClaimLink = function(url, amount) {
+  if (navigator.share) {
+    navigator.share({
+      title: 'PayMesh Voucher',
+      text: `I've sent you ₹${Number(amount).toFixed(2)} via PayMesh. Open this link to claim it — enter your UPI ID and I'll transfer it to you:`,
+      url: url
+    }).catch(() => {});
+  } else {
+    navigator.clipboard.writeText(url).catch(() => {});
+    alert('Link copied! Share it with the receiver.');
+  }
+};
 
 // ═══════════════════════════════════════════
 // OFFLINE VOUCHER SYNC
