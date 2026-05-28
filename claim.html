@@ -335,14 +335,14 @@ function renderClaimForm(v) {
         claimUpi:  upi
       });
 
-      // Log a transaction record on the receiver side (informational — not a credit yet)
-      await addDoc(collection(db, 'transactions'), {
-        phone:  upi, // UPI as identifier for non-app receivers
+      // Log a transaction record — fire and forget, don't block success on this
+      addDoc(collection(db, 'transactions'), {
+        phone:  upi,
         label:  `Claimed voucher from ${fData.createdByName || 'PayMesh user'}`,
         amount: Number(fData.amount),
-        type:   'claim_pending', // will flip to credit when sender marks paid
+        type:   'claim_pending',
         time:   new Date().toISOString()
-      });
+      }).catch(() => {}); // non-critical — don't fail the claim if this write fails
 
       renderSuccess(Number(fData.amount), fData.createdByName || 'the sender', upi);
 
