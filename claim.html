@@ -166,6 +166,47 @@ body{
 <p class="claim-footer">Powered by PayMesh · Secure payment link</p>
 
 <script type="module">
+// ── DESKTOP-ONLY GATE ──
+(function() {
+  var isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+    || (navigator.maxTouchPoints > 1 && window.screen.width < 1024);
+  if (isMobile) {
+    document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;min-height:100svh;padding:32px;text-align:center;font-family:system-ui,sans-serif;background:#03050A;color:#EEF2FF;">'
+      + '<div><div style="font-size:48px;margin-bottom:20px;">💻</div>'
+      + '<div style="font-size:22px;font-weight:700;margin-bottom:10px;">Desktop Only</div>'
+      + '<div style="font-size:14px;color:#7A8BAA;line-height:1.6;">This claim page must be opened on a laptop or desktop computer.<br>Please use a computer to claim your payment.</div></div></div>';
+    return;
+  }
+})();
+
+// ── DEVTOOLS BLOCK ──
+(function() {
+  // Keyboard shortcuts
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'F12') { e.preventDefault(); e.stopImmediatePropagation(); return false; }
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && ['i','I','j','J','c','C'].includes(e.key)) {
+      e.preventDefault(); e.stopImmediatePropagation(); return false;
+    }
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'u' || e.key === 'U')) {
+      e.preventDefault(); e.stopImmediatePropagation(); return false;
+    }
+    if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
+      e.preventDefault(); e.stopImmediatePropagation(); return false;
+    }
+  }, true);
+  // Right-click
+  document.addEventListener('contextmenu', function(e) { e.preventDefault(); return false; }, true);
+  // Size-based devtools detection
+  var _dtOpen = false;
+  setInterval(function() {
+    var open = (window.outerWidth - window.innerWidth > 160) || (window.outerHeight - window.innerHeight > 160);
+    if (open && !_dtOpen) { _dtOpen = true; document.body.style.filter = 'blur(20px) grayscale(1)'; }
+    else if (!open) { _dtOpen = false; document.body.style.filter = ''; }
+  }, 800);
+  // Suppress console
+  var noop = function(){};
+  ['log','warn','info','debug','table','dir'].forEach(function(m){ try{console[m]=noop;}catch(e){} });
+})();
 // ═══════════════════════════════════════════════
 // PAYMESH CLAIM PAGE — Phase 1
 // Receiver opens this link, enters UPI ID.

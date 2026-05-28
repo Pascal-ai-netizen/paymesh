@@ -2838,8 +2838,7 @@ window.btStartReceive = function() {
 window.btBack = function() {
   var s=document.getElementById('bt-send-panel');
   var r=document.getElementById('bt-receive-panel');
-  var u=document.getElementById('bt-unsupported');
-  var inSub=(s&&s.style.display==='block')||(r&&r.style.display==='block')||(u&&u.style.display==='block');
+  var inSub=(s&&s.style.display==='block')||(r&&r.style.display==='block');
   if(inSub){_qtPanel(false,false,true,false);}
   else{if(window.showScreen)window.showScreen('screen-home');}
 };
@@ -3016,8 +3015,7 @@ function _nfcStatus(icon,text,sub){
 window.nfcBack=function(){
   var s=document.getElementById('nfc-send-panel');
   var r=document.getElementById('nfc-receive-panel');
-  var u=document.getElementById('nfc-unsupported');
-  var inSub=(s&&s.style.display==='block')||(r&&r.style.display==='block')||(u&&u.style.display==='block');
+  var inSub=(s&&s.style.display==='block')||(r&&r.style.display==='block');
   if(inSub){_nfcPanel(false,false,true,false);}
   else{if(window.showScreen)window.showScreen('screen-home');}
 };
