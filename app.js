@@ -547,17 +547,19 @@ function addRipple(e) {
 
 function showOverlay(icon, title, sub) {
   if (typeof window.showPaymentSuccess === 'function') {
+    // Payment animation morphs into success state — no need to also open success-overlay.
+    // Just run confetti after the animation resolves.
     window.showPaymentSuccess(title, sub).then(function() {
-      document.getElementById('overlay-title').textContent = title;
-      document.getElementById('overlay-sub').textContent   = sub;
-      document.getElementById('success-overlay').classList.remove('hidden');
       launchConfetti(70);
+      showScreen('screen-home');
     });
     return;
   }
+  // Fallback: no payment animation available — use plain success overlay
   document.getElementById('overlay-title').textContent = title;
   document.getElementById('overlay-sub').textContent   = sub;
   document.getElementById('success-overlay').classList.remove('hidden');
+  launchConfetti(70);
 }
 window.showOverlay = showOverlay;
 
@@ -941,6 +943,7 @@ function renderTransactions(snap) {
 
 function animateBalance(target) {
   const el  = document.getElementById('wallet-balance');
+  // Guard: if balance is masked (e.g. devtools detection showed ••••), read from data attribute only
   const cur = parseFloat(el.dataset.value || '0') || 0;
   el.dataset.value = target;
   if (cur === target) { el.textContent = target.toFixed(2); return; }
@@ -953,6 +956,37 @@ function animateBalance(target) {
     else el.textContent = target.toFixed(2);
   };
   requestAnimationFrame(tick);
+}
+
+// ── Load Approval Toast ──
+// Shown when admin approves a UTR while the user is in-app.
+function _showLoadApprovedToast(amount, utr) {
+  try {
+    const toast = document.createElement('div');
+    toast.style.cssText = [
+      'position:fixed','bottom:max(80px,env(safe-area-inset-bottom,80px))','left:50%',
+      'transform:translateX(-50%) translateY(20px)',
+      'background:linear-gradient(135deg,rgba(0,232,122,.18),rgba(0,232,122,.10))',
+      'border:1px solid rgba(0,232,122,.35)','border-radius:16px',
+      'padding:14px 22px','z-index:9999','min-width:260px','text-align:center',
+      'box-shadow:0 12px 40px rgba(0,0,0,.6),0 0 40px rgba(0,232,122,.15)',
+      'font-family:var(--sans)','color:var(--text)',
+      'animation:fadeUp .4s var(--ease) both',
+      'backdrop-filter:blur(24px)','-webkit-backdrop-filter:blur(24px)'
+    ].join(';');
+    toast.innerHTML =
+      '<div style="font-size:11px;font-weight:800;letter-spacing:2px;color:var(--em);text-transform:uppercase;margin-bottom:6px;">✅ Balance Loaded!</div>' +
+      '<div style="font-size:20px;font-weight:800;font-family:var(--mono);color:var(--text);">+₹' + Number(amount).toFixed(2) + '</div>' +
+      '<div style="font-size:11px;color:var(--text3);margin-top:4px;">UTR ' + utr + ' approved</div>';
+    document.body.appendChild(toast);
+    if (navigator.vibrate) navigator.vibrate([100, 50, 200]);
+    setTimeout(function() {
+      toast.style.transition = 'opacity .4s ease, transform .4s ease';
+      toast.style.opacity = '0';
+      toast.style.transform = 'translateX(-50%) translateY(10px)';
+      setTimeout(function() { toast.remove(); }, 450);
+    }, 4000);
+  } catch(e) {}
 }
 
 // ═══════════════════════════════════════════
@@ -1822,6 +1856,7 @@ function _hideVoucherFraudPanel() {
   const panel = document.getElementById('voucher-fraud-panel');
   if (badge) badge.className = 'fraud-badge';
   if (panel) panel.className = 'voucher-fraud-panel';
+  _voucherFraudOverrideGranted = false; // always reset override when panel is hidden
 }
 
 // ═══════════════════════════════════════════
@@ -1910,8 +1945,12 @@ window.sendMoney = async function() {
     document.getElementById('send-phone').value  = '';
     document.getElementById('send-amount').value = '';
     if (navigator.vibrate) navigator.vibrate(200);
+    if (typeof window.showPaymentSuccess === 'function') {
+      await window.showPaymentSuccess('Payment Sent!', `₹${amount.toFixed(2)} sent to ${receiverName}`);
+    }
     showOverlay('', 'Sent!', `₹${amount.toFixed(2)} sent to ${receiverName}`);
   } catch(e) {
+    if (typeof window.hidePaymentAnim === 'function') window.hidePaymentAnim();
     showMsg(msg,'error', e.message || 'Error. Try again.');
     console.error(e);
   }
@@ -2088,23 +2127,26 @@ async function replayPendingVouchers() {
       const vRef        = doc(db,"vouchers",v.code);
       const receiverRef = doc(db,"users",CURRENT_USER.phone);
       let createdBy = '';
+      let didTransact = false;
       await runTransaction(db, async (tx) => {
         const vSnap = await tx.get(vRef);
         const rSnap = await tx.get(receiverRef);
+        // Voucher already used or doesn't exist — skip silently
         if (!vSnap.exists() || vSnap.data().status === 'USED') return;
         if (!rSnap.exists()) throw new Error('Account not found');
-        createdBy = vSnap.data().createdBy;
+        createdBy = vSnap.data().createdBy || '';
+        didTransact = true;
         tx.update(vRef, { status:'USED', redeemedBy:CURRENT_USER.phone, redeemedByName:CURRENT_USER.name, redeemedAt:new Date().toISOString() });
         tx.update(receiverRef, { balance:(rSnap.data().balance||0) + amount });
       });
-      if (createdBy) {
+      // Only write transaction records if the Firestore transaction actually ran
+      if (didTransact && createdBy) {
         const time = new Date().toISOString();
         await Promise.all([
           addDoc(collection(db,"transactions"), { phone:CURRENT_USER.phone, label:`Voucher from ${v.from}`, amount, type:"credit", time }),
           addDoc(collection(db,"transactions"), { phone:createdBy, label:`Voucher redeemed by ${CURRENT_USER.name}`, amount, type:"debit", time })
         ]);
       }
-      console.log('Replayed offline voucher:', v.code);
     } catch(e) {
       if (e.message !== 'Account not found') stillPending.push(v);
       console.warn('Voucher replay failed:', v.code, e.message);

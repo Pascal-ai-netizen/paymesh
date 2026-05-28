@@ -774,7 +774,7 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
 
 /* Progress bar at bottom */
 .pay-anim-progress{
-  position:absolute;bottom:60px;left:40px;right:40px;
+  position:absolute;
   height:3px;background:rgba(255,255,255,.07);border-radius:99px;overflow:hidden;
   z-index:1;
   left:24px;right:24px;
@@ -1586,6 +1586,22 @@ input[type="text"]{
   padding-left:max(18px, env(safe-area-inset-left, 18px));
   padding-right:max(18px, env(safe-area-inset-right, 18px));
 }
+
+/* ══════════════════════════════════════
+   ARIA SEND ADVISORY STATES
+══════════════════════════════════════ */
+#aria-send-advisory.night{
+  background:rgba(77,159,255,.08);border-color:rgba(77,159,255,.22);color:rgba(150,190,255,.95);
+}
+#aria-send-advisory.warning{
+  background:rgba(255,184,48,.08);border-color:rgba(255,184,48,.22);color:var(--amber);
+}
+/* Aria insights rows */
+.aria-insight-row{
+  padding:10px 14px;border-radius:11px;
+  background:var(--surface);border:1px solid var(--border);
+  font-size:12px;color:var(--text2);font-weight:500;line-height:1.6;
+}
 </style>
 </head>
 <body>
@@ -1906,6 +1922,9 @@ window.__PM_SPLASH_TIMEOUT = setTimeout(function() {
     </div>
   </div>
   <div style="height:12px"></div>
+  <!-- Aria proactive advisories (shown/hidden by JS on screen entry and field changes) -->
+  <div id="aria-send-advisory" style="display:none;margin:0 14px 10px;padding:11px 14px;border-radius:12px;font-size:12px;font-weight:600;line-height:1.6;border:1px solid transparent;"></div>
+  <div id="aria-prior-warning" style="display:none;margin:0 14px 10px;padding:10px 14px;border-radius:12px;background:rgba(255,184,48,.08);border:1px solid rgba(255,184,48,.22);font-size:12px;font-weight:600;color:var(--amber);line-height:1.6;"></div>
   <div class="card">
     <div class="form-group">
       <label>Recipient Phone Number</label>
@@ -2192,7 +2211,7 @@ window.__PM_SPLASH_TIMEOUT = setTimeout(function() {
     </div>
     <!-- Money SVG -->
     <svg id="pay-icon-svg" width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="var(--em)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="position:relative;z-index:2;">
-      <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+      <path d="M6 3h12M6 8h12M9 13h1c3 0 5-1.5 5-5H6M9 13l3 8"/>
     </svg>
   </div>
   <div class="pay-anim-title" id="pay-anim-title">Processing Payment</div>
@@ -2321,7 +2340,7 @@ if ('serviceWorker' in navigator) {
 }
 </script>
 
-<!-- ══ BLUETOOTH SCREEN ══ -->
+<!-- ══ FRAUD COPILOT / ARIA SCREEN ══ -->
 <div id="screen-copilot" class="screen">
   <div class="topbar">
     <button type="button" class="back-btn" onclick="showScreen('screen-home')">
@@ -2378,6 +2397,8 @@ if ('serviceWorker' in navigator) {
     <div class="aria-tip-icon">💡</div>
     <div class="aria-tip-text" id="aria-tip-text">Loading tip…</div>
   </div>
+  <!-- Aria Insights — dynamic sentences from log data (populated by JS) -->
+  <div id="aria-insights" style="margin:10px 14px 0;display:flex;flex-direction:column;gap:6px;"></div>
   <div class="pattern-log">
     <div class="pattern-log-header">
       <div class="section-label" style="padding:18px 0 8px">Aria's Detection Log</div>
@@ -2483,7 +2504,7 @@ if ('serviceWorker' in navigator) {
 }
 </style>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<!-- QRCode lib is loaded lazily by app.js loadScript() only when needed -->
 <script type="module" src="app.js?v=13"></script>
 
 
@@ -2557,7 +2578,7 @@ document.addEventListener('DOMContentLoaded', function() {
     <div style="width:60px"></div>
   </div>
   <div style="padding:16px 0 20px;">
-    <div id="nfc-unsupported" style="display:none;" class="card" style="text-align:center;padding:32px;">
+    <div id="nfc-unsupported" style="display:none;text-align:center;padding:32px;" class="card">
       <div style="font-size:36px;margin-bottom:12px;">&#128248;</div>
       <div style="font-weight:600;color:var(--text);margin-bottom:8px;">NFC Not Supported</div>
       <div style="font-size:13px;color:var(--text2);">Web NFC requires Chrome on Android. Please open PayMesh in Chrome browser.</div>
@@ -2911,24 +2932,8 @@ window.nfcWrite=async function(){
     });
 
     await ndef.write({records:[{recordType:'text',data:payload}]});
-    _nfcStatus('✅','Payment sent!','Receiver\'s phone will confirm momentarily');
-    setMsg('success','NFC data written. Receiver\'s phone will complete the transfer.');
-
-    // Debit sender immediately after write succeeds
-    // Receiver credits themselves when they read the NFC tag
-    var sRef=doc(db,'users',phone);
-    var sSnap2=await getDoc(sRef);
-    if(!sSnap2.exists())throw new Error('Account not found');
-    var sBal=sSnap2.data().balance||0;
-    if(sBal<amount)throw new Error('Insufficient balance');
-
-    // We can't do a full transaction here without knowing receiver yet
-    // So we debit sender and let receiver credit themselves
-    // This is safe because receiver validates the payload before crediting
-    // In worst case (receiver doesn't tap) sender is NOT debited yet - write happens on read
-    // Actually the cleanest approach: don't debit here, let receiver's runTransaction handle both
-    // Sender just writes the NFC tag. Receiver executes the full atomic transaction.
     _nfcStatus('✅','Ready!','Hold phone to receiver until they confirm');
+    setMsg('success','NFC data written. Keep phones together until receiver confirms.');
 
     if(amountEl)amountEl.value='';
 
