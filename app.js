@@ -26,14 +26,24 @@
   }
 
   function _onDevToolsOpen() {
-    // Clear sensitive DOM values
+    // Immediately wipe all sensitive DOM values
     try {
       const balEl = document.getElementById('wallet-balance');
       if (balEl) balEl.textContent = '••••••';
       const nameEl = document.getElementById('display-name');
       if (nameEl) nameEl.textContent = 'Hi 👋';
+      // Wipe all form inputs that might contain sensitive data
+      document.querySelectorAll('input').forEach(function(i) { i.value = ''; });
     } catch(e) {}
-    // Redirect to login to wipe session view
+    // Clear session balance from storage
+    try { sessionStorage.removeItem('pm_balance'); } catch(e) {}
+    // Force back to login screen regardless of device
+    try {
+      document.querySelectorAll('.screen').forEach(function(s) { s.classList.remove('active'); });
+      const loginScreen = document.getElementById('screen-login');
+      if (loginScreen) loginScreen.classList.add('active');
+    } catch(e) {}
+    // Also call showScreen if available
     if (typeof showScreen === 'function' && window.CURRENT_USER && window.CURRENT_USER.phone) {
       showScreen('screen-login');
     }
@@ -2071,42 +2081,85 @@ window.generateVoucher = async function() {
 }
 
 // ── One-time OTP modal shown immediately after voucher creation ──
+// Store OTP codes in localStorage so they can be shown again in the voucher card
+function _storeVoucherOtp(token, otp) {
+  try {
+    const key = 'pm_votp_' + token;
+    // Store encrypted simply with token as key (security-by-obscurity for UX, real security is the hash on server)
+    localStorage.setItem(key, btoa(otp));
+  } catch(e) {}
+}
+function _getVoucherOtp(token) {
+  try {
+    const v = localStorage.getItem('pm_votp_' + token);
+    return v ? atob(v) : null;
+  } catch(e) { return null; }
+}
+function _clearVoucherOtp(token) {
+  try { localStorage.removeItem('pm_votp_' + token); } catch(e) {}
+}
+
 function _showOtpModal(otp, amount, token, claimUrl, expiresAt) {
-  // Create modal overlay
+  // Store so it can be shown again from the voucher card
+  _storeVoucherOtp(token, otp);
+
+  _renderOtpModal(otp, amount, token, claimUrl, expiresAt);
+}
+
+function _renderOtpModal(otp, amount, token, claimUrl, expiresAt) {
+  // Remove any existing modal
+  const existing = document.getElementById('otp-reveal-overlay');
+  if (existing) existing.remove();
+
   const overlay = document.createElement('div');
   overlay.id = 'otp-reveal-overlay';
   overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(3,5,10,.92);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);display:flex;align-items:center;justify-content:center;padding:20px;animation:screenIn .3s var(--ease) both;';
 
   overlay.innerHTML = `
-    <div style="width:100%;max-width:380px;background:linear-gradient(158deg,rgba(255,255,255,.07),rgba(255,255,255,.03));border:1px solid rgba(0,232,122,.3);border-radius:28px;padding:32px 24px 28px;box-shadow:0 32px 80px rgba(0,0,0,.7),0 0 80px rgba(0,232,122,.08);position:relative;">
+    <div style="width:100%;max-width:380px;background:linear-gradient(158deg,rgba(255,255,255,.07),rgba(255,255,255,.03));border:1px solid rgba(0,232,122,.3);border-radius:28px;padding:32px 24px 28px;box-shadow:0 32px 80px rgba(0,0,0,.7),0 0 80px rgba(0,232,122,.08);position:relative;overflow:hidden;">
       <div style="position:absolute;top:0;left:8%;right:8%;height:1.5px;border-radius:99px;background:linear-gradient(90deg,transparent,rgba(0,232,122,.8) 50%,transparent);"></div>
       <div style="text-align:center;margin-bottom:8px;">
         <div style="font-size:32px;margin-bottom:10px;">🔐</div>
         <div style="font-size:19px;font-weight:800;color:var(--text);letter-spacing:-.4px;margin-bottom:6px;">Your Secret Code</div>
-        <div style="font-size:13px;color:var(--text2);font-weight:500;line-height:1.5;">Share this code with the receiver <strong style="color:var(--text);">separately</strong> from the link. It's shown only once.</div>
+        <div style="font-size:13px;color:var(--text2);font-weight:500;line-height:1.5;">Share this code with the receiver <strong style="color:var(--text);">separately</strong> from the link. You can view it again from the voucher card.</div>
       </div>
       <div style="margin:22px 0;background:rgba(0,0,0,.5);border:2px solid rgba(0,232,122,.35);border-radius:18px;padding:20px 16px;text-align:center;">
         <div style="font-size:10px;font-weight:800;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-bottom:12px;">6-DIGIT CODE</div>
-        <div style="font-family:var(--mono);font-size:44px;font-weight:700;color:var(--em);letter-spacing:10px;text-shadow:0 0 32px rgba(0,232,122,.4);">${otp}</div>
+        <div id="otp-code-display" style="font-family:var(--mono);font-size:44px;font-weight:700;color:var(--em);letter-spacing:10px;text-shadow:0 0 32px rgba(0,232,122,.4);user-select:all;">${otp}</div>
         <div style="font-size:11px;color:var(--text3);margin-top:10px;font-weight:500;">₹${Number(amount).toFixed(2)} · Expires in 48h · Max 3 attempts</div>
       </div>
-      <div style="background:rgba(255,184,48,.08);border:1px solid rgba(255,184,48,.22);border-radius:12px;padding:11px 14px;font-size:12px;color:var(--amber);font-weight:600;line-height:1.5;margin-bottom:20px;">
-        ⚠️ This code <strong>will not be shown again</strong>. Note it down before dismissing.
+      <button type="button" id="otp-copy-btn"
+        style="width:100%;padding:12px;background:rgba(0,232,122,.12);border:1px solid rgba(0,232,122,.25);border-radius:var(--r);color:var(--em);font:700 13px/1 var(--sans);cursor:pointer;margin-bottom:10px;transition:background .2s;">
+        📋 Copy Code
+      </button>
+      <div style="background:rgba(77,159,255,.08);border:1px solid rgba(77,159,255,.2);border-radius:12px;padding:11px 14px;font-size:12px;color:rgba(150,190,255,.9);font-weight:600;line-height:1.5;margin-bottom:20px;">
+        💡 You can view this code again anytime by tapping <strong>Show Code</strong> on the voucher card.
       </div>
       <button type="button" id="otp-confirm-btn"
         style="width:100%;padding:16px;background:linear-gradient(135deg,var(--em),#00F5A8);border:none;border-radius:var(--r);color:#011A0A;font:800 15px/1 var(--sans);cursor:pointer;box-shadow:0 8px 28px rgba(0,232,122,.35);">
-        ✅ I've noted it down
+        ✅ Done — View Voucher
       </button>
     </div>`;
 
   document.body.appendChild(overlay);
 
+  document.getElementById('otp-copy-btn').addEventListener('click', () => {
+    navigator.clipboard && navigator.clipboard.writeText(otp).catch(() => {});
+    const btn = document.getElementById('otp-copy-btn');
+    if (btn) { btn.textContent = '✅ Copied!'; setTimeout(() => { if (btn) btn.textContent = '📋 Copy Code'; }, 2000); }
+  });
+
   document.getElementById('otp-confirm-btn').addEventListener('click', () => {
     overlay.remove();
-    // Now render the voucher card (no code shown here)
+    // Now render the voucher card WITH the stored code accessible
     renderSingleVoucher(token, amount, 'pending', claimUrl, expiresAt);
   });
 }
+
+// Expose so voucher cards can call it
+window._renderOtpModal = _renderOtpModal;
+window._getVoucherOtp  = _getVoucherOtp;
+window._clearVoucherOtp = _clearVoucherOtp;
 
 // ── Build the public /claim/<token> URL ──
 function _buildClaimUrl(token) {
@@ -2193,6 +2246,26 @@ window.runExpirySweep = async function() {
 // PHASE 1 — MARK AS PAID (Admin action)
 // You manually paid the UPI → flip status to paid
 // ═══════════════════════════════════════════
+
+// Show the stored secret code for a voucher at any time
+window._showVoucherCode = function(token, amount, claimUrl, expiresAt) {
+  const otp = _getVoucherOtp(token);
+  if (!otp) {
+    // Code not in local storage (older device / cleared) — show helpful message
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(3,5,10,.92);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);display:flex;align-items:center;justify-content:center;padding:20px;';
+    overlay.innerHTML = `
+      <div style="width:100%;max-width:340px;background:linear-gradient(158deg,rgba(255,255,255,.07),rgba(255,255,255,.03));border:1px solid rgba(255,184,48,.3);border-radius:24px;padding:28px 22px;text-align:center;box-shadow:0 32px 80px rgba(0,0,0,.7);">
+        <div style="font-size:32px;margin-bottom:12px;">⚠️</div>
+        <div style="font-size:16px;font-weight:800;color:var(--text);margin-bottom:8px;">Code Not Available</div>
+        <div style="font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:20px;">The code was created on a different device or browser. The receiver still needs to use the claim link — they can request the code from you directly.</div>
+        <button type="button" onclick="this.closest('[style*=fixed]').remove()" style="width:100%;padding:14px;background:rgba(255,184,48,.15);border:1px solid rgba(255,184,48,.3);border-radius:12px;color:var(--amber);font:700 14px/1 var(--sans);cursor:pointer;">OK</button>
+      </div>`;
+    document.body.appendChild(overlay);
+    return;
+  }
+  _renderOtpModal(otp, amount, token, claimUrl, expiresAt);
+};
 
 window.markVoucherPaid = async function(token) {
   if (!CURRENT_USER.phone) return;
@@ -2413,6 +2486,7 @@ function renderSingleVoucher(code, amount, status, claimUrl, expiresAt) {
           <button type="button" onclick="_copyClaimLink('${code}','${claimUrl.replace(/'/g,"&#39;")}')" style="flex:1;padding:11px;background:rgba(0,232,122,.12);border:1px solid rgba(0,232,122,.25);border-radius:var(--r);color:var(--em);font:700 12px/1 var(--sans);cursor:pointer;transition:background .2s;" onmouseover="this.style.background='rgba(0,232,122,.2)'" onmouseout="this.style.background='rgba(0,232,122,.12)'">📋 Copy Link</button>
           <button type="button" onclick="_shareClaimLink('${claimUrl.replace(/'/g,"&#39;")}',${amount})" style="flex:1;padding:11px;background:rgba(77,159,255,.12);border:1px solid rgba(77,159,255,.25);border-radius:var(--r);color:var(--blue);font:700 12px/1 var(--sans);cursor:pointer;transition:background .2s;" onmouseover="this.style.background='rgba(77,159,255,.2)'" onmouseout="this.style.background='rgba(77,159,255,.12)'">↗ Share</button>
         </div>
+        <button type="button" id="show-code-btn-${code}" onclick="window._showVoucherCode('${code}',${amount},'${claimUrl.replace(/'/g,"&#39;")}','${expiresAt||''}')" style="width:100%;margin-top:8px;padding:11px;background:rgba(255,184,48,.1);border:1px solid rgba(255,184,48,.22);border-radius:var(--r);color:var(--amber);font:700 12px/1 var(--sans);cursor:pointer;transition:background .2s;" onmouseover="this.style.background='rgba(255,184,48,.18)'" onmouseout="this.style.background='rgba(255,184,48,.1)'">🔐 Show Secret Code</button>
         ${(status === 'claimed' || status === 'needs_payout') ? `
         <div style="margin-top:10px;padding:10px 12px;background:rgba(77,159,255,.10);border:1px solid rgba(77,159,255,.22);border-radius:var(--r);font-size:12px;color:var(--blue);font-weight:600;line-height:1.5;">
           🔔 Receiver has entered their UPI ID. Check the <strong>PayMesh Admin</strong> panel to view it, send payment manually, then mark as paid.
