@@ -160,40 +160,48 @@ window.CURRENT_USER = CURRENT_USER; // expose so inline scripts can check sessio
 
 const _PM_NOTIF_MSGS = {
   sent: [
-    '{name} got your ₹{amount}. Smooth as always 😎',
-    '₹{amount} flew to {name}. PayMesh speed, no cap.',
-    'Done deal! ₹{amount} → {name}. Your wallet took the hit.',
-    'Sent ₹{amount} to {name}. You\'re basically the UPI god now.',
+    '💸 Done, {user}! ₹{amount} zipped to {name} in a flash. PayMesh never misses!',
+    '🚀 Boom, {user}! ₹{amount} just landed in {name}\'s wallet. You\'re unstoppable!',
+    '✅ Transaction complete! {user}, you sent ₹{amount} to {name} like an absolute pro 😎',
+    '⚡ {user}, ₹{amount} → {name}. Faster than light, smoother than butter!',
+    '🎯 Nailed it, {user}! ₹{amount} delivered to {name}. Your UPI game is elite!',
+    '💫 {user}, your ₹{amount} is already with {name}. PayMesh speed hits different!',
   ],
   received: [
-    '{name} just dropped ₹{amount} in your wallet 💚',
-    'Cha-ching! ₹{amount} from {name} just landed.',
-    '{name} paid up. ₹{amount} is yours now 🤑',
-    'Your wallet just got ₹{amount} richer. Thanks, {name}!',
+    '🤑 Ka-ching, {user}! ₹{amount} just crashed into your wallet from {name}. Time to celebrate!',
+    '💚 {user}, you\'ve got money! ₹{amount} from {name} just hit your account. Big W!',
+    '🎉 Surprise, {user}! {name} dropped ₹{amount} into your wallet. You\'re loved!',
+    '🔥 {user}, your balance just levelled up! ₹{amount} from {name} is IN. Let\'s go!',
+    '💰 Alert, {user}! {name} sent you ₹{amount}. Your wallet is smiling right now 😄',
+    '✨ Ooh nice, {user}! ₹{amount} from {name} just landed safe and sound. Cha-ching!',
   ],
   voucherCreated: [
-    '₹{amount} voucher locked and loaded. Who\'s the lucky one? 🎁',
-    'Voucher worth ₹{amount} created. You\'re basically Santa now.',
-    '₹{amount} is waiting to be claimed — share the code!',
-    'Locked ₹{amount} into a voucher. Let the magic happen ✨',
+    '🎁 {user}, your ₹{amount} gift voucher is live! Go spread the joy — someone\'s in for a treat!',
+    '✨ Magic sealed, {user}! ₹{amount} voucher is ready to make someone\'s day. You\'re a legend!',
+    '🎀 {user}, Santa mode: ON! Your ₹{amount} voucher is locked and loaded. Who\'s the lucky one?',
+    '💝 {user}, you just created a ₹{amount} surprise! Share the code and watch the smiles roll in 😊',
+    '🌟 Generous move, {user}! ₹{amount} voucher is out in the world. You\'re basically a gift god!',
   ],
   voucherClaimed: [
-    '{name} grabbed your ₹{amount} voucher. They loved it 🙌',
-    'Voucher redeemed! {name} just claimed ₹{amount}.',
-    'Your ₹{amount} gift reached {name}. Mission complete ✅',
-    '{name} used your voucher. ₹{amount} well spent!',
+    '🙌 Great news, {user}! {name} grabbed your ₹{amount} voucher and LOVED it. Mission accomplished!',
+    '✅ {user}, your ₹{amount} gift reached {name}! They\'re probably doing a happy dance right now 💃',
+    '🎊 {user}, {name} just redeemed your ₹{amount} voucher. Your generosity hit different today!',
+    '🔔 Voucher alert, {user}! {name} claimed your ₹{amount} gift. You made someone\'s day brighter ☀️',
+    '💌 {user}, ₹{amount} well spent! {name} used your voucher. Best gifter award goes to YOU 🏆',
   ],
   voucherReceived: [
-    '₹{amount} voucher credited. Someone likes you 💚',
-    'Voucher redeemed! +₹{amount} added to your wallet 🎉',
-    '₹{amount} just landed from a voucher. Spend wisely!',
-    'Free money alert! ₹{amount} voucher claimed successfully.',
+    '🎉 Jackpot, {user}! A ₹{amount} voucher just landed in your wallet. Someone really likes you 💚',
+    '🤩 Free money moment, {user}! +₹{amount} from a voucher is now yours. What a day to be alive!',
+    '💸 {user}, your wallet just got a gift injection! ₹{amount} voucher redeemed successfully 🎁',
+    '🥳 Woohoo, {user}! ₹{amount} from a voucher is in your account. Go treat yourself — you deserve it!',
+    '✨ Lucky you, {user}! ₹{amount} voucher claimed and credited. The universe is being kind today 🌈',
   ],
   walletLoaded: [
-    '₹{amount} added. Your wallet is ready to roll 🟢',
-    'Loaded up! ₹{amount} is in. Go make it rain.',
-    'Wallet fuelled with ₹{amount}. You\'re good to go.',
-    '+₹{amount} approved and in your wallet. Let\'s gooo 🚀',
+    '🟢 Fuelled up, {user}! ₹{amount} is locked and loaded in your PayMesh wallet. Let\'s roll!',
+    '🚀 {user}, your wallet just got a power-up! ₹{amount} added and ready to fire. Go make moves!',
+    '💪 Money in, {user}! ₹{amount} approved and sitting pretty in your wallet. You\'re all set!',
+    '🎯 {user}, ₹{amount} just hit your wallet — confirmed, verified, and yours! Time to spend smart 😎',
+    '⚡ Charged up, {user}! ₹{amount} loaded into PayMesh. Your wallet is ready for anything!',
   ],
 };
 
@@ -1122,7 +1130,7 @@ function _showLoadApprovedToast(amount, utr) {
       '<div style="font-size:11px;color:var(--text3);margin-top:4px;">UTR ' + utr + ' approved</div>';
     document.body.appendChild(toast);
     if (navigator.vibrate) navigator.vibrate([100, 50, 200]);
-    pmNotify('PayMesh · Wallet Loaded 🟢', _pmPickMsg(_PM_NOTIF_MSGS.walletLoaded, { amount: Number(amount).toFixed(2) }));
+    pmNotify('PayMesh · Wallet Loaded 🟢', _pmPickMsg(_PM_NOTIF_MSGS.walletLoaded, { amount: Number(amount).toFixed(2), user: (CURRENT_USER.name || '').split(' ')[0] || 'there' }));
     setTimeout(function() {
       toast.style.transition = 'opacity .4s ease, transform .4s ease';
       toast.style.opacity = '0';
@@ -2718,7 +2726,7 @@ window.sendMoney = async function() {
       await window.showPaymentSuccess('Payment Sent!', `₹${amount.toFixed(2)} sent to ${receiverName}`);
     }
     showOverlay('', 'Sent!', `₹${amount.toFixed(2)} sent to ${receiverName}`);
-    pmNotify('PayMesh · Sent ✈️', _pmPickMsg(_PM_NOTIF_MSGS.sent, { name: receiverName, amount: amount.toFixed(2) }));
+    pmNotify('PayMesh · Sent ✈️', _pmPickMsg(_PM_NOTIF_MSGS.sent, { name: receiverName, amount: amount.toFixed(2), user: (CURRENT_USER.name || '').split(' ')[0] || 'there' }));
   } catch(e) {
     if (typeof window.hidePaymentAnim === 'function') window.hidePaymentAnim();
     showMsg(msg,'error', e.message || 'Error. Try again.');
@@ -2809,7 +2817,7 @@ window.generateVoucher = async function() {
     document.getElementById('voucher-amount').value = '';
     showMsg(msg,'success','Voucher created! Note down the 6-digit code shown below.');
     if (navigator.vibrate) navigator.vibrate([100,50,200]);
-    pmNotify('PayMesh · Voucher Created 🎁', _pmPickMsg(_PM_NOTIF_MSGS.voucherCreated, { amount: amount.toFixed(2) }));
+    pmNotify('PayMesh · Voucher Created 🎁', _pmPickMsg(_PM_NOTIF_MSGS.voucherCreated, { amount: amount.toFixed(2), user: (CURRENT_USER.name || '').split(' ')[0] || 'there' }));
 
     // ── Show one-time OTP modal — code never shown again ──
     _showOtpModal(otpPlain, amount, token, claimUrl, expiresAt);
@@ -3548,7 +3556,7 @@ window.redeemVoucher = async function() {
     launchConfetti(80);
     if (navigator.vibrate) navigator.vibrate([200,100,200,100,400]);
     showOverlay('', 'Received!', `₹${amount.toFixed(2)} from ${fromName} added to wallet`);
-    pmNotify('PayMesh · Voucher Claimed 🎉', _pmPickMsg(_PM_NOTIF_MSGS.voucherReceived, { amount: amount.toFixed(2) }));
+    pmNotify('PayMesh · Voucher Claimed 🎉', _pmPickMsg(_PM_NOTIF_MSGS.voucherReceived, { amount: amount.toFixed(2), user: (CURRENT_USER.name || '').split(' ')[0] || 'there' }));
 
   } catch(e) {
     if (e.message === 'Failed to get document because the client is offline.') {
