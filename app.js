@@ -928,13 +928,15 @@ async function loadHomeData() {
   const txQuery = query(
     collection(db,"transactions"),
     where("phone","==",CURRENT_USER.phone),
-    orderBy("time","desc"),
     limit(20)
   );
   unsubTxns = onSnapshot(
     txQuery,
     (snap) => renderTransactions(snap),
-    (err)  => console.warn('Tx listener error:', err.message)
+    (err)  => {
+      const list = document.getElementById('tx-list');
+      if (list) list.innerHTML = '<div class="tx-empty">Could not load transactions</div>';
+    }
   );
 
   // ── LOAD APPROVAL NOTIFICATION ──
@@ -961,10 +963,13 @@ async function loadHomeData() {
 function renderTransactions(snap) {
   const list = document.getElementById('tx-list');
   if (snap.empty) { list.innerHTML = '<div class="tx-empty">No transactions yet</div>'; return; }
-  // Snapshot is already ordered by time desc, limited to 20 by the query
   const txs = [];
   snap.forEach(d => txs.push(d.data()));
-  list.innerHTML = txs.map((tx, i) => {
+  // Sort newest first in JS (avoids Firestore composite index on phone + time)
+  txs.sort((a,b) => (b.time || '').localeCompare(a.time || ''));
+  // Keep latest 20
+  const top20 = txs.slice(0, 20);
+  list.innerHTML = top20.map((tx, i) => {
     const isDebit   = tx.type === 'debit';
     const isPending = tx.type === 'pending';
     const amtClass  = isPending ? 'tx-pending' : isDebit ? 'tx-debit' : 'tx-credit';

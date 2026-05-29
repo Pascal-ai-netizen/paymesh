@@ -3,220 +3,259 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Claim Your PayMesh Payment</title>
-<meta name="theme-color" content="#03050A">
-<meta name="description" content="Someone sent you money via PayMesh. Enter your UPI ID to receive it.">
+<title>PayMesh — Claim Voucher</title>
+<meta name="theme-color" content="#070A0E">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700;800&family=Space+Mono:wght@700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 :root{
-  --bg:#03050A;--bg1:#070B14;
-  --surface:rgba(255,255,255,0.04);--surface2:rgba(255,255,255,0.07);
-  --border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.12);
-  --em:#00E87A;--em2:#00FFA3;--em-dim:rgba(0,232,122,0.12);--em-glow:rgba(0,232,122,0.25);
-  --blue:#4D9FFF;--blue-dim:rgba(77,159,255,0.12);
-  --amber:#FFB830;--red:#FF4D6A;
-  --text:#EEF2FF;--text2:#7A8BAA;--text3:#3A4558;
-  --mono:'Space Mono',monospace;--sans:'Space Grotesk',system-ui,sans-serif;
-  --r:14px;--r2:20px;--r3:28px;
-  --ease:cubic-bezier(0.16,1,0.3,1);--spring:cubic-bezier(0.34,1.56,0.64,1);
+  --bg:#070A0E;--bg2:#0F141C;--bg3:#141B25;
+  --border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.10);
+  --em:#2DD882;--em2:#1DB86A;
+  --amber:#F0A830;--blue:#5B9CF6;--red:#E8526A;
+  --text:#EDF1F7;--text2:#6E849E;--text3:#3A4A5C;
+  --mono:'DM Mono',monospace;--sans:'DM Sans',sans-serif;
+  --r:12px;--r2:18px;--spring:cubic-bezier(0.34,1.56,0.64,1);
 }
-html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
-body{
-  background:var(--bg);color:var(--text);font-family:var(--sans);
-  font-size:15px;line-height:1.5;min-height:100svh;
-  display:flex;flex-direction:column;align-items:center;justify-content:center;
-  padding:20px;-webkit-font-smoothing:antialiased;overscroll-behavior:none;
+html{-webkit-text-size-adjust:100%}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:15px;
+  line-height:1.5;min-height:100svh;-webkit-font-smoothing:antialiased;overscroll-behavior:none;}
+
+/* ── Mobile-only gate ── */
+#pm-mobile-gate{
+  display:none;position:fixed;inset:0;z-index:9999;
+  background:var(--bg);flex-direction:column;align-items:center;
+  justify-content:center;gap:20px;padding:40px;text-align:center;
+  font-family:var(--sans);
+}
+#pm-mobile-gate svg{opacity:.7}
+#pm-mobile-gate h2{font-size:22px;font-weight:700;color:var(--text);letter-spacing:-.4px}
+#pm-mobile-gate p{font-size:14px;color:var(--text2);max-width:300px;line-height:1.7}
+#pm-mobile-gate .badge{
+  margin-top:8px;padding:9px 18px;border:1px solid rgba(232,82,106,.25);
+  border-radius:10px;background:rgba(232,82,106,.07);
+  font-size:12px;color:var(--red);letter-spacing:.5px;font-weight:600;
 }
 
-/* ── AMBIENT ── */
-.ambient{position:fixed;inset:0;pointer-events:none;z-index:0;
-  background:
-    radial-gradient(ellipse 80% 55% at 10% -5%,rgba(0,232,122,.10) 0%,transparent 60%),
-    radial-gradient(ellipse 60% 45% at 90% 105%,rgba(77,159,255,.09) 0%,transparent 55%);
-  animation:ambientDrift 18s ease-in-out infinite alternate}
-@keyframes ambientDrift{0%{opacity:1;transform:scale(1)}100%{opacity:.8;transform:scale(1.08)}}
-
-/* ── CARD ── */
-.claim-card{
-  position:relative;z-index:1;
-  width:100%;max-width:420px;
-  background:linear-gradient(158deg,rgba(255,255,255,.055) 0%,rgba(255,255,255,.025) 100%);
-  border:1px solid var(--border2);border-radius:var(--r3);
-  padding:36px 28px 32px;
-  box-shadow:0 1px 0 rgba(255,255,255,.07) inset,0 32px 80px rgba(0,0,0,.7),0 0 80px rgba(0,232,122,.05);
-  animation:cardIn .5s var(--ease) both;
+/* ── App shell ── */
+#app{
+  max-width:440px;margin:0 auto;padding:20px 16px 40px;
+  min-height:100svh;display:flex;flex-direction:column;
 }
-@keyframes cardIn{from{opacity:0;transform:translateY(32px) scale(.96)}to{opacity:1;transform:none}}
 
-/* ── TOP SHIMMER ── */
-.claim-card::before{
-  content:'';position:absolute;top:0;left:8%;right:8%;height:1.5px;border-radius:99px;
-  background:linear-gradient(90deg,transparent,rgba(0,232,122,.55) 30%,rgba(0,255,163,1) 50%,rgba(0,232,122,.55) 70%,transparent);
-  background-size:250%;animation:shimmerTop 3s ease-in-out infinite;
-}
-@keyframes shimmerTop{0%{background-position:-100%;opacity:.5}50%{background-position:200%;opacity:1}100%{background-position:-100%;opacity:.5}}
-
-/* ── LOGO ── */
-.logo{display:flex;align-items:center;gap:10px;margin-bottom:28px}
-.logo-mark{width:40px;height:40px;border-radius:12px;
-  background:linear-gradient(135deg,rgba(0,232,122,.2),rgba(0,232,122,.07));
-  border:1px solid rgba(0,232,122,.28);
+/* ── Logo bar ── */
+.logo-bar{display:flex;align-items:center;gap:10px;margin-bottom:28px;padding-top:12px}
+.logo-mark{
+  width:34px;height:34px;border-radius:10px;
+  background:rgba(45,216,130,.1);border:1px solid rgba(45,216,130,.16);
   display:flex;align-items:center;justify-content:center;
-  box-shadow:0 0 24px rgba(0,232,122,.18)}
-.logo-text{font-size:20px;font-weight:700;color:var(--text);letter-spacing:-.5px}
-.logo-text span{background:linear-gradient(90deg,var(--em),var(--em2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+}
+.logo-text{font-size:17px;font-weight:700;letter-spacing:-.4px;color:var(--text)}
+.logo-text span{color:var(--em)}
 
-/* ── AMOUNT DISPLAY ── */
-.claim-amount-wrap{text-align:center;margin-bottom:24px}
-.claim-label{font-size:10px;font-weight:800;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-bottom:12px}
-.claim-amount{font-family:var(--mono);font-size:58px;font-weight:700;
-  color:var(--text);line-height:1;letter-spacing:-2px;
-  text-shadow:0 0 80px rgba(0,232,122,.25)}
-.claim-currency{font-size:26px;vertical-align:super;font-weight:400;opacity:.45;letter-spacing:0;margin-right:4px}
-.claim-from{font-size:13px;color:var(--text2);margin-top:10px;font-weight:500}
-.claim-from strong{color:var(--text);font-weight:700}
-.claim-expiry{font-size:11px;color:var(--text3);margin-top:4px;font-weight:500}
+/* ── Hero card ── */
+.hero{
+  background:linear-gradient(148deg,rgba(45,216,130,.07),rgba(45,216,130,.02) 60%,rgba(91,156,246,.04));
+  border:1px solid rgba(45,216,130,.12);border-radius:22px;
+  padding:28px 22px 24px;margin-bottom:14px;position:relative;overflow:hidden;
+}
+.hero::before{
+  content:'';position:absolute;top:0;left:10%;right:10%;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(45,216,130,.4),transparent);
+}
+.hero-icon{font-size:40px;margin-bottom:14px;display:block}
+.hero-title{font-size:26px;font-weight:700;letter-spacing:-.8px;color:var(--text);margin-bottom:6px}
+.hero-amount{font-family:var(--mono);font-size:36px;font-weight:500;color:var(--em);letter-spacing:-1px;margin-bottom:8px}
+.hero-from{font-size:14px;color:var(--text2);font-weight:400}
 
-/* ── DIVIDER ── */
-.divider{height:1px;background:var(--border);margin:0 -4px 22px}
+/* ── Card ── */
+.card{
+  background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);
+  padding:20px 18px;margin-bottom:12px;
+}
+.card::before{
+  content:'';display:block;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.05),transparent);
+  margin:-20px -18px 18px;
+}
 
-/* ── FORM ── */
-.form-group{margin-bottom:18px}
-.form-group label{display:block;font-size:9px;font-weight:800;color:var(--text3);
-  margin-bottom:9px;letter-spacing:2.5px;text-transform:uppercase}
+/* ── Form ── */
+.form-group{margin-bottom:16px}
+.form-group label{
+  display:block;font-size:9.5px;font-weight:600;letter-spacing:2px;
+  text-transform:uppercase;color:var(--text3);margin-bottom:8px;
+}
 .form-group input{
-  width:100%;padding:15px 17px;
-  background:rgba(0,0,0,.45);border:1.5px solid var(--border2);
-  border-radius:var(--r);color:var(--text);
-  font:600 15px/1 var(--sans);outline:none;
-  transition:border-color .25s,box-shadow .25s,background .25s;
-  caret-color:var(--em);-webkit-appearance:none}
+  width:100%;padding:13px 15px;
+  background:var(--bg3);border:1px solid var(--border2);
+  border-radius:12px;color:var(--text);
+  font:400 16px/1 var(--sans);outline:none;
+  transition:border-color .18s,box-shadow .18s;
+  caret-color:var(--em);-webkit-appearance:none;
+}
 .form-group input:focus{
-  border-color:rgba(0,232,122,.5);background:rgba(0,232,122,.04);
-  box-shadow:0 0 0 4px rgba(0,232,122,.12),0 0 24px rgba(0,232,122,.08)}
-.form-group input::placeholder{color:var(--text3);font-weight:500}
-
-/* ── BUTTON ── */
-.btn-claim{
-  width:100%;padding:17px;border:none;border-radius:var(--r);
-  font:800 15px/1 var(--sans);letter-spacing:.4px;cursor:pointer;
-  position:relative;overflow:hidden;margin-top:4px;color:#011A0A;
-  background:linear-gradient(135deg,var(--em) 0%,#00F5A8 50%,var(--em2) 100%);
-  box-shadow:0 8px 28px rgba(0,232,122,.40),0 1px 0 rgba(255,255,255,.28) inset;
-  transition:transform .18s var(--spring),box-shadow .22s;
+  border-color:rgba(45,216,130,.35);
+  background:rgba(45,216,130,.025);
+  box-shadow:0 0 0 3px rgba(45,216,130,.08);
 }
-.btn-claim::before{
-  content:'';position:absolute;top:-50%;left:-90%;width:50%;height:200%;
-  background:linear-gradient(105deg,transparent,rgba(255,255,255,.30),transparent);
-  transform:skewX(-20deg);animation:btnShine 3s ease-in-out infinite;
+.form-group input::placeholder{color:var(--text3)}
+
+/* ── OTP dots ── */
+.otp-row{display:flex;gap:10px;justify-content:center;margin:12px 0 0}
+.otp-digit{
+  width:46px;height:54px;border-radius:12px;
+  background:var(--bg3);border:1.5px solid var(--border2);
+  display:flex;align-items:center;justify-content:center;
+  font:600 22px/1 var(--mono);color:var(--text);
+  transition:border-color .15s,background .15s;
 }
-@keyframes btnShine{0%,60%,100%{left:-90%;opacity:0}65%{opacity:1}80%{left:150%;opacity:1}81%{opacity:0}}
-.btn-claim:hover{box-shadow:0 14px 44px rgba(0,232,122,.55),0 1px 0 rgba(255,255,255,.32) inset;transform:translateY(-2px)}
-.btn-claim:active{transform:scale(.96) translateY(1px);transition-duration:.07s}
-.btn-claim:disabled{opacity:.5;cursor:not-allowed;pointer-events:none}
+.otp-digit.filled{background:rgba(45,216,130,.06);border-color:rgba(45,216,130,.3);color:var(--em)}
+.otp-digit.error{border-color:var(--red);background:rgba(232,82,106,.06);color:var(--red);animation:shake .35s ease both}
+@keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-6px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(4px)}}
 
-/* ── MESSAGES ── */
-.msg{margin-top:14px;padding:13px 17px;border-radius:var(--r);font:600 13px/1.6 var(--sans);display:none}
-.msg.success{display:block;background:rgba(0,232,122,.10);color:var(--em);border:1px solid rgba(0,232,122,.22);animation:msgPop .3s var(--spring) both}
-.msg.error{display:block;background:rgba(255,77,106,.10);color:var(--red);border:1px solid rgba(255,77,106,.22);animation:msgPop .3s var(--spring) both}
-.msg.info{display:block;background:rgba(77,159,255,.10);color:var(--blue);border:1px solid rgba(77,159,255,.22);animation:msgPop .3s var(--spring) both}
-@keyframes msgPop{from{opacity:0;transform:scale(.94) translateY(8px)}to{opacity:1;transform:none}}
+/* ── Keypad ── */
+.keypad{
+  display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:16px;
+}
+.key{
+  height:54px;border-radius:14px;border:1px solid var(--border);
+  background:var(--bg3);font:500 20px/1 var(--mono);color:var(--text);
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+  transition:background .12s,transform .12s;-webkit-tap-highlight-color:transparent;
+}
+.key:active{background:rgba(45,216,130,.09);transform:scale(.94)}
+.key.del{font-size:18px;color:var(--text2)}
+.key.empty{background:none;border:none;cursor:default}
 
-/* ── SUCCESS STATE ── */
-.success-state{text-align:center;animation:cardIn .5s var(--ease) both}
-.success-icon{font-size:64px;margin-bottom:16px;animation:bounceIn .6s var(--spring) both}
-@keyframes bounceIn{from{opacity:0;transform:scale(.5)}to{opacity:1;transform:scale(1)}}
-.success-title{font-size:26px;font-weight:800;color:var(--em);letter-spacing:-.5px;margin-bottom:8px}
-.success-sub{font-size:14px;color:var(--text2);line-height:1.6;font-weight:500}
-.success-note{font-size:12px;color:var(--text3);margin-top:14px;line-height:1.5;
-  background:rgba(0,232,122,.06);border:1px solid rgba(0,232,122,.12);
-  border-radius:var(--r);padding:12px 14px}
+/* ── Buttons ── */
+.btn-primary{
+  width:100%;padding:15px;border:none;border-radius:var(--r);
+  background:linear-gradient(135deg,#2DD882,#28C876 60%,#1DB86A);
+  color:#031A0A;font:600 14px/1 var(--sans);letter-spacing:.2px;
+  cursor:pointer;margin-top:4px;
+  box-shadow:0 2px 12px rgba(45,216,130,.18);
+  transition:transform .15s,box-shadow .2s,opacity .15s;
+}
+.btn-primary:hover{transform:translateY(-1px);box-shadow:0 6px 22px rgba(45,216,130,.24)}
+.btn-primary:active{transform:scale(.97);transition-duration:.06s}
+.btn-primary:disabled{opacity:.45;cursor:not-allowed;transform:none}
 
-/* ── FOOTER ── */
-.claim-footer{font-size:11px;color:var(--text3);text-align:center;margin-top:18px;letter-spacing:.3px;font-weight:500}
+/* ── Msg ── */
+.msg{margin-top:12px;padding:12px 15px;border-radius:11px;font:500 13px/1.6 var(--sans);display:none}
+.msg.success{display:block;background:rgba(45,216,130,.07);border:1px solid rgba(45,216,130,.18);color:var(--em)}
+.msg.error  {display:block;background:rgba(232,82,106,.07);border:1px solid rgba(232,82,106,.18);color:var(--red)}
 
-/* ── ERROR STATE ── */
-.error-state{text-align:center}
-.error-icon{font-size:56px;margin-bottom:14px}
-.error-title{font-size:22px;font-weight:800;color:var(--red);letter-spacing:-.4px;margin-bottom:8px}
-.error-sub{font-size:14px;color:var(--text2);line-height:1.6;font-weight:500}
+/* ── Notice ── */
+.notice{
+  padding:12px 14px;border-radius:12px;
+  background:rgba(91,156,246,.07);border:1px solid rgba(91,156,246,.16);
+  font:400 12.5px/1.7 var(--sans);color:var(--text2);
+}
+.notice strong{color:var(--text);font-weight:600}
 
-/* ── SPINNER ── */
-.spinner{display:inline-block;width:22px;height:22px;
-  border:2.5px solid rgba(0,232,122,.25);border-top-color:var(--em);
-  border-radius:50%;animation:spin .8s linear infinite;margin:0 auto}
+/* ── Loading spinner ── */
+.spinner{
+  width:36px;height:36px;border-radius:50%;
+  border:3px solid rgba(255,255,255,.08);
+  border-top-color:var(--em);
+  animation:spin .7s linear infinite;margin:0 auto;
+}
 @keyframes spin{to{transform:rotate(360deg)}}
-.loading-wrap{text-align:center;padding:20px 0}
+
+/* ── Ambient ── */
+.ambient{
+  position:fixed;inset:0;pointer-events:none;z-index:0;
+  background:radial-gradient(ellipse 70% 50% at 15% 0%,rgba(45,216,130,.05) 0%,transparent 65%),
+             radial-gradient(ellipse 55% 40% at 85% 100%,rgba(91,156,246,.04) 0%,transparent 60%);
+}
+#app{position:relative;z-index:1}
+
+/* ── Success state ── */
+.success-icon{
+  width:72px;height:72px;border-radius:50%;
+  background:rgba(45,216,130,.1);border:1px solid rgba(45,216,130,.2);
+  display:flex;align-items:center;justify-content:center;
+  margin:0 auto 20px;
+  animation:popIn .5s cubic-bezier(0.34,1.56,0.64,1) both;
+}
+@keyframes popIn{from{opacity:0;transform:scale(.6)}to{opacity:1;transform:scale(1)}}
 </style>
 </head>
 <body>
+
+<!-- Mobile-only gate -->
+<div id="pm-mobile-gate">
+  <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="#E8526A" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/>
+  </svg>
+  <h2>Mobile Only</h2>
+  <p>PayMesh voucher claims are only available on Android or iOS mobile devices.</p>
+  <div class="badge">MOBILE REQUIRED</div>
+</div>
+
 <div class="ambient"></div>
 
-<div class="claim-card" id="claim-card">
-  <!-- Content injected by JS -->
-  <div class="loading-wrap">
-    <div class="spinner"></div>
-    <p style="color:var(--text3);font-size:13px;margin-top:12px;font-weight:500">Loading voucher…</p>
+<div id="app">
+  <!-- Logo -->
+  <div class="logo-bar">
+    <div class="logo-mark">
+      <svg width="18" height="18" viewBox="0 0 32 32" fill="none">
+        <path d="M18 4L8 18H16L14 28L24 14H16L18 4Z" fill="url(#cGrad)"/>
+        <defs>
+          <linearGradient id="cGrad" x1="8" y1="4" x2="24" y2="28" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#2DD882"/>
+            <stop offset="100%" stop-color="#1DB86A"/>
+          </linearGradient>
+        </defs>
+      </svg>
+    </div>
+    <div class="logo-text">Pay<span>Mesh</span></div>
+  </div>
+
+  <!-- Dynamic content injected here -->
+  <div id="claim-root">
+    <div style="text-align:center;padding:60px 0">
+      <div class="spinner"></div>
+      <p style="margin-top:20px;color:var(--text3);font-size:13px">Loading voucher…</p>
+    </div>
   </div>
 </div>
 
-<p class="claim-footer">Powered by PayMesh · Secure payment link</p>
-
 <script type="module">
-// ── DESKTOP-ONLY GATE ──
+// ── MOBILE GATE ──
 (function() {
-  var isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
-    || (navigator.maxTouchPoints > 1 && window.screen.width < 1024);
-  if (isMobile) {
-    document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;min-height:100svh;padding:32px;text-align:center;font-family:system-ui,sans-serif;background:#03050A;color:#EEF2FF;">'
-      + '<div><div style="font-size:48px;margin-bottom:20px;">💻</div>'
-      + '<div style="font-size:22px;font-weight:700;margin-bottom:10px;">Desktop Only</div>'
-      + '<div style="font-size:14px;color:#7A8BAA;line-height:1.6;">This claim page must be opened on a laptop or desktop computer.<br>Please use a computer to claim your payment.</div></div></div>';
-    return;
+  var ua = navigator.userAgent || '';
+  var desktopUA = /Windows NT|Macintosh|Linux x86_64|Linux i686|CrOS/.test(ua);
+  var isMobileUA = /Android|iPhone|iPad|iPod|Mobile/.test(ua);
+  function isDesktop() {
+    if (desktopUA && !isMobileUA) return true;
+    if (window.matchMedia && window.matchMedia('(pointer:fine)').matches && !window.matchMedia('(pointer:coarse)').matches) return true;
+    if (!('ontouchstart' in window) && navigator.maxTouchPoints === 0) return true;
+    if (screen.width >= 1024 && navigator.maxTouchPoints === 0) return true;
+    if (screen.width >= 1024 && screen.height >= 1024 && !isMobileUA) return true;
+    if (/iPad/.test(ua)) return true;
+    if (/Android/.test(ua) && !/Mobile/.test(ua) && screen.width >= 768) return true;
+    return false;
+  }
+  var isDesktopResult = isDesktop();
+  if (isDesktopResult) {
+    var gate = document.getElementById('pm-mobile-gate');
+    var app  = document.getElementById('app');
+    if (gate) gate.style.display = 'flex';
+    if (app)  app.style.display  = 'none';
+    return; // stop all JS
   }
 })();
 
-// ── DEVTOOLS BLOCK ──
-(function() {
-  // Keyboard shortcuts
-  document.addEventListener('keydown', function(e) {
-    if (e.key === 'F12') { e.preventDefault(); e.stopImmediatePropagation(); return false; }
-    if ((e.ctrlKey || e.metaKey) && e.shiftKey && ['i','I','j','J','c','C'].includes(e.key)) {
-      e.preventDefault(); e.stopImmediatePropagation(); return false;
-    }
-    if ((e.ctrlKey || e.metaKey) && (e.key === 'u' || e.key === 'U')) {
-      e.preventDefault(); e.stopImmediatePropagation(); return false;
-    }
-    if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
-      e.preventDefault(); e.stopImmediatePropagation(); return false;
-    }
-  }, true);
-  // Right-click
-  document.addEventListener('contextmenu', function(e) { e.preventDefault(); return false; }, true);
-  // Size-based devtools detection
-  var _dtOpen = false;
-  setInterval(function() {
-    var open = (window.outerWidth - window.innerWidth > 160) || (window.outerHeight - window.innerHeight > 160);
-    if (open && !_dtOpen) { _dtOpen = true; document.body.style.filter = 'blur(20px) grayscale(1)'; }
-    else if (!open) { _dtOpen = false; document.body.style.filter = ''; }
-  }, 800);
-  // Suppress console
-  var noop = function(){};
-  ['log','warn','info','debug','table','dir'].forEach(function(m){ try{console[m]=noop;}catch(e){} });
-})();
-// ═══════════════════════════════════════════════
-// PAYMESH CLAIM PAGE — Phase 1
-// Receiver opens this link, enters UPI ID.
-// Firestore row flips to {status: 'claimed', upiId: ...}
-// Sender sees the notification, pays via UPI app, marks as paid.
-// ═══════════════════════════════════════════════
-
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import {
-  getFirestore, doc, getDoc, updateDoc, addDoc, collection, runTransaction
+  getFirestore,
+  doc, getDoc, updateDoc, runTransaction, addDoc, collection
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -227,418 +266,256 @@ const firebaseConfig = {
   messagingSenderId: "64830673482",
   appId: "1:64830673482:web:5722735cf616109b500cb3"
 };
+const db = getFirestore(initializeApp(firebaseConfig));
 
-const app = initializeApp(firebaseConfig);
-const db  = getFirestore(app);
+const UPI_REGEX = /^[a-zA-Z0-9.\-_+]+@[a-zA-Z]+$/i;
 
-// ── UPI ID validation (same regex as app.js) ──
-const UPI_REGEX = /^[a-zA-Z0-9.\-_+]+@(ybl|oksbi|okaxis|okicici|okhdfcbank|paytm|apl|ibl|upi|axl|airtel|jio|fbl|barodampay|centralbank|cmsidfc|dbs|equitas|federal|hsbc|idbi|idfc|indus|kotak|lvb|mahb|nsdl|pnb|postbank|psb|rbl|sbi|sc|scmobile|shbk|syndicate|tjsb|uco|union|united|vijb|yesfam|yesbank|icici|hdfc|axis|sib|dcb|karb|kvb|lax|tmb|csb|dlb|apgvb|aubank|bdbl|bgvb|bkid|bocl|bsbl|cbin|ccl|cie|citibank|csbcoin|dlxb|esfbl|fino|gbcoin|hsbc|idfcfirst|ikwik|indbank|iob|jkb|jsbl|kbl|kmbl|kscb|kvgb|mahagramin|nainital|nkgsb|nmgb|obcfin|payzapp|pingpay|pkgb|psb|qfix|rajgovt|saraswat|sbm|scbl|shb|snapwork|spices|svcbank|tjsb|ubi|uboi|ucb|ucobank|unionbank|utbi|vardhman|vbhvn|vijayabank|vitp|wpay|yapl|yesb)$/i;
+// Parse token from ?t=
+const token = new URLSearchParams(location.search).get('t');
+const root  = document.getElementById('claim-root');
 
-const card = document.getElementById('claim-card');
-
-function setCard(html) { card.innerHTML = html; }
-
-function showMsg(type, text) {
-  const el = document.getElementById('claim-msg');
-  if (!el) return;
+function showMsg(el, type, text) {
   el.className = 'msg ' + type;
   el.textContent = text;
 }
 
-// ── Parse token from URL ──
-const params = new URLSearchParams(window.location.search);
-const token  = (params.get('t') || '').trim(); // preserve exact case — Firestore key is case-sensitive
-
-// ── Main flow ──
-async function init() {
-  if (!token) {
-    renderError('Invalid Link', 'This claim link is missing the payment token. Ask the sender to share the link again.');
-    return;
-  }
-
-  try {
-    const vRef  = doc(db, 'vouchers', token);
-    const vSnap = await getDoc(vRef);
-
-    if (!vSnap.exists()) {
-      renderError('Voucher Not Found', 'This payment link is invalid or has already been removed. Ask the sender for a new one.');
-      return;
-    }
-
-    const v = vSnap.data();
-
-    // ── Guard: expired? ──
-    if (v.expiresAt && new Date(v.expiresAt) < new Date()) {
-      renderError('Link Expired', `This payment link expired on ${new Date(v.expiresAt).toLocaleString()}. The sender has been refunded automatically. Ask them to create a new voucher.`);
-      return;
-    }
-
-    // ── Guard: already claimed / paid? ──
-    if (v.status === 'completed') {
-      renderAlreadyClaimed(v);
-      return;
-    }
-    if (v.status === 'needs_payout') {
-      renderAlreadyClaimed(v);
-      return;
-    }
-    if (v.status === 'claimed') {
-      renderAlreadyClaimed(v);
-      return;
-    }
-    if (v.status === 'paid') {
-      renderAlreadyPaid(v);
-      return;
-    }
-    if (v.status === 'locked') {
-      renderError('Link Locked', 'Too many incorrect code attempts. This voucher has been permanently locked. Contact the sender for a new one.');
-      return;
-    }
-    if (v.status === 'USED' || v.status === 'expired') {
-      renderError('Already Used', 'This payment link has already been used or has expired.');
-      return;
-    }
-
-    // ── Valid pending voucher — show claim form ──
-    renderClaimForm(v);
-
-  } catch(e) {
-    console.error(e);
-    renderError('Connection Error', 'Could not load this payment link. Check your internet and refresh the page.');
-  }
-}
-
-// ── Hash OTP for comparison ──
-async function hashOtp(plainOtp, tokenId) {
-  const buf  = new TextEncoder().encode(plainOtp + ':paymesh:' + tokenId);
+async function hashOtp(otp, token) {
+  const buf  = new TextEncoder().encode(otp + ':paymesh:' + token);
   const hash = await crypto.subtle.digest('SHA-256', buf);
   return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2,'0')).join('');
 }
 
-// ── Render the claim form — Step 1: PayMesh or not? ──
-function renderClaimForm(v) {
-  const senderName = v.createdByName || 'Someone';
-  const amount     = Number(v.amount || 0);
-  let expiryText   = '';
-  if (v.expiresAt) {
+if (!token) {
+  root.innerHTML = `<div class="card" style="text-align:center">
+    <p style="color:var(--red);font-weight:600">Invalid voucher link.</p>
+    <p style="color:var(--text2);font-size:13px;margin-top:8px">This link appears to be broken or expired.</p>
+  </div>`;
+} else {
+  // Load voucher from Firestore
+  (async () => {
     try {
-      const diffMs = new Date(v.expiresAt) - Date.now();
-      const diffH  = Math.floor(diffMs / 3600000);
-      const diffM  = Math.floor((diffMs % 3600000) / 60000);
-      expiryText = diffMs > 0 ? `Expires in ${diffH}h ${diffM}m` : '';
-    } catch(e) {}
-  }
+      const vSnap = await getDoc(doc(db,'vouchers',token));
+      if (!vSnap.exists()) {
+        root.innerHTML = `<div class="card" style="text-align:center">
+          <div style="font-size:36px;margin-bottom:12px">❌</div>
+          <p style="color:var(--red);font-weight:600;font-size:16px">Voucher not found</p>
+          <p style="color:var(--text2);font-size:13px;margin-top:8px;line-height:1.6">This voucher doesn't exist or has already been used.</p>
+        </div>`;
+        return;
+      }
+      const v = vSnap.data();
+      if (v.status === 'USED' || v.status === 'completed') {
+        root.innerHTML = `<div class="card" style="text-align:center">
+          <div style="font-size:36px;margin-bottom:12px">✅</div>
+          <p style="color:var(--em);font-weight:600;font-size:16px">Already Redeemed</p>
+          <p style="color:var(--text2);font-size:13px;margin-top:8px">This voucher has already been claimed.</p>
+        </div>`;
+        return;
+      }
+      if (v.status === 'expired') {
+        root.innerHTML = `<div class="card" style="text-align:center">
+          <div style="font-size:36px;margin-bottom:12px">⏰</div>
+          <p style="color:var(--amber);font-weight:600;font-size:16px">Voucher Expired</p>
+          <p style="color:var(--text2);font-size:13px;margin-top:8px">This voucher has expired and the sender has been refunded.</p>
+        </div>`;
+        return;
+      }
 
-  setCard(`
-    <div class="logo">
-      <div class="logo-mark">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00E87A" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
-      </div>
-      <div class="logo-text">Pay<span>Mesh</span></div>
-    </div>
+      const amount   = Number(v.amount || 0);
+      const fromName = v.createdByName || 'Someone';
+      let expiryText = '';
+      if (v.expiresAt) {
+        const diffH = Math.floor((new Date(v.expiresAt) - Date.now()) / 3600000);
+        if (diffH > 0) expiryText = `Expires in ~${diffH}h`;
+        else expiryText = 'Expiring soon';
+      }
 
-    <div class="claim-amount-wrap">
-      <div class="claim-label">You're Receiving</div>
-      <div class="claim-amount"><span class="claim-currency">₹</span>${amount.toFixed(2)}</div>
-      <div class="claim-from">From <strong>${escHtml(senderName)}</strong></div>
-      ${expiryText ? `<div class="claim-expiry">⏳ ${escHtml(expiryText)}</div>` : ''}
-    </div>
+      // OTP entry state
+      let otpBuffer = '';
+      let claimedUpi = '';
+      let step = 'upi'; // 'upi' | 'otp' | 'done'
 
-    <div class="divider"></div>
+      function render() {
+        if (step === 'upi') renderUpiStep();
+        else if (step === 'otp') renderOtpStep();
+      }
 
-    <div style="text-align:center;margin-bottom:18px;">
-      <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px;">Do you have a PayMesh account?</div>
-      <div style="font-size:12px;color:var(--text2);font-weight:500;">This determines how you'll receive the money.</div>
-    </div>
-    <div style="display:flex;gap:10px;margin-bottom:8px;">
-      <button type="button" id="btn-yes-paymesh"
-        style="flex:1;padding:15px;background:rgba(0,232,122,.12);border:1.5px solid rgba(0,232,122,.3);border-radius:var(--r);color:var(--em);font:700 14px/1 var(--sans);cursor:pointer;transition:all .2s;"
-        onclick="window._showPaymeshForm()">
-        ✅ Yes, I have PayMesh
-      </button>
-      <button type="button" id="btn-no-paymesh"
-        style="flex:1;padding:15px;background:rgba(77,159,255,.10);border:1.5px solid rgba(77,159,255,.25);border-radius:var(--r);color:var(--blue);font:700 14px/1 var(--sans);cursor:pointer;transition:all .2s;"
-        onclick="window._showExternalForm()">
-        ❌ No, use my UPI ID
-      </button>
-    </div>
-    <div id="claim-form-step2" style="margin-top:16px;"></div>
-    <div id="claim-msg" class="msg"></div>
-  `);
+      function renderUpiStep() {
+        root.innerHTML = `
+          <div class="hero">
+            <span class="hero-icon">🎁</span>
+            <div class="hero-title">You've received a voucher!</div>
+            <div class="hero-amount">₹${amount.toFixed(2)}</div>
+            <div class="hero-from">From <strong style="color:var(--text)">${fromName}</strong>${expiryText ? ' · ' + expiryText : ''}</div>
+          </div>
+          <div class="card">
+            <p style="font-size:13.5px;color:var(--text2);line-height:1.6;margin-bottom:16px">
+              Enter your UPI ID to receive ₹${amount.toFixed(2)} directly to your bank account.
+            </p>
+            <div class="form-group">
+              <label>Your UPI ID</label>
+              <input type="text" id="claim-upi" placeholder="yourname@bankname" inputmode="email" autocomplete="off" spellcheck="false" style="font-family:var(--mono);font-size:15px">
+            </div>
+            <button type="button" class="btn-primary" id="upi-submit-btn">Continue →</button>
+            <div id="upi-msg" class="msg"></div>
+          </div>
+          <div class="notice">
+            <strong>How it works:</strong> Enter your UPI ID → Enter the secret code from the sender → The sender will transfer the money to your UPI ID within a few minutes.
+          </div>`;
 
-  // Store voucher data for submit handlers
-  window._claimVoucher = v;
+        document.getElementById('upi-submit-btn').addEventListener('click', () => {
+          const upi = document.getElementById('claim-upi').value.trim();
+          const msg = document.getElementById('upi-msg');
+          if (!upi) { showMsg(msg,'error','Enter your UPI ID'); return; }
+          if (!UPI_REGEX.test(upi)) { showMsg(msg,'error','Invalid UPI ID format. Example: name@upi'); return; }
+          claimedUpi = upi;
+          step = 'otp';
+          render();
+        });
+
+        document.getElementById('claim-upi').addEventListener('keydown', e => {
+          if (e.key === 'Enter') document.getElementById('upi-submit-btn').click();
+        });
+      }
+
+      function renderOtpStep() {
+        otpBuffer = '';
+        root.innerHTML = `
+          <div class="hero">
+            <span class="hero-icon">🔐</span>
+            <div class="hero-title">Enter Secret Code</div>
+            <div class="hero-amount">₹${amount.toFixed(2)}</div>
+            <div class="hero-from">Ask <strong style="color:var(--text)">${fromName}</strong> for the 6-digit code</div>
+          </div>
+          <div class="card">
+            <p style="font-size:13px;color:var(--text2);margin-bottom:16px;line-height:1.6">
+              The sender shared a 6-digit secret code with you separately. Enter it below to confirm your claim.
+            </p>
+            <div class="otp-row" id="otp-dots">
+              ${[0,1,2,3,4,5].map(i=>`<div class="otp-digit" id="od${i}"></div>`).join('')}
+            </div>
+            <div class="keypad">
+              ${[1,2,3,4,5,6,7,8,9,'','0','⌫'].map(k =>
+                k === '' ? '<div class="key empty"></div>' :
+                k === '⌫' ? `<button type="button" class="key del" id="key-del">⌫</button>` :
+                `<button type="button" class="key" data-digit="${k}">${k}</button>`
+              ).join('')}
+            </div>
+            <div id="otp-msg" class="msg"></div>
+            <button type="button" style="width:100%;margin-top:14px;padding:12px;background:none;border:1px solid var(--border2);border-radius:var(--r);color:var(--text3);font:500 13px/1 var(--sans);cursor:pointer;" id="back-btn">← Change UPI ID</button>
+          </div>`;
+
+        document.querySelectorAll('.key[data-digit]').forEach(btn => {
+          btn.addEventListener('click', () => pressKey(btn.dataset.digit));
+        });
+        document.getElementById('key-del').addEventListener('click', () => pressKey('del'));
+        document.getElementById('back-btn').addEventListener('click', () => { step = 'upi'; render(); });
+      }
+
+      function pressKey(k) {
+        const msg = document.getElementById('otp-msg');
+        if (k === 'del') {
+          if (otpBuffer.length > 0) { otpBuffer = otpBuffer.slice(0,-1); updateDots(); }
+          return;
+        }
+        if (otpBuffer.length >= 6) return;
+        otpBuffer += k;
+        updateDots();
+        if (otpBuffer.length === 6) setTimeout(() => submitOtp(), 120);
+      }
+
+      function updateDots() {
+        for (let i=0;i<6;i++) {
+          const d = document.getElementById('od'+i);
+          if (!d) return;
+          d.classList.toggle('filled', i < otpBuffer.length);
+          d.classList.remove('error');
+          d.textContent = i < otpBuffer.length ? otpBuffer[i] : '';
+        }
+      }
+
+      async function submitOtp() {
+        const msg = document.getElementById('otp-msg');
+        if (!msg) return;
+        showMsg(msg,'success','Verifying…');
+        // disable keys
+        document.querySelectorAll('.key').forEach(b => b.disabled = true);
+
+        try {
+          const entered = await hashOtp(otpBuffer, token);
+          const fresh   = await getDoc(doc(db,'vouchers',token));
+          if (!fresh.exists()) { flashError(msg,'Voucher no longer exists.'); return; }
+          const vd = fresh.data();
+
+          if (vd.status === 'USED' || vd.status === 'completed') {
+            flashError(msg,'This voucher was already redeemed.'); return;
+          }
+          if ((vd.codeAttempts || 0) >= 3) {
+            flashError(msg,'Too many incorrect attempts. Voucher locked.'); return;
+          }
+          if (entered !== vd.codeHash) {
+            // Increment attempts
+            await updateDoc(doc(db,'vouchers',token), { codeAttempts: (vd.codeAttempts||0)+1 });
+            const left = 3 - ((vd.codeAttempts||0)+1);
+            flashError(msg, left > 0 ? `Wrong code. ${left} attempt${left!==1?'s':''} left.` : 'Too many attempts. Voucher locked.');
+            return;
+          }
+
+          // Correct — mark as claimed (needs_payout), store UPI
+          await updateDoc(doc(db,'vouchers',token), {
+            status:     'needs_payout',
+            claimUpi:   claimedUpi,
+            claimedAt:  new Date().toISOString(),
+            codeAttempts: (vd.codeAttempts||0)+1
+          });
+
+          step = 'done';
+          root.innerHTML = `
+            <div class="card" style="text-align:center;padding:32px 20px">
+              <div class="success-icon">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#2DD882" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+              </div>
+              <div style="font-size:22px;font-weight:700;letter-spacing:-.5px;color:var(--text);margin-bottom:8px">Claim Submitted!</div>
+              <div style="font-family:var(--mono);font-size:30px;font-weight:500;color:var(--em);letter-spacing:-1px;margin-bottom:12px">₹${amount.toFixed(2)}</div>
+              <p style="font-size:14px;color:var(--text2);line-height:1.7;max-width:280px;margin:0 auto">
+                <strong style="color:var(--text)">${fromName}</strong> will send ₹${amount.toFixed(2)} to<br>
+                <strong style="color:var(--text);font-family:var(--mono);font-size:13px">${claimedUpi}</strong><br>
+                within a few minutes via UPI.
+              </p>
+              <div style="margin-top:20px;padding:12px 14px;background:rgba(45,216,130,.06);border:1px solid rgba(45,216,130,.14);border-radius:12px;font-size:12.5px;color:var(--text2);line-height:1.7">
+                You'll receive a standard UPI transfer. Check your GPay / PhonePe / bank app once they mark it as sent.
+              </div>
+            </div>`;
+
+        } catch(e) {
+          flashError(msg, e.message || 'Error. Please try again.');
+        }
+      }
+
+      function flashError(msg, text) {
+        for(let i=0;i<6;i++){
+          const d=document.getElementById('od'+i);
+          if(d){d.classList.add('filled','error');d.textContent=otpBuffer[i]||''}
+        }
+        showMsg(msg,'error',text);
+        setTimeout(()=>{
+          otpBuffer='';updateDots();
+          document.querySelectorAll('.key').forEach(b=>b.disabled=false);
+          msg.className='msg';msg.textContent='';
+        },1800);
+      }
+
+      render();
+    } catch(e) {
+      root.innerHTML = `<div class="card" style="text-align:center">
+        <p style="color:var(--red);font-weight:600">Failed to load voucher</p>
+        <p style="color:var(--text2);font-size:13px;margin-top:8px">Check your internet connection and try again.</p>
+      </div>`;
+    }
+  })();
 }
-
-// ── Step 2a: PayMesh receiver ──
-window._showPaymeshForm = function() {
-  const step2 = document.getElementById('claim-form-step2');
-  if (!step2) return;
-  const amount = Number((window._claimVoucher || {}).amount || 0);
-  step2.innerHTML = `
-    <div class="form-group">
-      <label>Your PayMesh Phone Number</label>
-      <input type="tel" id="pm-phone-input" placeholder="10-digit phone number" inputmode="numeric"
-        maxlength="10" autocomplete="off" spellcheck="false"
-        oninput="document.getElementById('claim-submit-pm') && (document.getElementById('claim-submit-pm').disabled = this.value.trim().length !== 10 || document.getElementById('otp-input-pm').value.trim().length !== 6)">
-    </div>
-    <div class="form-group">
-      <label>6-Digit Code (from sender)</label>
-      <input type="text" id="otp-input-pm" placeholder="Enter 6-digit code" inputmode="numeric"
-        maxlength="6" autocomplete="off" spellcheck="false"
-        oninput="document.getElementById('claim-submit-pm') && (document.getElementById('claim-submit-pm').disabled = this.value.trim().length !== 6 || document.getElementById('pm-phone-input').value.trim().length !== 10)">
-    </div>
-    <button type="button" class="btn-claim" id="claim-submit-pm" disabled onclick="window._submitClaimPaymesh()">
-      Claim ₹${amount.toFixed(2)} → Wallet
-    </button>`;
-};
-
-// ── Step 2b: External receiver ──
-window._showExternalForm = function() {
-  const step2 = document.getElementById('claim-form-step2');
-  if (!step2) return;
-  const amount = Number((window._claimVoucher || {}).amount || 0);
-  step2.innerHTML = `
-    <div class="form-group">
-      <label>Your UPI ID</label>
-      <input type="text" id="upi-input" placeholder="yourname@ybl" inputmode="email"
-        autocomplete="off" spellcheck="false" autocapitalize="none"
-        oninput="document.getElementById('claim-submit-ext') && (document.getElementById('claim-submit-ext').disabled = !this.value.trim() || document.getElementById('otp-input-ext').value.trim().length !== 6)">
-    </div>
-    <div class="form-group">
-      <label>6-Digit Code (from sender)</label>
-      <input type="text" id="otp-input-ext" placeholder="Enter 6-digit code" inputmode="numeric"
-        maxlength="6" autocomplete="off" spellcheck="false"
-        oninput="document.getElementById('claim-submit-ext') && (document.getElementById('claim-submit-ext').disabled = document.getElementById('otp-input-ext').value.trim().length !== 6 || !document.getElementById('upi-input').value.trim())">
-    </div>
-    <div style="font-size:11px;color:var(--text3);margin-top:-10px;margin-bottom:16px;line-height:1.5;font-weight:500">
-      The sender will manually send ₹${amount.toFixed(2)} to your UPI ID via GPay / PhonePe once verified.
-    </div>
-    <button type="button" class="btn-claim" id="claim-submit-ext" disabled onclick="window._submitClaimExternal()">
-      Submit UPI ID →
-    </button>`;
-};
-
-// ── Shared OTP verification helper ──
-// Returns { fData, vRef } on success, throws descriptive Error on failure.
-// Atomically increments codeAttempts and locks on 3rd failure.
-async function _verifyOtp(otpVal) {
-  const vRef  = doc(db, 'vouchers', token);
-  const fresh = await getDoc(vRef);
-  if (!fresh.exists()) throw new Error('Voucher not found.');
-  const fData = fresh.data();
-  if (fData.status !== 'pending')                                   throw new Error('This voucher is no longer available.');
-  if (fData.expiresAt && new Date(fData.expiresAt) < new Date())    throw new Error('This voucher has expired.');
-  if ((fData.codeAttempts || 0) >= 3)                               throw new Error('This voucher is locked due to too many attempts. Contact the sender.');
-
-  const enteredHash = await hashOtp(otpVal, token);
-  if (enteredHash !== fData.codeHash) {
-    const newAttempts = (fData.codeAttempts || 0) + 1;
-    const newStatus   = newAttempts >= 3 ? 'locked' : 'pending';
-    await updateDoc(vRef, { codeAttempts: newAttempts, status: newStatus });
-    const left = 3 - newAttempts;
-    if (newStatus === 'locked') throw new Error('Incorrect code. Voucher is now permanently locked after 3 failed attempts.');
-    throw new Error(`Incorrect code. ${left} attempt${left !== 1 ? 's' : ''} remaining.`);
-  }
-  return { fData, vRef };
-}
-
-// ── Submit: PayMesh receiver — instant wallet transfer ──
-window._submitClaimPaymesh = async function() {
-  const v = window._claimVoucher;
-  if (!v) return;
-  const phoneEl = document.getElementById('pm-phone-input');
-  const otpEl   = document.getElementById('otp-input-pm');
-  const btn     = document.getElementById('claim-submit-pm');
-  const phone   = (phoneEl ? phoneEl.value.trim() : '');
-  const otpVal  = (otpEl ? otpEl.value.trim() : '');
-  const amount  = Number(v.amount || 0);
-
-  if (!/^\d{10}$/.test(phone)) { showMsg('error', 'Enter a valid 10-digit phone number'); return; }
-  if (!/^\d{6}$/.test(otpVal)) { showMsg('error', 'Enter the 6-digit code'); return; }
-  if (btn) { btn.disabled = true; btn.textContent = 'Verifying…'; }
-  showMsg('info', 'Verifying code…');
-
-  try {
-    // Step 1: verify OTP (increments attempts on failure, throws on any error)
-    const { fData, vRef } = await _verifyOtp(otpVal);
-
-    // Step 2: verify PayMesh account exists
-    const receiverRef  = doc(db, 'users', phone);
-    const receiverSnap = await getDoc(receiverRef);
-    if (!receiverSnap.exists()) throw new Error('No PayMesh account found for this phone number. Try "No, use my UPI ID" instead.');
-
-    // Step 3: atomic wallet credit + voucher status flip
-    showMsg('info', 'Crediting wallet…');
-    await runTransaction(db, async (tx) => {
-      const vSnap = await tx.get(vRef);
-      const rSnap = await tx.get(receiverRef);
-      if (!vSnap.exists())                      throw new Error('Voucher no longer exists.');
-      if (vSnap.data().status !== 'pending')    throw new Error('Voucher is no longer available.');
-      if (!rSnap.exists())                      throw new Error('PayMesh account not found.');
-      const rBal = rSnap.data().balance || 0;
-      tx.update(vRef, {
-        status:       'completed',
-        claimedBy:    phone,
-        claimedAt:    new Date().toISOString(),
-        receiverType: 'paymesh'
-      });
-      tx.update(receiverRef, { balance: rBal + amount });
-    });
-
-    // Step 4: transaction record (fire-and-forget)
-    addDoc(collection(db, 'transactions'), {
-      phone,
-      label:  `Voucher from ${fData.createdByName || 'PayMesh user'}`,
-      amount: Number(fData.amount),
-      type:   'credit',
-      time:   new Date().toISOString()
-    }).catch(() => {});
-
-    renderSuccessPaymesh(amount, fData.createdByName || 'the sender');
-
-  } catch(e) {
-    showMsg('error', e.message || 'Something went wrong. Please try again.');
-    if (btn) { btn.disabled = false; btn.textContent = `Claim ₹${amount.toFixed(2)} → Wallet`; }
-  }
-};
-
-// ── Submit: External receiver — flag for admin payout ──
-window._submitClaimExternal = async function() {
-  const v = window._claimVoucher;
-  if (!v) return;
-  const upiEl  = document.getElementById('upi-input');
-  const otpEl  = document.getElementById('otp-input-ext');
-  const btn    = document.getElementById('claim-submit-ext');
-  const upi    = (upiEl ? upiEl.value.trim().toLowerCase() : '');
-  const otpVal = (otpEl ? otpEl.value.trim() : '');
-  const amount = Number(v.amount || 0);
-
-  if (!upi)                      { showMsg('error', 'Enter your UPI ID'); return; }
-  if (!UPI_REGEX.test(upi))      { showMsg('error', 'Invalid UPI ID. Example: yourname@ybl'); return; }
-  if (!/^\d{6}$/.test(otpVal))   { showMsg('error', 'Enter the 6-digit code'); return; }
-  if (btn) { btn.disabled = true; btn.textContent = 'Verifying…'; }
-  showMsg('info', 'Verifying code…');
-
-  try {
-    // Step 1: verify OTP
-    const { fData, vRef } = await _verifyOtp(otpVal);
-
-    // Step 2: flip status and record UPI
-    await updateDoc(vRef, {
-      status:       'needs_payout',
-      claimUpi:     upi,
-      claimedAt:    new Date().toISOString(),
-      receiverType: 'external'
-    });
-
-    // Step 3: transaction record (fire-and-forget)
-    addDoc(collection(db, 'transactions'), {
-      phone:  upi,
-      label:  `Claim pending payout from ${fData.createdByName || 'PayMesh user'}`,
-      amount: Number(fData.amount),
-      type:   'claim_pending',
-      time:   new Date().toISOString()
-    }).catch(() => {});
-
-    renderSuccessExternal(amount, fData.createdByName || 'the sender', upi);
-
-  } catch(e) {
-    showMsg('error', e.message || 'Something went wrong. Please try again.');
-    if (btn) { btn.disabled = false; btn.textContent = 'Submit UPI ID →'; }
-  }
-};
-
-function renderSuccessPaymesh(amount, senderName) {
-  setCard(`
-    <div class="logo" style="justify-content:center;margin-bottom:20px">
-      <div class="logo-mark"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00E87A" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg></div>
-      <div class="logo-text">Pay<span>Mesh</span></div>
-    </div>
-    <div class="success-state">
-      <div class="success-icon">🎉</div>
-      <div class="success-title">₹${amount.toFixed(2)} Added!</div>
-      <div class="success-sub">
-        <strong>₹${amount.toFixed(2)}</strong> from <strong>${escHtml(senderName)}</strong> has been credited to your PayMesh wallet instantly.
-      </div>
-      <div class="success-note">
-        Open PayMesh and check your wallet balance. The money is already there!
-      </div>
-    </div>
-  `);
-}
-
-function renderSuccessExternal(amount, senderName, upi) {
-  setCard(`
-    <div class="logo" style="justify-content:center;margin-bottom:20px">
-      <div class="logo-mark"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00E87A" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg></div>
-      <div class="logo-text">Pay<span>Mesh</span></div>
-    </div>
-    <div class="success-state">
-      <div class="success-icon">🎉</div>
-      <div class="success-title">UPI ID Submitted!</div>
-      <div class="success-sub">
-        <strong>${escHtml(senderName)}</strong> will send <strong>₹${amount.toFixed(2)}</strong> to your UPI ID shortly.
-      </div>
-      <div class="success-note">
-        <strong>Your UPI ID:</strong> ${escHtml(upi)}<br><br>
-        The sender will open GPay / PhonePe and transfer ₹${amount.toFixed(2)} directly to you. This usually takes a few minutes.
-      </div>
-    </div>
-  `);
-}
-
-function renderAlreadyClaimed(v) {
-  setCard(`
-    <div class="logo" style="justify-content:center;margin-bottom:20px">
-      <div class="logo-mark"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00E87A" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg></div>
-      <div class="logo-text">Pay<span>Mesh</span></div>
-    </div>
-    <div class="success-state">
-      <div class="success-icon">⏳</div>
-      <div style="font-size:20px;font-weight:800;color:var(--amber);margin-bottom:8px">Already Claimed</div>
-      <div class="success-sub">This payment of <strong>₹${Number(v.amount).toFixed(2)}</strong> has been claimed and the sender is processing the UPI transfer.</div>
-      <div class="success-note">If you're still waiting after 24 hours, contact <strong>${escHtml(v.createdByName || 'the sender')}</strong> directly.</div>
-    </div>
-  `);
-}
-
-function renderAlreadyPaid(v) {
-  setCard(`
-    <div class="logo" style="justify-content:center;margin-bottom:20px">
-      <div class="logo-mark"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00E87A" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg></div>
-      <div class="logo-text">Pay<span>Mesh</span></div>
-    </div>
-    <div class="success-state">
-      <div class="success-icon">✅</div>
-      <div class="success-title">Payment Sent!</div>
-      <div class="success-sub">₹${Number(v.amount).toFixed(2)} has been transferred to your UPI account by <strong>${escHtml(v.createdByName || 'the sender')}</strong>.</div>
-      <div class="success-note">Check your UPI app for the credit. If you don't see it, contact the sender.</div>
-    </div>
-  `);
-}
-
-function renderError(title, sub) {
-  setCard(`
-    <div class="logo" style="justify-content:center;margin-bottom:20px">
-      <div class="logo-mark"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00E87A" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg></div>
-      <div class="logo-text">Pay<span>Mesh</span></div>
-    </div>
-    <div class="error-state">
-      <div class="error-icon">❌</div>
-      <div class="error-title">${escHtml(title)}</div>
-      <div class="error-sub">${escHtml(sub)}</div>
-    </div>
-  `);
-}
-
-function escHtml(s) {
-  return String(s)
-    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
-}
-
-init();
 </script>
 </body>
 </html>
