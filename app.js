@@ -664,23 +664,34 @@ function buildUPILink() {
     amtInput.removeEventListener('input', amtInput._upiLinkListener);
     amtInput._upiLinkListener = null;
   }
-  const btn = document.createElement('a');
+  const btn = document.createElement('button');
   btn.id = 'upi-pay-btn';
-  btn.style.cssText = `display:flex;align-items:center;justify-content:center;gap:10px;width:100%;padding:14px;margin:12px 0;background:linear-gradient(135deg,rgba(0,232,122,.12),rgba(0,232,122,.06));border:1px solid rgba(0,232,122,.25);border-radius:14px;color:var(--em);font:700 14px/1 var(--sans);text-decoration:none;cursor:pointer;transition:all .2s;`;
-  btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>Open GPay / PhonePe to Pay`;
+  btn.type = 'button';
+  btn.style.cssText = `display:flex;align-items:center;justify-content:center;gap:10px;width:100%;padding:14px;margin:12px 0;background:linear-gradient(135deg,rgba(0,232,122,.12),rgba(0,232,122,.06));border:1px solid rgba(0,232,122,.25);border-radius:14px;color:var(--em);font:700 14px/1 var(--sans);cursor:pointer;transition:all .2s;`;
+  btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>Open UPI App`;
+
   function updateLink() {
     const amt = parseFloat(amtInput.value);
     if (amt && amt > 0) {
-      btn.href = `upi://pay?pa=${encodeURIComponent(PAYMESH_UPI)}&pn=${encodeURIComponent('PayMesh')}&am=${amt.toFixed(2)}&cu=INR&tn=${encodeURIComponent('PayMesh Wallet Load')}`;
+      btn._upiAmt = amt;
       btn.style.opacity = '1';
       btn.style.pointerEvents = '';
     } else {
-      // No valid amount — disable link so it doesn't fire with am=NaN or am=
-      btn.removeAttribute('href');
+      btn._upiAmt = null;
       btn.style.opacity = '0.45';
       btn.style.pointerEvents = 'none';
     }
   }
+
+  btn.addEventListener('click', function() {
+    const amt = btn._upiAmt;
+    if (!amt || amt <= 0) return;
+    // Use location.href for UPI deep link — this is the correct way on Android/iOS
+    // It hands off to the installed UPI app (GPay, PhonePe, Paytm, etc.)
+    const upiLink = `upi://pay?pa=${encodeURIComponent(PAYMESH_UPI)}&pn=${encodeURIComponent('PayMesh')}&am=${amt.toFixed(2)}&cu=INR&tn=${encodeURIComponent('PayMesh Wallet Load')}`;
+    window.location.href = upiLink;
+  });
+
   amtInput._upiLinkListener = updateLink;
   amtInput.addEventListener('input', updateLink);
   updateLink();
@@ -688,7 +699,6 @@ function buildUPILink() {
   if (upiBox && upiBox.parentNode) {
     upiBox.parentNode.insertBefore(btn, upiBox.nextSibling);
   } else {
-    // Fallback: insert after amount input
     amtInput.parentNode && amtInput.parentNode.insertBefore(btn, amtInput.nextSibling);
   }
 }
@@ -3006,45 +3016,31 @@ async function loadClaimedVouchers() {
     snap.forEach(d => {
       const v      = d.data();
       const amount = Number(v.amount || 0);
-      const upi    = v.claimUpi || '—';
       const claimTime = v.claimedAt ? new Date(v.claimedAt).toLocaleString() : '';
+      // claimMethod tells us if receiver chose PayMesh (shouldn't be here) or UPI
+      const upi    = v.claimUpi || '—';
 
       const row = document.createElement('div');
       row.dataset.adminVoucher = v.code || '';
-      row.style.cssText = 'background:linear-gradient(158deg,rgba(77,159,255,.09),rgba(0,232,122,.06));border:1px solid rgba(77,159,255,.22);border-radius:16px;padding:16px 18px;margin-bottom:10px;';
+      row.style.cssText = 'background:linear-gradient(158deg,rgba(255,184,48,.09),rgba(0,232,122,.06));border:1px solid rgba(255,184,48,.22);border-radius:16px;padding:16px 18px;margin-bottom:10px;';
       row.innerHTML = `
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:10px">
           <div>
-            <div style="font-size:10px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:var(--blue);margin-bottom:4px">Claimed · ₹${amount.toFixed(2)}</div>
+            <div style="font-size:10px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:var(--amber);margin-bottom:4px">Claimed (UPI) · ₹${amount.toFixed(2)}</div>
             <div style="font-size:12px;color:var(--text2);font-weight:500">${claimTime}</div>
           </div>
           <div style="font-size:9px;color:var(--text3);font-family:var(--mono);word-break:break-all;text-align:right;max-width:60%">${v.code || ''}</div>
         </div>
-        <div style="background:rgba(0,0,0,.35);border:1px solid var(--border2);border-radius:10px;padding:10px 12px;margin-bottom:12px;">
+        <div style="background:rgba(0,0,0,.35);border:1px solid var(--border2);border-radius:10px;padding:10px 12px;margin-bottom:10px;">
           <div style="font-size:9px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:4px">Receiver's UPI ID</div>
           <div style="font-family:var(--mono);font-size:14px;color:var(--text);font-weight:700;word-break:break-all;user-select:all">${escHtml(upi)}</div>
         </div>
-        <div style="display:flex;gap:8px;">
-          <button type="button"
-            onclick="_openUpiApp('${escAttr(upi)}',${amount})"
-            style="flex:1;padding:10px;background:rgba(0,232,122,.12);border:1px solid rgba(0,232,122,.25);border-radius:12px;color:var(--em);font:700 12px/1 var(--sans);cursor:pointer;">
-            📲 Open UPI App
-          </button>
-          <button type="button"
-            onclick="_copyUpi('${escAttr(upi)}')"
-            style="padding:10px 14px;background:var(--surface);border:1px solid var(--border2);border-radius:12px;color:var(--text2);font:700 12px/1 var(--sans);cursor:pointer;">
-            📋 Copy
-          </button>
-          <button type="button"
-            onclick="markVoucherPaid('${escAttr(v.code || '')}')"
-            style="padding:10px 14px;background:rgba(77,159,255,.14);border:1px solid rgba(77,159,255,.28);border-radius:12px;color:var(--blue);font:700 11px/1 var(--sans);cursor:pointer;">
-            ✅ Paid
-          </button>
+        <div style="padding:10px 12px;background:rgba(77,159,255,.08);border:1px solid rgba(77,159,255,.18);border-radius:10px;font-size:12px;color:var(--blue);font-weight:600;line-height:1.5;">
+          ℹ️ The admin will transfer ₹${amount.toFixed(2)} to the receiver's UPI. No action needed from you.
         </div>`;
       list.appendChild(row);
     });
   } catch(e) {
-    console.error('[PayMesh] loadClaimedVouchers error:', e);
     if (section) section.style.display = 'none';
   }
 }
@@ -3125,10 +3121,9 @@ function renderSingleVoucher(code, amount, status, claimUrl, expiresAt) {
         </div>
         <button type="button" id="show-code-btn-${code}" onclick="window._showVoucherCode('${code}',${amount},'${claimUrl.replace(/'/g,"&#39;")}','${expiresAt||''}')" style="width:100%;margin-top:8px;padding:11px;background:rgba(255,184,48,.1);border:1px solid rgba(255,184,48,.22);border-radius:var(--r);color:var(--amber);font:700 12px/1 var(--sans);cursor:pointer;transition:background .2s;" onmouseover="this.style.background='rgba(255,184,48,.18)'" onmouseout="this.style.background='rgba(255,184,48,.1)'">🔐 Show Secret Code</button>
         ${(status === 'claimed' || status === 'needs_payout') ? `
-        <div style="margin-top:10px;padding:10px 12px;background:rgba(77,159,255,.10);border:1px solid rgba(77,159,255,.22);border-radius:var(--r);font-size:12px;color:var(--blue);font-weight:600;line-height:1.5;">
-          🔔 Receiver has entered their UPI ID. Check the <strong>PayMesh Admin</strong> panel to view it, send payment manually, then mark as paid.
+        <div style="margin-top:10px;padding:10px 12px;background:rgba(255,184,48,.10);border:1px solid rgba(255,184,48,.22);border-radius:var(--r);font-size:12px;color:var(--amber);font-weight:600;line-height:1.5;">
+          🔔 Receiver entered their UPI ID. The admin will transfer ₹${Number(amount).toFixed(2)} to them — no action needed from you.
         </div>
-        <button type="button" onclick="markVoucherPaid('${code}')" style="width:100%;margin-top:10px;padding:12px;background:linear-gradient(135deg,rgba(0,232,122,.18),rgba(0,232,122,.08));border:1px solid rgba(0,232,122,.28);border-radius:var(--r);color:var(--em);font:800 13px/1 var(--sans);cursor:pointer;">✅ I've Sent the UPI — Mark as Paid</button>
         ` : ''}
       </div>`;
   } else {
@@ -3231,18 +3226,36 @@ async function replayPendingVouchers() {
 
 function generateReceiveQR() {
   const c = document.getElementById('receive-qr');
+  if (!c) return;
   c.innerHTML = '';
-  document.getElementById('receive-upi-display').textContent = CURRENT_USER.upi;
+  const upiEl = document.getElementById('receive-upi-display');
+  if (upiEl) upiEl.textContent = CURRENT_USER.upi || '';
+  if (!CURRENT_USER.phone) return;
+
+  const qrData = JSON.stringify({ type:'person', phone:CURRENT_USER.phone, name:CURRENT_USER.name, upi:CURRENT_USER.upi });
+  let _tries = 0;
   function makeQR() {
-    if (typeof QRCode === 'undefined') { setTimeout(makeQR, 200); return; }
+    _tries++;
+    if (typeof QRCode === 'undefined') {
+      if (_tries < 30) { setTimeout(makeQR, 200); return; }
+      c.innerHTML = '<div style="color:var(--text3);font-size:12px;padding:20px;text-align:center">QR library failed to load. Refresh the page.</div>';
+      return;
+    }
     try {
+      c.innerHTML = ''; // clear any stale content
       new QRCode(c, {
-        text: JSON.stringify({ type:'person', phone:CURRENT_USER.phone, name:CURRENT_USER.name, upi:CURRENT_USER.upi }),
-        width:200, height:200, colorDark:"#000000", colorLight:"#ffffff"
+        text: qrData,
+        width: 200, height: 200, colorDark: "#000000", colorLight: "#ffffff",
+        correctLevel: QRCode.CorrectLevel.M
       });
-    } catch(e) { console.warn('Receive QR failed:', e); }
+    } catch(e) {
+      c.innerHTML = '<div style="color:var(--text3);font-size:12px;padding:20px;text-align:center">QR generation failed. Try refreshing.</div>';
+    }
   }
-  makeQR();
+  // Ensure the QR lib is loaded first
+  loadScript('https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js')
+    .then(() => makeQR())
+    .catch(() => makeQR()); // even on "error" it might already be cached
 }
 
 // ═══════════════════════════════════════════

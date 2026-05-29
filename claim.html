@@ -304,10 +304,10 @@ if (!token) {
         return;
       }
       const v = vSnap.data();
-      if (v.status === 'USED' || v.status === 'completed') {
+      if (v.status === 'USED' || v.status === 'completed' || v.status === 'needs_payout' || v.status === 'paid') {
         root.innerHTML = `<div class="card" style="text-align:center">
           <div style="font-size:36px;margin-bottom:12px">✅</div>
-          <p style="color:var(--em);font-weight:600;font-size:16px">Already Redeemed</p>
+          <p style="color:var(--em);font-weight:600;font-size:16px">Already Claimed</p>
           <p style="color:var(--text2);font-size:13px;margin-top:8px">This voucher has already been claimed.</p>
         </div>`;
         return;
@@ -333,6 +333,8 @@ if (!token) {
       // OTP entry state
       let otpBuffer = '';
       let claimedUpi = '';
+      let claimMethod = ''; // 'paymesh' | 'upi'
+      let claimedPhone = '';
       let step = 'upi'; // 'upi' | 'otp' | 'done'
 
       function render() {
@@ -341,6 +343,7 @@ if (!token) {
       }
 
       function renderUpiStep() {
+        window._claimMethodChosen = ''; // reset on every entry to this step
         root.innerHTML = `
           <div class="hero">
             <span class="hero-icon">🎁</span>
@@ -350,31 +353,63 @@ if (!token) {
           </div>
           <div class="card">
             <p style="font-size:13.5px;color:var(--text2);line-height:1.6;margin-bottom:16px">
-              Enter your UPI ID to receive ₹${amount.toFixed(2)} directly to your bank account.
+              How would you like to receive ₹${amount.toFixed(2)}?
             </p>
-            <div class="form-group">
-              <label>Your UPI ID</label>
-              <input type="text" id="claim-upi" placeholder="yourname@bankname" inputmode="email" autocomplete="off" spellcheck="false" style="font-family:var(--mono);font-size:15px">
+
+            <!-- Option A: PayMesh user -->
+            <div id="pm-option" style="margin-bottom:12px;border:1.5px solid rgba(45,216,130,.22);border-radius:14px;padding:16px;cursor:pointer;transition:background .15s" onclick="document.getElementById('pm-option').style.background='rgba(45,216,130,.07)';document.getElementById('upi-option').style.background='none';document.getElementById('pm-option').style.borderColor='rgba(45,216,130,.5)';document.getElementById('upi-option').style.borderColor='rgba(255,255,255,.1)';document.getElementById('pm-fields').style.display='block';document.getElementById('upi-fields').style.display='none';window._claimMethodChosen='paymesh';">
+              <div style="font-size:13px;font-weight:700;color:var(--em);margin-bottom:4px">✅ I have a PayMesh account</div>
+              <div style="font-size:12px;color:var(--text2);line-height:1.5">Enter your phone number — money credited instantly to your PayMesh wallet.</div>
+              <div id="pm-fields" style="display:none;margin-top:14px">
+                <div class="form-group" style="margin-bottom:0">
+                  <label>Your PayMesh Phone Number</label>
+                  <input type="tel" id="claim-phone" placeholder="10 digit number" maxlength="10" inputmode="numeric" autocomplete="off" style="font-family:var(--mono);font-size:15px">
+                </div>
+              </div>
             </div>
+
+            <!-- Option B: No PayMesh -->
+            <div id="upi-option" style="margin-bottom:16px;border:1.5px solid rgba(255,255,255,.1);border-radius:14px;padding:16px;cursor:pointer;transition:background .15s" onclick="document.getElementById('upi-option').style.background='rgba(91,156,246,.07)';document.getElementById('pm-option').style.background='none';document.getElementById('upi-option').style.borderColor='rgba(91,156,246,.4)';document.getElementById('pm-option').style.borderColor='rgba(255,255,255,.1)';document.getElementById('upi-fields').style.display='block';document.getElementById('pm-fields').style.display='none';window._claimMethodChosen='upi';">
+              <div style="font-size:13px;font-weight:700;color:var(--blue);margin-bottom:4px">🏦 I don't have PayMesh — use UPI</div>
+              <div style="font-size:12px;color:var(--text2);line-height:1.5">Enter your UPI ID — the admin will manually transfer the money. Takes a few minutes.</div>
+              <div id="upi-fields" style="display:none;margin-top:14px">
+                <div class="form-group" style="margin-bottom:0">
+                  <label>Your UPI ID</label>
+                  <input type="text" id="claim-upi" placeholder="yourname@bankname" inputmode="email" autocomplete="off" spellcheck="false" style="font-family:var(--mono);font-size:15px">
+                </div>
+              </div>
+            </div>
+
             <button type="button" class="btn-primary" id="upi-submit-btn">Continue →</button>
             <div id="upi-msg" class="msg"></div>
           </div>
           <div class="notice">
-            <strong>How it works:</strong> Enter your UPI ID → Enter the secret code from the sender → The sender will transfer the money to your UPI ID within a few minutes.
+            <strong>PayMesh users</strong> get instant wallet credit. <strong>Non-PayMesh users</strong> will receive a manual UPI transfer from the admin within minutes.
           </div>`;
 
         document.getElementById('upi-submit-btn').addEventListener('click', () => {
-          const upi = document.getElementById('claim-upi').value.trim();
           const msg = document.getElementById('upi-msg');
-          if (!upi) { showMsg(msg,'error','Enter your UPI ID'); return; }
-          if (!UPI_REGEX.test(upi)) { showMsg(msg,'error','Invalid UPI ID format. Example: name@upi'); return; }
-          claimedUpi = upi;
-          step = 'otp';
-          render();
-        });
+          const method = window._claimMethodChosen;
+          if (!method) { showMsg(msg,'error','Please choose how you want to receive the money'); return; }
 
-        document.getElementById('claim-upi').addEventListener('keydown', e => {
-          if (e.key === 'Enter') document.getElementById('upi-submit-btn').click();
+          if (method === 'paymesh') {
+            const phone = (document.getElementById('claim-phone').value || '').trim();
+            if (!/^\d{10}$/.test(phone)) { showMsg(msg,'error','Enter a valid 10-digit phone number'); return; }
+            claimedPhone = phone;
+            claimedUpi = '';
+            claimMethod = 'paymesh';
+            step = 'otp';
+            render();
+          } else {
+            const upi = (document.getElementById('claim-upi').value || '').trim();
+            if (!upi) { showMsg(msg,'error','Enter your UPI ID'); return; }
+            if (!UPI_REGEX.test(upi)) { showMsg(msg,'error','Invalid UPI ID format. Example: name@upi'); return; }
+            claimedUpi = upi;
+            claimedPhone = '';
+            claimMethod = 'upi';
+            step = 'otp';
+            render();
+          }
         });
       }
 
@@ -402,14 +437,14 @@ if (!token) {
               ).join('')}
             </div>
             <div id="otp-msg" class="msg"></div>
-            <button type="button" style="width:100%;margin-top:14px;padding:12px;background:none;border:1px solid var(--border2);border-radius:var(--r);color:var(--text3);font:500 13px/1 var(--sans);cursor:pointer;" id="back-btn">← Change UPI ID</button>
+            <button type="button" style="width:100%;margin-top:14px;padding:12px;background:none;border:1px solid var(--border2);border-radius:var(--r);color:var(--text3);font:500 13px/1 var(--sans);cursor:pointer;" id="back-btn">← Go Back</button>
           </div>`;
 
         document.querySelectorAll('.key[data-digit]').forEach(btn => {
           btn.addEventListener('click', () => pressKey(btn.dataset.digit));
         });
         document.getElementById('key-del').addEventListener('click', () => pressKey('del'));
-        document.getElementById('back-btn').addEventListener('click', () => { step = 'upi'; render(); });
+        document.getElementById('back-btn').addEventListener('click', () => { step = 'upi'; otpBuffer = ''; render(); });
       }
 
       function pressKey(k) {
@@ -447,8 +482,8 @@ if (!token) {
           if (!fresh.exists()) { flashError(msg,'Voucher no longer exists.'); return; }
           const vd = fresh.data();
 
-          if (vd.status === 'USED' || vd.status === 'completed') {
-            flashError(msg,'This voucher was already redeemed.'); return;
+          if (vd.status === 'USED' || vd.status === 'completed' || vd.status === 'needs_payout' || vd.status === 'paid') {
+            flashError(msg,'This voucher has already been claimed.'); return;
           }
           if ((vd.codeAttempts || 0) >= 3) {
             flashError(msg,'Too many incorrect attempts. Voucher locked.'); return;
@@ -461,33 +496,94 @@ if (!token) {
             return;
           }
 
-          // Correct — mark as claimed (needs_payout), store UPI
-          await updateDoc(doc(db,'vouchers',token), {
-            status:     'needs_payout',
-            claimUpi:   claimedUpi,
-            claimedAt:  new Date().toISOString(),
-            codeAttempts: (vd.codeAttempts||0)+1
-          });
+          // ── PAYMESH PATH: auto-credit instantly ──
+          if (claimMethod === 'paymesh') {
+            // Verify the receiver's phone exists in Firestore
+            let receiverName = '';
+            try {
+              const receiverSnap = await getDoc(doc(db,'users',claimedPhone));
+              if (!receiverSnap.exists()) {
+                flashError(msg, 'No PayMesh account found for this phone number. Try using your UPI ID instead.');
+                return;
+              }
+              receiverName = receiverSnap.data().name || claimedPhone;
+              // Atomic: mark voucher as USED, credit receiver
+              await runTransaction(db, async (tx) => {
+                const vFresh = await tx.get(doc(db,'vouchers',token));
+                const rFresh = await tx.get(doc(db,'users',claimedPhone));
+                if (!vFresh.exists() || vFresh.data().status === 'USED' || vFresh.data().status === 'completed' || vFresh.data().status === 'needs_payout') throw new Error('Voucher already redeemed.');
+                if (!rFresh.exists()) throw new Error('Receiver account not found.');
+                const rBal = rFresh.data().balance || 0;
+                const freshAttempts = vFresh.data().codeAttempts || 0;
+                tx.update(doc(db,'vouchers',token), {
+                  status: 'USED',
+                  redeemedBy: claimedPhone,
+                  redeemedByName: receiverName,
+                  redeemedAt: new Date().toISOString(),
+                  claimMethod: 'paymesh',
+                  codeAttempts: freshAttempts + 1
+                });
+                tx.update(doc(db,'users',claimedPhone), { balance: rBal + amount });
+              });
+              // Write transaction records
+              const time = new Date().toISOString();
+              await Promise.all([
+                addDoc(collection(db,'transactions'), { phone: claimedPhone, label: `Voucher from ${fromName}`, amount, type: 'credit', time }),
+                addDoc(collection(db,'transactions'), { phone: vd.createdBy, label: `Voucher redeemed by ${receiverName}`, amount, type: 'debit', time })
+              ]);
+            } catch(txErr) {
+              flashError(msg, txErr.message || 'Could not credit your wallet. Try again.');
+              return;
+            }
 
-          step = 'done';
-          root.innerHTML = `
-            <div class="card" style="text-align:center;padding:32px 20px">
-              <div class="success-icon">
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#2DD882" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                  <polyline points="20 6 9 17 4 12"/>
-                </svg>
-              </div>
-              <div style="font-size:22px;font-weight:700;letter-spacing:-.5px;color:var(--text);margin-bottom:8px">Claim Submitted!</div>
-              <div style="font-family:var(--mono);font-size:30px;font-weight:500;color:var(--em);letter-spacing:-1px;margin-bottom:12px">₹${amount.toFixed(2)}</div>
-              <p style="font-size:14px;color:var(--text2);line-height:1.7;max-width:280px;margin:0 auto">
-                <strong style="color:var(--text)">${fromName}</strong> will send ₹${amount.toFixed(2)} to<br>
-                <strong style="color:var(--text);font-family:var(--mono);font-size:13px">${claimedUpi}</strong><br>
-                within a few minutes via UPI.
-              </p>
-              <div style="margin-top:20px;padding:12px 14px;background:rgba(45,216,130,.06);border:1px solid rgba(45,216,130,.14);border-radius:12px;font-size:12.5px;color:var(--text2);line-height:1.7">
-                You'll receive a standard UPI transfer. Check your GPay / PhonePe / bank app once they mark it as sent.
-              </div>
-            </div>`;
+            step = 'done';
+            root.innerHTML = `
+              <div class="card" style="text-align:center;padding:32px 20px">
+                <div class="success-icon">
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#2DD882" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="20 6 9 17 4 12"/>
+                  </svg>
+                </div>
+                <div style="font-size:22px;font-weight:700;letter-spacing:-.5px;color:var(--text);margin-bottom:8px">Money Received! 🎉</div>
+                <div style="font-family:var(--mono);font-size:30px;font-weight:500;color:var(--em);letter-spacing:-1px;margin-bottom:12px">+₹${amount.toFixed(2)}</div>
+                <p style="font-size:14px;color:var(--text2);line-height:1.7;max-width:280px;margin:0 auto">
+                  ₹${amount.toFixed(2)} has been added to your PayMesh wallet (<strong style="color:var(--text);font-family:var(--mono);font-size:13px">${claimedPhone}</strong>) instantly!
+                </p>
+                <div style="margin-top:20px;padding:12px 14px;background:rgba(45,216,130,.06);border:1px solid rgba(45,216,130,.14);border-radius:12px;font-size:12.5px;color:var(--text2);line-height:1.7">
+                  Open PayMesh to see your updated balance.
+                </div>
+              </div>`;
+
+          } else {
+            // ── UPI PATH: mark needs_payout, admin transfers manually ──
+            await updateDoc(doc(db,'vouchers',token), {
+              status:     'needs_payout',
+              claimUpi:   claimedUpi,
+              claimedAt:  new Date().toISOString(),
+              claimMethod: 'upi',
+              codeAttempts: (vd.codeAttempts||0)+1
+            });
+
+            step = 'done';
+            root.innerHTML = `
+              <div class="card" style="text-align:center;padding:32px 20px">
+                <div class="success-icon">
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#2DD882" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="20 6 9 17 4 12"/>
+                  </svg>
+                </div>
+                <div style="font-size:22px;font-weight:700;letter-spacing:-.5px;color:var(--text);margin-bottom:8px">Claim Submitted!</div>
+                <div style="font-family:var(--mono);font-size:30px;font-weight:500;color:var(--em);letter-spacing:-1px;margin-bottom:12px">₹${amount.toFixed(2)}</div>
+                <p style="font-size:14px;color:var(--text2);line-height:1.7;max-width:280px;margin:0 auto">
+                  The admin will send ₹${amount.toFixed(2)} to<br>
+                  <strong style="color:var(--text);font-family:var(--mono);font-size:13px">${claimedUpi}</strong><br>
+                  within a few minutes via UPI.
+                </p>
+                <div style="margin-top:20px;padding:12px 14px;background:rgba(45,216,130,.06);border:1px solid rgba(45,216,130,.14);border-radius:12px;font-size:12.5px;color:var(--text2);line-height:1.7">
+                  You'll receive a standard UPI transfer. Check your GPay / PhonePe / bank app once they mark it as sent.
+                </div>
+              </div>`;
+          }
 
         } catch(e) {
           flashError(msg, e.message || 'Error. Please try again.');
