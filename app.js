@@ -154,6 +154,90 @@ const CURRENT_USER = { phone: "", name: "", upi: "" };
 window.CURRENT_USER = CURRENT_USER; // expose so inline scripts can check session
 
 // ═══════════════════════════════════════════
+// PAYMESH NOTIFICATION ENGINE
+// Zero-cost · No Blaze · Service Worker based
+// ═══════════════════════════════════════════
+
+const _PM_NOTIF_MSGS = {
+  sent: [
+    '{name} got your ₹{amount}. Smooth as always 😎',
+    '₹{amount} flew to {name}. PayMesh speed, no cap.',
+    'Done deal! ₹{amount} → {name}. Your wallet took the hit.',
+    'Sent ₹{amount} to {name}. You\'re basically the UPI god now.',
+  ],
+  received: [
+    '{name} just dropped ₹{amount} in your wallet 💚',
+    'Cha-ching! ₹{amount} from {name} just landed.',
+    '{name} paid up. ₹{amount} is yours now 🤑',
+    'Your wallet just got ₹{amount} richer. Thanks, {name}!',
+  ],
+  voucherCreated: [
+    '₹{amount} voucher locked and loaded. Who\'s the lucky one? 🎁',
+    'Voucher worth ₹{amount} created. You\'re basically Santa now.',
+    '₹{amount} is waiting to be claimed — share the code!',
+    'Locked ₹{amount} into a voucher. Let the magic happen ✨',
+  ],
+  voucherClaimed: [
+    '{name} grabbed your ₹{amount} voucher. They loved it 🙌',
+    'Voucher redeemed! {name} just claimed ₹{amount}.',
+    'Your ₹{amount} gift reached {name}. Mission complete ✅',
+    '{name} used your voucher. ₹{amount} well spent!',
+  ],
+  voucherReceived: [
+    '₹{amount} voucher credited. Someone likes you 💚',
+    'Voucher redeemed! +₹{amount} added to your wallet 🎉',
+    '₹{amount} just landed from a voucher. Spend wisely!',
+    'Free money alert! ₹{amount} voucher claimed successfully.',
+  ],
+  walletLoaded: [
+    '₹{amount} added. Your wallet is ready to roll 🟢',
+    'Loaded up! ₹{amount} is in. Go make it rain.',
+    'Wallet fuelled with ₹{amount}. You\'re good to go.',
+    '+₹{amount} approved and in your wallet. Let\'s gooo 🚀',
+  ],
+};
+
+function _pmPickMsg(arr, vars) {
+  var msg = arr[Math.floor(Math.random() * arr.length)];
+  Object.keys(vars).forEach(function(k) {
+    msg = msg.replace(new RegExp('{' + k + '}', 'g'), vars[k]);
+  });
+  return msg;
+}
+
+function pmNotify(title, body) {
+  try {
+    if (!('Notification' in window)) return;
+    if (Notification.permission !== 'granted') return;
+    navigator.serviceWorker.ready.then(function(sw) {
+      sw.showNotification(title, {
+        body:    body,
+        icon:    '/icon-192-1.png',
+        badge:   '/icon-192-1.png',
+        vibrate: [200, 100, 200],
+        tag:     'paymesh-txn',
+      });
+    }).catch(function() {});
+  } catch(e) {}
+}
+
+// Request permission once on login — non-blocking
+function pmRequestNotifPermission() {
+  try {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission().catch(function() {});
+    }
+  } catch(e) {}
+}
+
+// Register SW if not already registered
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(function() {});
+}
+
+// END PAYMESH NOTIFICATION ENGINE
+
+// ═══════════════════════════════════════════
 // DEVICE TOKEN — single-device session lock
 // A random token is generated on each login and stored BOTH in localStorage
 // AND in Firestore on the user doc. On every init, we compare them.
@@ -781,6 +865,9 @@ window.loginUser = async function() {
     CURRENT_USER.phone = phone;
     CURRENT_USER.upi   = finalUpi;
 
+    // Request notification permission on every login (no-op if already granted/denied)
+    pmRequestNotifPermission();
+
     if (btn) { btn.disabled = false; btn.querySelector('span').textContent = isKnownDevice ? 'Sign In' : 'Get Started'; }
 
     setTimeout(() => {
@@ -1035,6 +1122,7 @@ function _showLoadApprovedToast(amount, utr) {
       '<div style="font-size:11px;color:var(--text3);margin-top:4px;">UTR ' + utr + ' approved</div>';
     document.body.appendChild(toast);
     if (navigator.vibrate) navigator.vibrate([100, 50, 200]);
+    pmNotify('PayMesh · Wallet Loaded 🟢', _pmPickMsg(_PM_NOTIF_MSGS.walletLoaded, { amount: Number(amount).toFixed(2) }));
     setTimeout(function() {
       toast.style.transition = 'opacity .4s ease, transform .4s ease';
       toast.style.opacity = '0';
@@ -2630,6 +2718,7 @@ window.sendMoney = async function() {
       await window.showPaymentSuccess('Payment Sent!', `₹${amount.toFixed(2)} sent to ${receiverName}`);
     }
     showOverlay('', 'Sent!', `₹${amount.toFixed(2)} sent to ${receiverName}`);
+    pmNotify('PayMesh · Sent ✈️', _pmPickMsg(_PM_NOTIF_MSGS.sent, { name: receiverName, amount: amount.toFixed(2) }));
   } catch(e) {
     if (typeof window.hidePaymentAnim === 'function') window.hidePaymentAnim();
     showMsg(msg,'error', e.message || 'Error. Try again.');
@@ -2720,6 +2809,7 @@ window.generateVoucher = async function() {
     document.getElementById('voucher-amount').value = '';
     showMsg(msg,'success','Voucher created! Note down the 6-digit code shown below.');
     if (navigator.vibrate) navigator.vibrate([100,50,200]);
+    pmNotify('PayMesh · Voucher Created 🎁', _pmPickMsg(_PM_NOTIF_MSGS.voucherCreated, { amount: amount.toFixed(2) }));
 
     // ── Show one-time OTP modal — code never shown again ──
     _showOtpModal(otpPlain, amount, token, claimUrl, expiresAt);
@@ -3458,6 +3548,7 @@ window.redeemVoucher = async function() {
     launchConfetti(80);
     if (navigator.vibrate) navigator.vibrate([200,100,200,100,400]);
     showOverlay('', 'Received!', `₹${amount.toFixed(2)} from ${fromName} added to wallet`);
+    pmNotify('PayMesh · Voucher Claimed 🎉', _pmPickMsg(_PM_NOTIF_MSGS.voucherReceived, { amount: amount.toFixed(2) }));
 
   } catch(e) {
     if (e.message === 'Failed to get document because the client is offline.') {

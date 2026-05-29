@@ -54,3 +54,16 @@ self.addEventListener('fetch', (e) => {
     })
   );
 });
+
+// ── NOTIFICATION CLICK — opens PayMesh when user taps a notification ──
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  e.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+      for (const c of list) {
+        if (c.url && c.focus) { c.focus(); return; }
+      }
+      return clients.openWindow('/paymesh/');
+    })
+  );
+});

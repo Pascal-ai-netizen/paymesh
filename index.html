@@ -3914,6 +3914,7 @@ async function nfcListen(){
           if(subEl)subEl.innerHTML=
             '<div style="font-size:40px;font-weight:800;color:var(--em);margin:14px 0;">+&#8377;'+amount.toFixed(2)+'</div>'+
             '<div style="color:var(--text2);font-size:15px;">From '+senderName+'</div>';
+          pmNotify('PayMesh · Money In 💚',_pmPickMsg(_PM_NOTIF_MSGS.received,{name:senderName,amount:amount.toFixed(2)}));
 
           setTimeout(function(){if(window.showScreen)window.showScreen('screen-home');},2500);
           return; // exit loop after first valid record
