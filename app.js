@@ -886,7 +886,9 @@ async function loadHomeData() {
   const displayName = CURRENT_USER.name ? `Hi, ${CURRENT_USER.name} 👋` : 'Welcome 👋';
   document.getElementById('display-name').textContent = displayName;
   const cached = parseFloat(sessionStorage.getItem('pm_balance') || '0');
-  document.getElementById('wallet-balance').textContent = cached.toFixed(2);
+  const balEl = document.getElementById('wallet-balance');
+  if (balEl && !balEl.dataset.value) balEl.dataset.value = cached.toFixed(2);
+  balEl.textContent = cached.toFixed(2);
 
   // Update Aria alert dot on home load
   try { if (CURRENT_USER.phone) _ariaUpdateAlertDot(ariaGetData()); } catch(e) {}
@@ -1654,16 +1656,20 @@ async function _runFraudScore(phone, amount, note) {
   // ══════════════════════════════════════════
   if (isKnownContact) {
     try {
-      const { getDocs: gd2, query: qr2, collection: col2, where: wh2, limit: lim2, orderBy: ob2 } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
+      const { getDocs: gd2, query: qr2, collection: col2, where: wh2, limit: lim2 } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
       const recentSnap = await gd2(qr2(col2(db,'transactions'),
         wh2('phone','==',CURRENT_USER.phone),
         wh2('type','==','debit'),
         wh2('toPhone','==',phone),
-        ob2('time','desc'), lim2(5)
+        lim2(10) // fetch more since we sort in JS
       ));
       if (!recentSnap.empty) {
         const amounts = [];
-        recentSnap.forEach(d => amounts.push(d.data().amount || 0));
+        const rows = [];
+        recentSnap.forEach(d => rows.push(d.data()));
+        // Sort newest first in JS (no Firestore composite index needed)
+        rows.sort((a,b) => (b.time||'').localeCompare(a.time||''));
+        rows.slice(0,5).forEach(r => amounts.push(r.amount || 0));
         const avg = amounts.reduce((s,a) => s+a, 0) / amounts.length;
         const multiplier = Math.round(amount / avg);
         if (avg > 0 && amount > avg * 3) {
@@ -2810,7 +2816,10 @@ window._clearVoucherOtp = _clearVoucherOtp;
 
 // ── Build the public /claim/<token> URL ──
 function _buildClaimUrl(token) {
-  return window.location.origin + window.location.pathname.replace(/\/?$/, '') + '/claim.html?t=' + token;
+  // Strip any trailing filename (e.g. index.html, app.html) so we always get a clean directory base.
+  // e.g. https://site.com/app/index.html  → https://site.com/app/claim.html?t=TOKEN
+  const basePath = window.location.pathname.replace(/\/[^/]*\.html$/, '').replace(/\/?$/, '');
+  return window.location.origin + basePath + '/claim.html?t=' + token;
 }
 
 // ═══════════════════════════════════════════
@@ -2918,9 +2927,20 @@ window.markVoucherPaid = async function(token) {
   if (!CURRENT_USER.phone) return;
   if (!confirm(`Mark voucher ${token} as PAID? This confirms you sent the UPI payment.`)) return;
   try {
-    await updateDoc(doc(db,"vouchers",token), {
-      status: 'paid',
-      paidAt: new Date().toISOString()
+    // Read current status first — rule paths differ:
+    //   claimed      → paid  (allowed by rules)
+    //   needs_payout → paid  (allowed by rules)
+    await runTransaction(db, async (tx) => {
+      const vSnap = await tx.get(doc(db, 'vouchers', token));
+      if (!vSnap.exists()) throw new Error('Voucher not found.');
+      const cur = vSnap.data().status;
+      if (cur === 'paid') throw new Error('Already marked as paid.');
+      if (cur !== 'claimed' && cur !== 'needs_payout') throw new Error(`Cannot mark status "${cur}" as paid.`);
+      tx.update(doc(db, 'vouchers', token), {
+        status:  'paid',
+        paidAt:  new Date().toISOString(),
+        // preserve required fields for rule checks (rules verify amount == resource.data.amount — merge handles this)
+      });
     });
     // Update UI card status badge
     const card = document.querySelector(`[data-voucher-code="${token}"]`);
@@ -3035,9 +3055,12 @@ async function loadClaimedVouchers() {
           <div style="font-size:9px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:4px">Receiver's UPI ID</div>
           <div style="font-family:var(--mono);font-size:14px;color:var(--text);font-weight:700;word-break:break-all;user-select:all">${escHtml(upi)}</div>
         </div>
-        <div style="padding:10px 12px;background:rgba(77,159,255,.08);border:1px solid rgba(77,159,255,.18);border-radius:10px;font-size:12px;color:var(--blue);font-weight:600;line-height:1.5;">
-          ℹ️ The admin will transfer ₹${amount.toFixed(2)} to the receiver's UPI. No action needed from you.
-        </div>`;
+        <div style="display:flex;gap:8px;margin-bottom:10px;">
+          <button type="button" onclick="_openUpiApp('${escAttr(upi)}',${amount})" style="flex:1;padding:11px;background:rgba(0,232,122,.12);border:1px solid rgba(0,232,122,.25);border-radius:12px;color:var(--em);font:700 12px/1 var(--sans);cursor:pointer;">📲 Open UPI App</button>
+          <button type="button" onclick="_copyUpi('${escAttr(upi)}')" style="flex:1;padding:11px;background:rgba(77,159,255,.1);border:1px solid rgba(77,159,255,.22);border-radius:12px;color:var(--blue);font:700 12px/1 var(--sans);cursor:pointer;">📋 Copy UPI</button>
+        </div>
+        <button type="button" onclick="markVoucherPaid('${escAttr(v.code || '')}')" style="width:100%;padding:12px;background:rgba(255,184,48,.14);border:1px solid rgba(255,184,48,.3);border-radius:12px;color:var(--amber);font:700 13px/1 var(--sans);cursor:pointer;">✅ Mark as Paid — I've sent ₹${amount.toFixed(2)}</button>
+      `;
       list.appendChild(row);
     });
   } catch(e) {
@@ -3197,7 +3220,7 @@ async function replayPendingVouchers() {
         const vSnap = await tx.get(vRef);
         const rSnap = await tx.get(receiverRef);
         // Voucher already used or doesn't exist — skip silently
-        if (!vSnap.exists() || vSnap.data().status === 'USED') return;
+        if (!vSnap.exists() || vSnap.data().status === 'USED' || vSnap.data().status === 'completed' || vSnap.data().status === 'needs_payout' || vSnap.data().status === 'paid') return;
         if (!rSnap.exists()) throw new Error('Account not found');
         createdBy = vSnap.data().createdBy || '';
         didTransact = true;

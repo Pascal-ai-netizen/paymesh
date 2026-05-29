@@ -507,16 +507,16 @@ if (!token) {
                 return;
               }
               receiverName = receiverSnap.data().name || claimedPhone;
-              // Atomic: mark voucher as USED, credit receiver
+              // Atomic: mark voucher as completed, credit receiver
               await runTransaction(db, async (tx) => {
                 const vFresh = await tx.get(doc(db,'vouchers',token));
                 const rFresh = await tx.get(doc(db,'users',claimedPhone));
-                if (!vFresh.exists() || vFresh.data().status === 'USED' || vFresh.data().status === 'completed' || vFresh.data().status === 'needs_payout') throw new Error('Voucher already redeemed.');
+                if (!vFresh.exists() || vFresh.data().status === 'completed' || vFresh.data().status === 'needs_payout' || vFresh.data().status === 'paid') throw new Error('Voucher already redeemed.');
                 if (!rFresh.exists()) throw new Error('Receiver account not found.');
                 const rBal = rFresh.data().balance || 0;
                 const freshAttempts = vFresh.data().codeAttempts || 0;
                 tx.update(doc(db,'vouchers',token), {
-                  status: 'USED',
+                  status: 'completed',
                   redeemedBy: claimedPhone,
                   redeemedByName: receiverName,
                   redeemedAt: new Date().toISOString(),

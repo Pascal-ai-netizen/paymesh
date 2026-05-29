@@ -3573,6 +3573,7 @@ async function btAdvertise() {
     var shortCode = 'QT' + Array.from(arr).map(function(b){return chars[b%chars.length];}).join('').substring(0,6);
     await setDoc(doc(db,'bt_requests',shortCode), {
       code:shortCode, receiver:phone, receiverName:name,
+      from:phone, amount:1, time:new Date().toISOString(),
       status:'waiting', attempts:0,
       createdAt:new Date().toISOString(),
       expiresAt:new Date(Date.now()+5*60*1000).toISOString()
