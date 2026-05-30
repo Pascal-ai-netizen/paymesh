@@ -821,12 +821,14 @@ function buildUPILink() {
 window.loginUser = async function() {
   const phone = document.getElementById('login-phone').value.trim();
   const msg   = document.getElementById('login-msg');
-  const btn   = document.querySelector('#screen-login .btn-primary');
+  // Use ID selector directly — more reliable than querySelector on class
+  const btn   = document.getElementById('login-btn');
 
   if (!/^\d{10}$/.test(phone)) { showMsg(msg,'error','Enter a valid 10-digit phone number'); return; }
 
   const knownPhones   = JSON.parse(localStorage.getItem('pm_known_phones') || '[]');
   const isKnownDevice = knownPhones.includes(phone);
+  const btnLabel      = isKnownDevice ? 'Sign In' : 'Get Started';
 
   let nameInput, upiInput;
   if (!isKnownDevice) {
@@ -837,7 +839,11 @@ window.loginUser = async function() {
     if (!UPI_REGEX.test(upiInput)){ showMsg(msg,'error','Invalid UPI ID. Use format like name@ybl'); return; }
   }
 
-  if (btn) { btn.disabled = true; btn.querySelector('span').textContent = 'Please wait…'; }
+  if (btn) {
+    btn.disabled = true;
+    const span = btn.querySelector('span');
+    if (span) span.textContent = 'Please wait…';
+  }
   showMsg(msg,'success','Verifying account...');
 
   try {
@@ -875,18 +881,33 @@ window.loginUser = async function() {
     }
 
     addKnownPhone(phone);
-    // Write to localStorage so session survives tab close / app reopen (original behavior)
-    localStorage.setItem('pm_name', finalName);
-    localStorage.setItem('pm_phone', phone);
-    localStorage.setItem('pm_upi', finalUpi);
+
+    // ── REMEMBER ME PERSISTENCE LOGIC ──
+    // New users: always persist to localStorage (they registered on this device).
+    // Returning users: respect the Remember Me toggle.
+    //   - _rememberMe = true  → localStorage (survives app close/reopen)
+    //   - _rememberMe = false → sessionStorage only (cleared when tab/app closes)
+    const shouldPersist = !isKnownDevice || _rememberMe;
+
+    if (shouldPersist) {
+      localStorage.setItem('pm_name',  finalName);
+      localStorage.setItem('pm_phone', phone);
+      localStorage.setItem('pm_upi',   finalUpi);
+    } else {
+      // Ensure stale localStorage data doesn't auto-log them in next time
+      localStorage.removeItem('pm_name');
+      localStorage.removeItem('pm_phone');
+      localStorage.removeItem('pm_upi');
+    }
+
+    // Always write to sessionStorage for in-session reads
+    sessionStorage.setItem('pm_name',  finalName);
+    sessionStorage.setItem('pm_phone', phone);
+    sessionStorage.setItem('pm_upi',   finalUpi);
+
     const _fp = generateDeviceToken();
     setLocalToken(_fp);
-    localStorage.setItem('pm_device_token', _fp);
-    // Mirror to sessionStorage for fast in-session reads
-    sessionStorage.setItem('pm_name', finalName);
-    sessionStorage.setItem('pm_phone', phone);
-    sessionStorage.setItem('pm_upi', finalUpi);
-
+    if (shouldPersist) localStorage.setItem('pm_device_token', _fp);
 
     CURRENT_USER.name  = finalName;
     CURRENT_USER.phone = phone;
@@ -895,7 +916,11 @@ window.loginUser = async function() {
     // Request notification permission on every login (no-op if already granted/denied)
     pmRequestNotifPermission();
 
-    if (btn) { btn.disabled = false; btn.querySelector('span').textContent = isKnownDevice ? 'Sign In' : 'Get Started'; }
+    if (btn) {
+      btn.disabled = false;
+      const span = btn.querySelector('span');
+      if (span) span.textContent = btnLabel;
+    }
 
     setTimeout(() => {
       refreshPinSettingsUI();
@@ -903,8 +928,12 @@ window.loginUser = async function() {
     }, 800);
 
   } catch(e) {
-    if (btn) { btn.disabled = false; btn.querySelector('span').textContent = isKnownDevice ? 'Sign In' : 'Get Started'; }
-    showMsg(msg, 'error', 'Error. Check internet and try again.');
+    if (btn) {
+      btn.disabled = false;
+      const span = btn.querySelector('span');
+      if (span) span.textContent = btnLabel;
+    }
+    showMsg(msg, 'error', 'Error: ' + (e.message || 'Check internet and try again.'));
     console.error(e);
   }
 }
@@ -986,11 +1015,11 @@ let _homeListenersActive = false;
 async function loadHomeData() {
   // Fallback: read from localStorage (persisted) or sessionStorage if CURRENT_USER not set yet
   if (!CURRENT_USER.phone) {
-    const savedPhone = localStorage.getItem('pm_phone') || sessionStorage.getItem('pm_phone');
+    const savedPhone = sessionStorage.getItem('pm_phone') || localStorage.getItem('pm_phone');
     if (savedPhone) {
       CURRENT_USER.phone = savedPhone;
-      CURRENT_USER.name  = localStorage.getItem('pm_name')  || sessionStorage.getItem('pm_name')  || '';
-      CURRENT_USER.upi   = localStorage.getItem('pm_upi')   || sessionStorage.getItem('pm_upi')   || '';
+      CURRENT_USER.name  = sessionStorage.getItem('pm_name')  || localStorage.getItem('pm_name')  || '';
+      CURRENT_USER.upi   = sessionStorage.getItem('pm_upi')   || localStorage.getItem('pm_upi')   || '';
     } else {
       showScreen('screen-login');
       return;
@@ -3637,11 +3666,12 @@ window.stopScan = function() {
 
 (function init() {
   function run() {
-    // Read from localStorage first (persists across tab close/app reopen),
-    // fall back to sessionStorage for any legacy in-session-only writes.
-    const phone = localStorage.getItem('pm_phone') || sessionStorage.getItem('pm_phone');
-    const name  = localStorage.getItem('pm_name')  || sessionStorage.getItem('pm_name')  || '';
-    const upi   = localStorage.getItem('pm_upi')   || sessionStorage.getItem('pm_upi')   || '';
+    // sessionStorage is checked first — a fresh app open clears it, so if it's set
+    // the user is mid-session. localStorage is the remembered (persisted) login.
+    // This means: non-remembered sessions work within the tab, but don't survive a close.
+    const phone = sessionStorage.getItem('pm_phone') || localStorage.getItem('pm_phone');
+    const name  = sessionStorage.getItem('pm_name')  || localStorage.getItem('pm_name')  || '';
+    const upi   = sessionStorage.getItem('pm_upi')   || localStorage.getItem('pm_upi')   || '';
 
     // Preload QRCode lib eagerly so "My QR" screen renders instantly
     loadScript('https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js').catch(() => {});
