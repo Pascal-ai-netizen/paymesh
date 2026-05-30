@@ -54,24 +54,24 @@
   // ── 2. KEYBOARD SHORTCUTS — block F12, Ctrl+Shift+I/J/C/U, Ctrl+U ──
   document.addEventListener('keydown', function(e) {
     // F12
-    if (e.key === 'F12') { e.preventDefault(); e.stopImmediatePropagation(); return false; }
+    if (e.key === 'F12') { e.preventDefault(); e.stopImmediatePropagation(); }
     // Ctrl/Cmd + Shift + I, J, C
     if ((e.ctrlKey || e.metaKey) && e.shiftKey && ['i','I','j','J','c','C'].includes(e.key)) {
-      e.preventDefault(); e.stopImmediatePropagation(); return false;
+      e.preventDefault(); e.stopImmediatePropagation();
     }
     // Ctrl + U (view source)
     if ((e.ctrlKey || e.metaKey) && (e.key === 'u' || e.key === 'U')) {
-      e.preventDefault(); e.stopImmediatePropagation(); return false;
+      e.preventDefault(); e.stopImmediatePropagation();
     }
     // Ctrl + S (save page)
     if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
-      e.preventDefault(); e.stopImmediatePropagation(); return false;
+      e.preventDefault(); e.stopImmediatePropagation();
     }
   }, true);
 
   // ── 3. RIGHT-CLICK DISABLE ──
   document.addEventListener('contextmenu', function(e) {
-    e.preventDefault(); return false;
+    e.preventDefault();
   }, true);
 
   // ── 4. PRINT / SCREENSHOT DETECTION — blank the page ──
@@ -161,47 +161,63 @@ window.CURRENT_USER = CURRENT_USER; // expose so inline scripts can check sessio
 const _PM_NOTIF_MSGS = {
   sent: [
     '💸 Done, {user}! ₹{amount} zipped to {name} in a flash. PayMesh never misses!',
-    '🚀 Boom, {user}! ₹{amount} just landed in {name}\'s wallet. You\'re unstoppable!',
-    '✅ Transaction complete! {user}, you sent ₹{amount} to {name} like an absolute pro 😎',
+    '🚀 Boom, {user}! ₹{amount} just landed in {name}'s wallet. You're unstoppable!',
+    '✅ {user}, you sent ₹{amount} to {name} like an absolute pro 😎',
     '⚡ {user}, ₹{amount} → {name}. Faster than light, smoother than butter!',
     '🎯 Nailed it, {user}! ₹{amount} delivered to {name}. Your UPI game is elite!',
     '💫 {user}, your ₹{amount} is already with {name}. PayMesh speed hits different!',
   ],
   received: [
     '🤑 Ka-ching, {user}! ₹{amount} just crashed into your wallet from {name}. Time to celebrate!',
-    '💚 {user}, you\'ve got money! ₹{amount} from {name} just hit your account. Big W!',
-    '🎉 Surprise, {user}! {name} dropped ₹{amount} into your wallet. You\'re loved!',
-    '🔥 {user}, your balance just levelled up! ₹{amount} from {name} is IN. Let\'s go!',
+    '💚 {user}, you've got money! ₹{amount} from {name} just hit your account. Big W!',
+    '🎉 Surprise, {user}! {name} dropped ₹{amount} into your wallet. You're loved!',
+    '🔥 {user}, your balance just levelled up! ₹{amount} from {name} is IN. Let's go!',
     '💰 Alert, {user}! {name} sent you ₹{amount}. Your wallet is smiling right now 😄',
     '✨ Ooh nice, {user}! ₹{amount} from {name} just landed safe and sound. Cha-ching!',
   ],
   voucherCreated: [
-    '🎁 {user}, your ₹{amount} gift voucher is live! Go spread the joy — someone\'s in for a treat!',
-    '✨ Magic sealed, {user}! ₹{amount} voucher is ready to make someone\'s day. You\'re a legend!',
-    '🎀 {user}, Santa mode: ON! Your ₹{amount} voucher is locked and loaded. Who\'s the lucky one?',
-    '💝 {user}, you just created a ₹{amount} surprise! Share the code and watch the smiles roll in 😊',
-    '🌟 Generous move, {user}! ₹{amount} voucher is out in the world. You\'re basically a gift god!',
+    '🎁 {user}, your ₹{amount} gift voucher is live! Go spread the joy — someone's in for a treat!',
+    '✨ Magic sealed, {user}! ₹{amount} voucher ready to make someone's day. You're a legend!',
+    '🎊 {user}, Santa mode: ON! Your ₹{amount} voucher is locked and loaded. Who's the lucky one?',
+    '💗 {user}, you just created a ₹{amount} surprise! Share the code and watch the smiles roll in 😊',
+    '🌟 Generous move, {user}! ₹{amount} voucher is out in the world. You're basically a gift god!',
   ],
   voucherClaimed: [
-    '🙌 Great news, {user}! {name} grabbed your ₹{amount} voucher and LOVED it. Mission accomplished!',
-    '✅ {user}, your ₹{amount} gift reached {name}! They\'re probably doing a happy dance right now 💃',
+    '🙌 Great news, {user}! {name} grabbed your ₹{amount} voucher. Mission accomplished!',
+    '✅ {user}, your ₹{amount} gift reached {name}! They're probably doing a happy dance right now 💃',
     '🎊 {user}, {name} just redeemed your ₹{amount} voucher. Your generosity hit different today!',
-    '🔔 Voucher alert, {user}! {name} claimed your ₹{amount} gift. You made someone\'s day brighter ☀️',
-    '💌 {user}, ₹{amount} well spent! {name} used your voucher. Best gifter award goes to YOU 🏆',
+    '🔔 {user}, {name} claimed your ₹{amount} gift. You made someone's day brighter ☀️',
+    '🏆 {user}, best gifter award goes to YOU! {name} loved the ₹{amount} voucher!',
   ],
   voucherReceived: [
     '🎉 Jackpot, {user}! A ₹{amount} voucher just landed in your wallet. Someone really likes you 💚',
     '🤩 Free money moment, {user}! +₹{amount} from a voucher is now yours. What a day to be alive!',
     '💸 {user}, your wallet just got a gift injection! ₹{amount} voucher redeemed successfully 🎁',
-    '🥳 Woohoo, {user}! ₹{amount} from a voucher is in your account. Go treat yourself — you deserve it!',
+    '🥳 Woohoo, {user}! ₹{amount} from a voucher is in. Go treat yourself — you deserve it!',
     '✨ Lucky you, {user}! ₹{amount} voucher claimed and credited. The universe is being kind today 🌈',
   ],
   walletLoaded: [
-    '🟢 Fuelled up, {user}! ₹{amount} is locked and loaded in your PayMesh wallet. Let\'s roll!',
+    '🟢 Fuelled up, {user}! ₹{amount} locked and loaded in your wallet. Let's roll!',
     '🚀 {user}, your wallet just got a power-up! ₹{amount} added and ready to fire. Go make moves!',
-    '💪 Money in, {user}! ₹{amount} approved and sitting pretty in your wallet. You\'re all set!',
+    '💪 Money in, {user}! ₹{amount} approved and sitting pretty. You're all set!',
     '🎯 {user}, ₹{amount} just hit your wallet — confirmed, verified, and yours! Time to spend smart 😎',
     '⚡ Charged up, {user}! ₹{amount} loaded into PayMesh. Your wallet is ready for anything!',
+    '💸 {user}, the money landed! ₹{amount} is in — fresh, confirmed, and all yours 🔥',
+  ],
+  ariaOpened: [
+    '🛡️ Hey {user}, Aria is on the case! Your fraud shield is active and watching every move. Stay safe!',
+    '🔍 {user}, you just opened the smartest feature in PayMesh! Aria is scanning your account in real-time 👀',
+    '🤖 Aria here, {user}! Keeping an eye on things. Your account looks clean so far 👌',
+    '🧠 Smart move, {user}! Aria Fraud Copilot is your personal bodyguard. No scammer gets past me 💪',
+    '⚡ {user}, Aria is powered up! Real-time fraud detection, risk scoring, and scam alerts all in one place 🔐',
+    '🌟 {user}, welcome to your fraud intelligence hub! Aria has been silently protecting you all along 🛡️',
+  ],
+  walletLoadPrompt: [
+    '💳 {user}, your Load Wallet request is submitted! We will notify you the moment it gets approved 🔔',
+    '⏳ Hang tight, {user}! Your wallet top-up is under review. Should be approved real soon 🟢',
+    '📩 Got it, {user}! Your load request is in the queue. Sit back — we will ping you when it is done!',
+    '🧾 {user}, UTR submitted successfully! Admin is reviewing it. You will be notified once credited ✅',
+    '🚀 On it, {user}! Your wallet load request is being processed. Watch out for that sweet credit alert 🔔',
   ],
 };
 
@@ -257,9 +273,9 @@ function generateDeviceToken() {
     .map(b => b.toString(16).padStart(2,'0')).join('');
 }
 
-function getLocalToken()        { return sessionStorage.getItem('pm_device_token') || null; }
-function setLocalToken(token)   { sessionStorage.setItem('pm_device_token', token); }
-function clearLocalToken()      { sessionStorage.removeItem('pm_device_token'); }
+function getLocalToken()        { return localStorage.getItem('pm_device_token') || sessionStorage.getItem('pm_device_token') || null; }
+function setLocalToken(token)   { localStorage.setItem('pm_device_token', token); sessionStorage.setItem('pm_device_token', token); }
+function clearLocalToken()      { localStorage.removeItem('pm_device_token'); sessionStorage.removeItem('pm_device_token'); }
 
 // ═══════════════════════════════════════════
 // PIN BRUTE-FORCE LOCKOUT
@@ -350,8 +366,8 @@ function requirePin(title = 'Enter PIN', sub = 'Required to complete this action
     if (!hasPinSet()) { resolve(); return; }
     // Lockout check
     if (isPinLocked()) {
-      reject(new Error(`PIN locked. Try again in ${pinLockoutRemaining()}.`));
       alert(`Too many wrong PINs. Try again in ${pinLockoutRemaining()}.`);
+      reject(new Error(`PIN locked. Try again in ${pinLockoutRemaining()}.`));
       return;
     }
     _pinMode     = 'verify';
@@ -689,7 +705,10 @@ window.showScreen = function(id) {
   if (id !== 'screen-home')    _homeListenersActive = false;
   if (id === 'screen-receive') generateReceiveQR();
   if (id === 'screen-pin')     refreshPinSettingsUI();
-  if (id === 'screen-copilot') ariaLoadDashboard();
+  if (id === 'screen-copilot') {
+    ariaLoadDashboard();
+    pmNotify('PayMesh · Aria Fraud Copilot 🛡️', _pmPickMsg(_PM_NOTIF_MSGS.ariaOpened, { user: (CURRENT_USER.name || '').split(' ')[0] || 'there' }));
+  }
   if (id === 'screen-load') {
     document.getElementById('display-upi').textContent = PAYMESH_UPI;
     buildUPILink();
@@ -861,12 +880,12 @@ window.loginUser = async function() {
     localStorage.setItem('pm_phone', phone);
     localStorage.setItem('pm_upi', finalUpi);
     const _fp = generateDeviceToken();
-    localStorage.setItem('pm_fp', _fp);
+    setLocalToken(_fp);
+    localStorage.setItem('pm_device_token', _fp);
     // Mirror to sessionStorage for fast in-session reads
     sessionStorage.setItem('pm_name', finalName);
     sessionStorage.setItem('pm_phone', phone);
     sessionStorage.setItem('pm_upi', finalUpi);
-    sessionStorage.setItem('pm_fp', _fp);
 
 
     CURRENT_USER.name  = finalName;
@@ -1037,9 +1056,24 @@ async function loadHomeData() {
     where("phone","==",CURRENT_USER.phone),
     limit(20)
   );
+  let _lastTxCount = null;
+  const _notifiedTxIds = new Set();
   unsubTxns = onSnapshot(
     txQuery,
-    (snap) => renderTransactions(snap),
+    (snap) => {
+      renderTransactions(snap);
+      if (_lastTxCount === null) { _lastTxCount = snap.size; snap.forEach(d => _notifiedTxIds.add(d.id)); return; }
+      snap.forEach(d => {
+        if (_notifiedTxIds.has(d.id)) return;
+        _notifiedTxIds.add(d.id);
+        const tx = d.data();
+        if (tx.type === 'credit' && tx.amount) {
+          const fromName = (tx.label || '').replace(/^From\s+/i, '') || 'Someone';
+          pmNotify('PayMesh · Money Received 💰', _pmPickMsg(_PM_NOTIF_MSGS.received, { name: fromName, amount: Number(tx.amount).toFixed(2), user: (CURRENT_USER.name || '').split(' ')[0] || 'there' }));
+        }
+      });
+      _lastTxCount = snap.size;
+    },
     (err)  => {
       const list = document.getElementById('tx-list');
       if (list) list.innerHTML = '<div class="tx-empty">Could not load transactions</div>';
@@ -1829,7 +1863,23 @@ async function _runFraudScore(phone, amount, note) {
 
   // Cap non-drain signal contribution for known contacts (reduces false positives)
   if (isKnownContact) {
-    const drainContrib = signals.filter(s => s.icon === '💸').reduce(() => 0, 0);
+    // Sum the score contributions of drain (💸) signals by matching the score
+    // increments defined in Module 8 above (60 / 40 / 30 pts respectively).
+    const drainScoreMap = [
+      { ratio: 0.95, isNew: true,  pts: 60 },
+      { ratio: 0.80, isNew: true,  pts: 40 },
+      { ratio: 0.90, isNew: false, pts: 30 },
+    ];
+    let drainContrib = 0;
+    if (currentBal >= 200) {
+      const drainRatio = amount / currentBal;
+      for (const rule of drainScoreMap) {
+        if (rule.isNew ? (drainRatio > rule.ratio && isNewContact) : (drainRatio > rule.ratio)) {
+          drainContrib = rule.pts;
+          break;
+        }
+      }
+    }
     const nonDrain = score - drainContrib;
     if (nonDrain > 25) score = drainContrib + 25;
   }
@@ -1988,7 +2038,7 @@ function _renderFraudPanel(score, signals, amount, toPhone) {
   else                  tier = 'green';
 
   // Score bar width capped at 100%
-  const pct = Math.min(Math.round(score / 100 * 100), 100);
+  const pct = Math.min(Math.round(score), 100);
 
   // ── Badge ──
   if (badge) {
@@ -2515,7 +2565,7 @@ function _renderVoucherFraudPanel(score, signals, amount) {
   else if (score >= 20) tier = 'amber';
   else                  tier = 'green';
 
-  const pct = Math.min(Math.round(score / 100 * 100), 100);
+  const pct = Math.min(Math.round(score), 100);
 
   // Badge
   if (badge) {
@@ -3559,7 +3609,7 @@ window.redeemVoucher = async function() {
     pmNotify('PayMesh · Voucher Claimed 🎉', _pmPickMsg(_PM_NOTIF_MSGS.voucherReceived, { amount: amount.toFixed(2), user: (CURRENT_USER.name || '').split(' ')[0] || 'there' }));
 
   } catch(e) {
-    if (e.message === 'Failed to get document because the client is offline.') {
+    if (e.message && e.message.includes('client is offline')) {
       const pending = JSON.parse(localStorage.getItem('pending_vouchers') || '[]');
       pending.push({ ...voucher, amount, redeemedBy:CURRENT_USER.phone, time:new Date().toISOString() });
       localStorage.setItem('pending_vouchers', JSON.stringify(pending));
