@@ -214,15 +214,11 @@ function _pmPickMsg(arr, vars) {
   return msg;
 }
 
-// Register the service worker. The app lives at /paymesh/ so we set the scope explicitly.
-// Without the scope option, registering /sw.js from /paymesh/index.html works but some
-// browsers may resolve .ready against a mismatched scope and stall forever.
+// ── BUG 1 FIX: single authoritative SW registration path ──
+// index.html also had a conflicting registration at /paymesh/sw.js — that one is removed there.
+// One SW, one scope. navigator.serviceWorker.ready will now resolve reliably.
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/sw.js', { scope: '/paymesh/' }).catch(function() {
-    // If the server doesn't send the Service-Worker-Allowed header for /paymesh/ from /sw.js,
-    // fall back to registering without an explicit scope (scope defaults to /paymesh/).
-    navigator.serviceWorker.register('/sw.js').catch(function() {});
-  });
+  navigator.serviceWorker.register('/sw.js').catch(function() {});
 }
 
 function pmNotify(title, body) {
@@ -230,25 +226,23 @@ function pmNotify(title, body) {
     if (!('Notification' in window)) return;
     if (Notification.permission !== 'granted') return;
 
-    // Show in-app toast whenever the page is visible (foreground / PWA standalone).
-    // On mobile PWA standalone mode document.hidden is almost always false, so we can't
-    // use it as the sole gate — the SW notification always fires regardless.
+    // ── BUG 5 FIX: when app is in foreground, show in-app toast instead of system push ──
+    // System push while the user is actively using the app is jarring and redundant.
     if (!document.hidden) {
       _pmShowInAppToast(title, body);
+      return;
     }
 
-    // ALWAYS fire the SW system notification so it appears on the device notification
-    // bar and lock screen. This is the only path that works when the app is backgrounded,
-    // screen is off, or the user is in another app. Use a unique tag per call so rapid
-    // events (e.g. sent + received) never collapse each other.
-    var tag = 'paymesh-' + Date.now();
+    // ── BUG 4 FIX: use registration.showNotification() — the correct ServiceWorkerRegistration API ──
+    // navigator.serviceWorker.ready resolves with the registration, not the worker itself.
+    // registration.showNotification() is the proper path and works even if the SW is waiting.
     navigator.serviceWorker.ready.then(function(registration) {
       return registration.showNotification(title, {
-        body:     body,
-        icon:     '/paymesh/icon-192-1.png',
-        badge:    '/paymesh/icon-192-1.png',
-        vibrate:  [200, 100, 200],
-        tag:      tag,
+        body:    body,
+        icon:    '/icon-192-1.png',
+        badge:   '/icon-192-1.png',
+        vibrate: [200, 100, 200],
+        tag:     'paymesh-txn',
         renotify: true,
       });
     }).catch(function() {});
@@ -668,10 +662,9 @@ let scannerStream   = null;
 let scannerInterval = null;
 let detectedQR      = null;
 
-let unsubBalance      = null;
-let unsubTxns         = null;
-let unsubLoadNotif    = null; // watches pending UTR requests for admin approval
-let unsubVoucherNotif = null; // watches creator's vouchers for claim events
+let unsubBalance = null;
+let unsubTxns    = null;
+let unsubLoadNotif = null; // watches pending UTR requests for admin approval
 
 // ═══════════════════════════════════════════
 // HELPERS
@@ -1013,10 +1006,9 @@ window.logoutUser = function() {
 // ═══════════════════════════════════════════
 
 function teardownListeners() {
-  if (unsubBalance)      { unsubBalance();      unsubBalance      = null; }
-  if (unsubTxns)         { unsubTxns();         unsubTxns         = null; }
-  if (unsubLoadNotif)    { unsubLoadNotif();    unsubLoadNotif    = null; }
-  if (unsubVoucherNotif) { unsubVoucherNotif(); unsubVoucherNotif = null; }
+  if (unsubBalance)   { unsubBalance();   unsubBalance   = null; }
+  if (unsubTxns)      { unsubTxns();      unsubTxns      = null; }
+  if (unsubLoadNotif) { unsubLoadNotif(); unsubLoadNotif = null; }
   _homeListenersActive = false;
 }
 
@@ -1167,31 +1159,6 @@ async function loadHomeData() {
       _showLoadApprovedToast(data.amount, utr);
     });
   }, (err) => console.warn('Load notif listener error:', err.message));
-
-  // ── VOUCHER CLAIMED NOTIFICATION ──
-  // Watch vouchers the current user created. When someone claims one, notify them.
-  const _notifiedVouchers = new Set(JSON.parse(sessionStorage.getItem('pm_notified_vouchers') || '[]'));
-  const voucherNotifQuery = query(
-    collection(db, 'vouchers'),
-    where('createdBy', '==', CURRENT_USER.phone),
-    where('status',    'in',  ['claimed', 'needs_payout', 'completed'])
-  );
-  unsubVoucherNotif = onSnapshot(voucherNotifQuery, (snap) => {
-    snap.forEach(d => {
-      const v     = d.data();
-      const token = d.id;
-      if (!token || _notifiedVouchers.has(token)) return;
-      _notifiedVouchers.add(token);
-      sessionStorage.setItem('pm_notified_vouchers', JSON.stringify([..._notifiedVouchers]));
-      const claimer = v.redeemedByName || v.claimedByName || 'Someone';
-      const amt     = Number(v.amount || 0);
-      const userName = (CURRENT_USER.name || '').split(' ')[0] || 'there';
-      pmNotify(
-        'PayMesh · Voucher Claimed 🎊',
-        _pmPickMsg(_PM_NOTIF_MSGS.voucherClaimed, { name: claimer, amount: amt.toFixed(2), user: userName })
-      );
-    });
-  }, (err) => console.warn('Voucher notif listener error:', err.message));
 }
 
 function renderTransactions(snap) {
@@ -1239,9 +1206,6 @@ function animateBalance(target) {
 // Shown when admin approves a UTR while the user is in-app.
 function _showLoadApprovedToast(amount, utr) {
   try {
-    // Fire system notification first — works even if the DOM toast fails
-    pmNotify('PayMesh · Wallet Loaded 🟢', _pmPickMsg(_PM_NOTIF_MSGS.walletLoaded, { amount: Number(amount).toFixed(2), user: (CURRENT_USER.name || '').split(' ')[0] || 'there' }));
-    if (navigator.vibrate) navigator.vibrate([100, 50, 200]);
     const toast = document.createElement('div');
     toast.style.cssText = [
       'position:fixed','bottom:max(80px,env(safe-area-inset-bottom,80px))','left:50%',
@@ -1259,6 +1223,8 @@ function _showLoadApprovedToast(amount, utr) {
       '<div style="font-size:20px;font-weight:800;font-family:var(--mono);color:var(--text);">+₹' + Number(amount).toFixed(2) + '</div>' +
       '<div style="font-size:11px;color:var(--text3);margin-top:4px;">UTR ' + utr + ' approved</div>';
     document.body.appendChild(toast);
+    if (navigator.vibrate) navigator.vibrate([100, 50, 200]);
+    pmNotify('PayMesh · Wallet Loaded 🟢', _pmPickMsg(_PM_NOTIF_MSGS.walletLoaded, { amount: Number(amount).toFixed(2), user: (CURRENT_USER.name || '').split(' ')[0] || 'there' }));
     setTimeout(function() {
       toast.style.transition = 'opacity .4s ease, transform .4s ease';
       toast.style.opacity = '0';
