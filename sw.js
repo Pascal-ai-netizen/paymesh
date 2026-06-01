@@ -1,4 +1,4 @@
-const CACHE_NAME = 'paymesh-v100';
+const CACHE_NAME = 'paymesh-v101';
 
 self.addEventListener('install', (e) => {
   e.waitUntil(
@@ -60,9 +60,13 @@ self.addEventListener('notificationclick', (e) => {
   e.notification.close();
   e.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+      // Find an existing PayMesh tab and focus it
       for (const c of list) {
-        if (c.url && c.focus) { c.focus(); return; }
+        if (c.url && c.url.includes('/paymesh/') && c.focus) {
+          return c.focus();
+        }
       }
+      // No existing tab — open a new one
       return clients.openWindow('/paymesh/');
     })
   );
