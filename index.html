@@ -2538,7 +2538,8 @@ h1,h2,h3,.wallet-amount,.login-title{letter-spacing:-.5px;font-weight:800}
 
 <!-- SPLASH: shown while JS decides login vs home -->
 <script>
-// Force SW update on every load so new app.js is always served
+// SW update check — the authoritative registration lives in app.js at /sw.js
+// This block only forces an update check on registered SWs; it does NOT register a new one.
 if (navigator.serviceWorker) {
   navigator.serviceWorker.getRegistrations().then(function(regs) {
     regs.forEach(function(reg) { reg.update(); });
@@ -2636,6 +2637,14 @@ window.__PM_SPLASH_TIMEOUT = setTimeout(function() {
       </div>
     </div>
     <div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">
+      <!-- ── BUG 2 FIX: bell button — permission MUST come from a real user tap ── -->
+      <button type="button" class="icon-btn" id="notif-bell-btn" onclick="pmHandleBellTap()" title="Enable notifications" aria-label="Enable notifications">
+        <svg id="notif-bell-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+          <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+        </svg>
+        <span id="notif-bell-dot" style="display:none;position:absolute;top:4px;right:4px;width:7px;height:7px;background:#E04060;border-radius:50%;border:1.5px solid var(--bg);pointer-events:none;"></span>
+      </button>
       <button type="button" class="aria-home-btn" id="aria-home-btn" onclick="showScreen('screen-copilot')" title="Fraud Copilot — Aria">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
@@ -3178,17 +3187,9 @@ window.__PM_SPLASH_TIMEOUT = setTimeout(function() {
 </script>
 
 <script>
-// Register SW FIRST before anything else loads
-// This ensures the NEW sw.js (v4) is picked up and old cache is cleared
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/paymesh/sw.js', { scope: '/paymesh/' })
-    .then(function(r) {
-      console.log('[PWA] SW registered:', r.scope);
-      // Force update check every page load
-      r.update();
-    })
-    .catch(function(e) { console.warn('[PWA] SW fail:', e); });
-}
+// SW registration is handled in app.js (/sw.js). This block removed to fix path conflict.
+// Previously registered /paymesh/sw.js with a different scope — that caused
+// navigator.serviceWorker.ready to resolve against a dead registration.
 </script>
 
 <!-- ══ FRAUD COPILOT / ARIA SCREEN ══ -->
@@ -3983,6 +3984,66 @@ async function nfcListen(){
     });
   });
   observer.observe(document.body, {subtree:true, attributeFilter:['class'], attributes:true});
+})();
+</script>
+<script>
+/* ── NOTIFICATION BELL — user-gesture gated permission (Bug 2 fix) ── */
+(function() {
+  function _updateBellUI() {
+    var btn  = document.getElementById('notif-bell-btn');
+    var dot  = document.getElementById('notif-bell-dot');
+    var icon = document.getElementById('notif-bell-icon');
+    if (!btn) return;
+    var perm = ('Notification' in window) ? Notification.permission : 'denied';
+    if (perm === 'granted') {
+      // Bell is active — green tint
+      btn.style.color = 'var(--em)';
+      if (dot)  dot.style.display = 'none';
+    } else if (perm === 'denied') {
+      // Blocked — muted, show red dot
+      btn.style.color = 'var(--text3)';
+      if (dot) dot.style.display = 'block';
+    } else {
+      // Default — nudge the user
+      btn.style.color = 'var(--text2)';
+      if (dot) dot.style.display = 'none';
+    }
+  }
+
+  window.pmHandleBellTap = function() {
+    if (!('Notification' in window)) {
+      alert('Your browser doesn\'t support notifications.');
+      return;
+    }
+    var perm = Notification.permission;
+    if (perm === 'granted') {
+      // Already on — show a test notification so user knows it works
+      if (window.pmNotify) window.pmNotify('PayMesh · Notifications ✅', 'You\'ll get alerts for payments, vouchers & more right here.');
+      return;
+    }
+    if (perm === 'denied') {
+      alert('Notifications are blocked. To enable them, tap the lock/info icon in your browser\'s address bar → Notifications → Allow, then reload the app.');
+      return;
+    }
+    // 'default' — request NOW (this IS the user gesture — the tap just happened)
+    if (window.pmRequestNotifPermission) {
+      window.pmRequestNotifPermission().then(function(result) {
+        _updateBellUI();
+        if (result === 'granted') {
+          if (window.pmNotify) window.pmNotify('PayMesh · Notifications enabled ✅', 'You\'ll now get instant alerts for every payment and voucher.');
+        }
+      }).catch(function() {});
+    }
+  };
+
+  // Sync bell state when home screen is shown
+  document.addEventListener('DOMContentLoaded', function() {
+    _updateBellUI();
+    // Re-sync whenever visibility changes (user may have changed settings in browser)
+    document.addEventListener('visibilitychange', _updateBellUI);
+  });
+
+  window._pmUpdateBellUI = _updateBellUI;
 })();
 </script>
 </body>

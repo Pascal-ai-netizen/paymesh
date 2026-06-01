@@ -214,34 +214,101 @@ function _pmPickMsg(arr, vars) {
   return msg;
 }
 
+// ── BUG 1 FIX: single authoritative SW registration path ──
+// index.html also had a conflicting registration at /paymesh/sw.js — that one is removed there.
+// One SW, one scope. navigator.serviceWorker.ready will now resolve reliably.
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(function() {});
+}
+
 function pmNotify(title, body) {
   try {
     if (!('Notification' in window)) return;
     if (Notification.permission !== 'granted') return;
-    navigator.serviceWorker.ready.then(function(sw) {
-      sw.showNotification(title, {
+
+    // ── BUG 5 FIX: when app is in foreground, show in-app toast instead of system push ──
+    // System push while the user is actively using the app is jarring and redundant.
+    if (!document.hidden) {
+      _pmShowInAppToast(title, body);
+      return;
+    }
+
+    // ── BUG 4 FIX: use registration.showNotification() — the correct ServiceWorkerRegistration API ──
+    // navigator.serviceWorker.ready resolves with the registration, not the worker itself.
+    // registration.showNotification() is the proper path and works even if the SW is waiting.
+    navigator.serviceWorker.ready.then(function(registration) {
+      return registration.showNotification(title, {
         body:    body,
         icon:    '/icon-192-1.png',
         badge:   '/icon-192-1.png',
         vibrate: [200, 100, 200],
         tag:     'paymesh-txn',
+        renotify: true,
       });
     }).catch(function() {});
   } catch(e) {}
 }
 
-// Request permission once on login — non-blocking
-function pmRequestNotifPermission() {
+// In-app toast for foreground notifications — styled to match PayMesh's design
+function _pmShowInAppToast(title, body) {
   try {
-    if ('Notification' in window && Notification.permission === 'default') {
-      Notification.requestPermission().catch(function() {});
+    var existing = document.getElementById('pm-toast');
+    if (existing) existing.remove();
+    var toast = document.createElement('div');
+    toast.id = 'pm-toast';
+    toast.style.cssText = [
+      'position:fixed','top:max(16px,env(safe-area-inset-top,16px))','left:50%',
+      'transform:translateX(-50%) translateY(-12px)',
+      'background:linear-gradient(135deg,rgba(13,17,23,.96),rgba(20,27,36,.96))',
+      'border:1px solid rgba(0,201,106,.3)','border-radius:16px',
+      'padding:12px 18px','z-index:99999','min-width:260px','max-width:340px','text-align:left',
+      'box-shadow:0 16px 48px rgba(0,0,0,.7),0 0 0 1px rgba(0,201,106,.1)',
+      'font-family:var(--sans)','color:var(--text)',
+      'animation:pmToastIn .35s cubic-bezier(0.34,1.56,0.64,1) forwards',
+      'backdrop-filter:blur(24px)','-webkit-backdrop-filter:blur(24px)',
+      'cursor:pointer'
+    ].join(';');
+    toast.innerHTML =
+      '<div style="display:flex;align-items:flex-start;gap:10px;">' +
+        '<div style="width:32px;height:32px;border-radius:50%;background:rgba(0,201,106,.15);border:1px solid rgba(0,201,106,.3);display:flex;align-items:center;justify-content:center;flex-shrink:0;">' +
+          '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--em)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>' +
+        '</div>' +
+        '<div style="flex:1;min-width:0;">' +
+          '<div style="font-size:11px;font-weight:800;letter-spacing:1.5px;color:var(--em);text-transform:uppercase;margin-bottom:3px;">' + title + '</div>' +
+          '<div style="font-size:13px;color:var(--text2);font-weight:500;line-height:1.45;">' + body + '</div>' +
+        '</div>' +
+      '</div>';
+
+    // Inject keyframe if not present
+    if (!document.getElementById('pm-toast-style')) {
+      var s = document.createElement('style');
+      s.id = 'pm-toast-style';
+      s.textContent = '@keyframes pmToastIn{from{opacity:0;transform:translateX(-50%) translateY(-20px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}';
+      document.head.appendChild(s);
     }
+
+    document.body.appendChild(toast);
+    toast.addEventListener('click', function() { toast.remove(); });
+
+    setTimeout(function() {
+      toast.style.transition = 'opacity .3s ease, transform .3s ease';
+      toast.style.opacity = '0';
+      toast.style.transform = 'translateX(-50%) translateY(-10px)';
+      setTimeout(function() { if (toast.parentNode) toast.remove(); }, 320);
+    }, 4500);
   } catch(e) {}
 }
 
-// Register SW if not already registered
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/sw.js').catch(function() {});
+// ── BUG 2 FIX: permission must be requested on a real user gesture ──
+// pmRequestNotifPermission() is now only a helper — callers must invoke it
+// from a tap handler (button click), not on login. See home screen bell button.
+function pmRequestNotifPermission() {
+  try {
+    if (!('Notification' in window)) return Promise.resolve('denied');
+    if (Notification.permission === 'granted') return Promise.resolve('granted');
+    if (Notification.permission === 'denied')  return Promise.resolve('denied');
+    return Notification.requestPermission();
+  } catch(e) { return Promise.resolve('denied'); }
 }
 
 // ── Expose notification helpers to window so cross-module scripts (NFC, QT) can use them ──
@@ -878,8 +945,8 @@ window.loginUser = async function() {
     CURRENT_USER.phone = phone;
     CURRENT_USER.upi   = finalUpi;
 
-    // Request notification permission on every login (no-op if already granted/denied)
-    pmRequestNotifPermission();
+    // Notification permission is requested via the bell button on the home screen,
+    // not here — browsers require a user gesture and will silently block this otherwise.
 
     if (btn) { btn.disabled = false; btn.querySelector('span').textContent = isKnownDevice ? 'Sign In' : 'Get Started'; }
 
@@ -1004,6 +1071,10 @@ async function loadHomeData() {
   // Phase 1: start hourly expiry sweep
   _scheduleExpirySweep();
 
+  // Track previous balance so we can detect an incoming credit
+  let _prevBalance = parseFloat(sessionStorage.getItem('pm_balance') || '0');
+  let _balanceListenerFirstRun = true; // suppress notification on initial load
+
   unsubBalance = onSnapshot(
     doc(db, "users", CURRENT_USER.phone),
     (snap) => {
@@ -1033,6 +1104,24 @@ async function loadHomeData() {
       document.getElementById('display-name').textContent = `Hi, ${CURRENT_USER.name} 👋`;
       animateBalance(bal);
       sessionStorage.setItem('pm_balance', bal.toFixed(2));
+
+      // ── BUG 3 FIX: notify receiver when money arrives ──
+      // Skip the very first snapshot (page load) — that's just the current balance, not a new credit.
+      if (!_balanceListenerFirstRun && bal > _prevBalance + 0.001) {
+        const received = bal - _prevBalance;
+        const userName = (CURRENT_USER.name || '').split(' ')[0] || 'there';
+        pmNotify(
+          'PayMesh · Money Received 💚',
+          _pmPickMsg(_PM_NOTIF_MSGS.received, {
+            amount: received.toFixed(2),
+            name: 'someone',   // sender name not available in balance snapshot
+            user: userName
+          })
+        );
+        if (navigator.vibrate) navigator.vibrate([100, 60, 200]);
+      }
+      _prevBalance = bal;
+      _balanceListenerFirstRun = false;
     },
     (err) => console.warn('Balance listener error:', err.message)
   );
