@@ -243,6 +243,11 @@ if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/sw.js').catch(function() {});
 }
 
+// ── Expose notification helpers to window so cross-module scripts (NFC, QT) can use them ──
+window.pmNotify       = pmNotify;
+window._pmPickMsg     = _pmPickMsg;
+window._PM_NOTIF_MSGS = _PM_NOTIF_MSGS;
+
 // END PAYMESH NOTIFICATION ENGINE
 
 // ═══════════════════════════════════════════
@@ -703,7 +708,6 @@ window.showScreen = function(id) {
     const vBtn = document.getElementById('voucher-submit-btn');
     if (vBtn) { vBtn.disabled = false; vBtn.style.opacity = '1'; vBtn.style.cursor = 'pointer'; vBtn.textContent = 'Generate Payment Link'; }
     loadVouchersFromFirestore();
-    loadClaimedVouchers(); // Phase 1: show any vouchers awaiting your manual UPI send
   }
   if (id === 'screen-send') {
     const m = document.getElementById('send-msg');
@@ -1595,6 +1599,14 @@ window.onSendFieldChange = function() {
   const noteGroup = document.getElementById('send-note-group');
   if (noteGroup) noteGroup.style.display = (phone.length >= 6 || amount > 0) ? '' : 'none';
 
+  // Update amount progress track
+  const trackFill = document.getElementById('send-amount-track');
+  if (trackFill) {
+    const currentBal = parseFloat(sessionStorage.getItem('pm_balance') || '0');
+    const pct = currentBal > 0 ? Math.min((amount / currentBal) * 100, 100) : (amount > 0 ? 5 : 0);
+    trackFill.style.width = pct + '%';
+  }
+
   if (!phone || phone.length < 10 || !amount || amount <= 0) {
     _hideFraudPanel();
     // §4: Show prior warning banner even without amount if phone is 10 digits
@@ -1667,6 +1679,13 @@ function _setUdCache(recipPhone, data) {
 }
 
 async function _runFraudScore(phone, amount, note) {
+  // ── MINIMUM THRESHOLD: Aria does not activate for amounts under ₹1000 ──
+  // Below this threshold all modules are skipped — no Firestore reads, no panel, no badge.
+  if (amount < 1000) {
+    _renderFraudPanel(0, [], amount, phone);
+    return;
+  }
+
   // Stamp a sequence number; discard result if a newer call has started
   const seq = ++_fraudSeq;
 
@@ -2414,6 +2433,12 @@ window.onVoucherFieldChange = function() {
 };
 
 async function _runVoucherFraudScore(amount) {
+  // ── MINIMUM THRESHOLD: Aria does not activate for vouchers under ₹1000 ──
+  if (amount < 1000) {
+    _renderVoucherFraudPanel(0, [], amount);
+    return;
+  }
+
   const seq = ++_voucherFraudSeq;
   const signals = [];
   let score = 0;
@@ -2996,11 +3021,6 @@ window.runExpirySweep = async function() {
   }
 }
 
-// ═══════════════════════════════════════════
-// PHASE 1 — MARK AS PAID (Admin action)
-// You manually paid the UPI → flip status to paid
-// ═══════════════════════════════════════════
-
 // Show the stored secret code for a voucher at any time
 window._showVoucherCode = function(token, amount, claimUrl, expiresAt) {
   const otp = _getVoucherOtp(token);
@@ -3020,44 +3040,6 @@ window._showVoucherCode = function(token, amount, claimUrl, expiresAt) {
   }
   _renderOtpModal(otp, amount, token, claimUrl, expiresAt);
 };
-
-window.markVoucherPaid = async function(token) {
-  if (!CURRENT_USER.phone) return;
-  if (!confirm(`Mark voucher ${token} as PAID? This confirms you sent the UPI payment.`)) return;
-  try {
-    // Read current status first — rule paths differ:
-    //   claimed      → paid  (allowed by rules)
-    //   needs_payout → paid  (allowed by rules)
-    await runTransaction(db, async (tx) => {
-      const vSnap = await tx.get(doc(db, 'vouchers', token));
-      if (!vSnap.exists()) throw new Error('Voucher not found.');
-      const cur = vSnap.data().status;
-      if (cur === 'paid') throw new Error('Already marked as paid.');
-      if (cur !== 'claimed' && cur !== 'needs_payout') throw new Error(`Cannot mark status "${cur}" as paid.`);
-      tx.update(doc(db, 'vouchers', token), {
-        status:  'paid',
-        paidAt:  new Date().toISOString(),
-        // preserve required fields for rule checks (rules verify amount == resource.data.amount — merge handles this)
-      });
-    });
-    // Update UI card status badge
-    const card = document.querySelector(`[data-voucher-code="${token}"]`);
-    if (card) {
-      const badge = card.querySelector('.voucher-status-badge');
-      if (badge) { badge.textContent = '✅ PAID'; badge.style.background = 'rgba(0,232,122,.18)'; badge.style.color = 'var(--em)'; }
-    }
-    // Also remove from claimed-vouchers-list row if present
-    const adminRow = document.querySelector(`[data-admin-voucher="${token}"]`);
-    if (adminRow) adminRow.remove();
-    // Re-check if section is now empty
-    const list = document.getElementById('claimed-vouchers-list');
-    const section = document.getElementById('claimed-vouchers-section');
-    if (list && section && list.children.length === 0) section.style.display = 'none';
-    alert('Marked as paid.');
-  } catch(e) {
-    alert('Error: ' + (e.message || 'Could not update. Check internet.'));
-  }
-}
 
 // Load all UNUSED vouchers created by this user from Firestore
 // Cached in sessionStorage for 2 minutes — screen re-opens don't cost a read.
@@ -3110,73 +3092,6 @@ function _renderVouchers(vouchers) {
 
 window.restoreVoucher = loadVouchersFromFirestore;
 
-// ═══════════════════════════════════════════
-// PHASE 1 — CLAIMED VOUCHER ADMIN PANEL
-// Shows vouchers where receiver submitted their UPI ID.
-// Sender sees them here, pays via UPI app, marks as paid.
-// ═══════════════════════════════════════════
-
-async function loadClaimedVouchers() {
-  if (!CURRENT_USER.phone) return;
-  const section = document.getElementById('claimed-vouchers-section');
-  const list    = document.getElementById('claimed-vouchers-list');
-  if (!section || !list) return;
-
-  try {
-    const { getDocs } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
-    const q    = query(collection(db,'vouchers'), where('createdBy','==',CURRENT_USER.phone), where('status','==','needs_payout'));
-    const snap = await getDocs(q);
-    if (snap.empty) { section.style.display = 'none'; return; }
-
-    section.style.display = 'block';
-    list.innerHTML = '';
-
-    snap.forEach(d => {
-      const v      = d.data();
-      const amount = Number(v.amount || 0);
-      const claimTime = v.claimedAt ? new Date(v.claimedAt).toLocaleString() : '';
-      // claimMethod tells us if receiver chose PayMesh (shouldn't be here) or UPI
-      const upi    = v.claimUpi || '—';
-
-      const row = document.createElement('div');
-      row.dataset.adminVoucher = v.code || '';
-      row.style.cssText = 'background:linear-gradient(158deg,rgba(255,184,48,.09),rgba(0,232,122,.06));border:1px solid rgba(255,184,48,.22);border-radius:16px;padding:16px 18px;margin-bottom:10px;';
-      row.innerHTML = `
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:10px">
-          <div>
-            <div style="font-size:10px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:var(--amber);margin-bottom:4px">Claimed (UPI) · ₹${amount.toFixed(2)}</div>
-            <div style="font-size:12px;color:var(--text2);font-weight:500">${claimTime}</div>
-          </div>
-          <div style="font-size:9px;color:var(--text3);font-family:var(--mono);word-break:break-all;text-align:right;max-width:60%">${v.code || ''}</div>
-        </div>
-        <div style="background:rgba(0,0,0,.35);border:1px solid var(--border2);border-radius:10px;padding:10px 12px;margin-bottom:10px;">
-          <div style="font-size:9px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:4px">Receiver's UPI ID</div>
-          <div style="font-family:var(--mono);font-size:14px;color:var(--text);font-weight:700;word-break:break-all;user-select:all">${escHtml(upi)}</div>
-        </div>
-        <div style="display:flex;gap:8px;margin-bottom:10px;">
-          <button type="button" onclick="_openUpiApp('${escAttr(upi)}',${amount})" style="flex:1;padding:11px;background:rgba(0,232,122,.12);border:1px solid rgba(0,232,122,.25);border-radius:12px;color:var(--em);font:700 12px/1 var(--sans);cursor:pointer;">📲 Open UPI App</button>
-          <button type="button" onclick="_copyUpi('${escAttr(upi)}')" style="flex:1;padding:11px;background:rgba(77,159,255,.1);border:1px solid rgba(77,159,255,.22);border-radius:12px;color:var(--blue);font:700 12px/1 var(--sans);cursor:pointer;">📋 Copy UPI</button>
-        </div>
-        <button type="button" onclick="markVoucherPaid('${escAttr(v.code || '')}')" style="width:100%;padding:12px;background:rgba(255,184,48,.14);border:1px solid rgba(255,184,48,.3);border-radius:12px;color:var(--amber);font:700 13px/1 var(--sans);cursor:pointer;">✅ Mark as Paid — I've sent ₹${amount.toFixed(2)}</button>
-      `;
-      list.appendChild(row);
-    });
-  } catch(e) {
-    if (section) section.style.display = 'none';
-  }
-}
-
-window._openUpiApp = function(upi, amount) {
-  // Opens default UPI app deep link — works with GPay, PhonePe, Paytm
-  // NOTE: window.open() is blocked for custom schemes on mobile browsers.
-  // location.href is the correct way to trigger UPI deep links on Android/iOS.
-  const link = `upi://pay?pa=${encodeURIComponent(upi)}&pn=${encodeURIComponent('PayMesh Voucher')}&am=${Number(amount).toFixed(2)}&cu=INR&tn=${encodeURIComponent('PayMesh Voucher Payment')}`;
-  location.href = link;
-};
-
-window._copyUpi = function(upi) {
-  navigator.clipboard.writeText(upi).then(() => alert('UPI ID copied: ' + upi)).catch(() => alert('UPI ID: ' + upi));
-};
 
 function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 function escAttr(s) { return String(s).replace(/'/g,"\\'").replace(/"/g,'&quot;'); }
@@ -3203,8 +3118,8 @@ function renderSingleVoucher(code, amount, status, claimUrl, expiresAt) {
   let badgeText = '⏳ PENDING';
   let badgeBg   = 'rgba(255,184,48,.18)';
   let badgeColor= 'var(--amber)';
-  if (status === 'claimed')      { badgeText = '🔔 CLAIMED — PAY NOW';   badgeBg = 'rgba(77,159,255,.18)';  badgeColor = 'var(--blue)'; }
-  if (status === 'needs_payout') { badgeText = '💸 NEEDS PAYOUT';        badgeBg = 'rgba(77,159,255,.18)';  badgeColor = 'var(--blue)'; }
+  if (status === 'claimed')      { badgeText = '🔔 CLAIMED — AWAITING PAYOUT'; badgeBg = 'rgba(77,159,255,.18)';  badgeColor = 'var(--blue)'; }
+  if (status === 'needs_payout') { badgeText = '💸 PAYOUT IN PROGRESS';         badgeBg = 'rgba(77,159,255,.18)';  badgeColor = 'var(--blue)'; }
   if (status === 'completed')    { badgeText = '✅ COMPLETED';            badgeBg = 'rgba(0,232,122,.18)';   badgeColor = 'var(--em)'; }
 
   // ── Expiry display ──
@@ -3222,28 +3137,36 @@ function renderSingleVoucher(code, amount, status, claimUrl, expiresAt) {
   }
 
   if (isPhase1) {
-    // ── PHASE 1 — Open-loop claim link card ──
+    // ── PHASE 1 — Secure QR + claim link card ──
     const shortCode = code.length > 14 ? code.substring(0,14) + '…' : code;
+    const qrWrapperId = 'vqr-p1-' + code;
+    const safeClaimUrl = claimUrl.replace(/'/g,"&#39;");
     wrapper.innerHTML = `
       <div class="voucher-card" style="background:linear-gradient(158deg,rgba(255,184,48,.10),rgba(0,232,122,.07));border-color:rgba(255,184,48,.22);">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-          <div class="voucher-label" style="margin:0">PayMesh Voucher · Open Link</div>
+          <div class="voucher-label" style="margin:0">PayMesh Voucher</div>
           <span class="voucher-status-badge" style="font-size:9px;font-weight:800;letter-spacing:.8px;padding:4px 9px;border-radius:6px;background:${badgeBg};color:${badgeColor};">${badgeText}</span>
         </div>
         <div class="voucher-code" style="font-size:13px;word-break:break-all">${shortCode}</div>
         <div class="voucher-sub" style="margin-top:6px">₹${Number(amount).toFixed(2)} · by ${CURRENT_USER.name}${expiryText ? ' · ' + expiryText : ''}</div>
       </div>
       <div class="card" style="margin-top:0">
-        <p class="info-text" style="margin-bottom:12px">Share this link — receiver enters their UPI ID to claim</p>
-        <div style="background:rgba(0,0,0,.4);border:1.5px solid var(--border2);border-radius:var(--r);padding:12px 14px;font:600 11px/1.5 var(--mono);color:var(--text2);word-break:break-all;user-select:all;cursor:text;" onclick="this.focus()">${claimUrl}</div>
-        <div style="display:flex;gap:8px;margin-top:12px;">
-          <button type="button" onclick="_copyClaimLink('${code}','${claimUrl.replace(/'/g,"&#39;")}')" style="flex:1;padding:11px;background:rgba(0,232,122,.12);border:1px solid rgba(0,232,122,.25);border-radius:var(--r);color:var(--em);font:700 12px/1 var(--sans);cursor:pointer;transition:background .2s;" onmouseover="this.style.background='rgba(0,232,122,.2)'" onmouseout="this.style.background='rgba(0,232,122,.12)'">📋 Copy Link</button>
-          <button type="button" onclick="_shareClaimLink('${claimUrl.replace(/'/g,"&#39;")}',${amount})" style="flex:1;padding:11px;background:rgba(77,159,255,.12);border:1px solid rgba(77,159,255,.25);border-radius:var(--r);color:var(--blue);font:700 12px/1 var(--sans);cursor:pointer;transition:background .2s;" onmouseover="this.style.background='rgba(77,159,255,.2)'" onmouseout="this.style.background='rgba(77,159,255,.12)'">↗ Share</button>
+        <p class="info-text" style="margin-bottom:12px;text-align:center">
+          PayMesh user: <strong style="color:var(--em)">Scan QR</strong> &nbsp;·&nbsp; No PayMesh: <strong style="color:var(--blue)">Open link</strong>
+        </p>
+        <div style="display:flex;justify-content:center;margin-bottom:14px;">
+          <div id="${qrWrapperId}" style="background:#fff;padding:10px;border-radius:12px;display:inline-block;"></div>
         </div>
-        <button type="button" id="show-code-btn-${code}" onclick="window._showVoucherCode('${code}',${amount},'${claimUrl.replace(/'/g,"&#39;")}','${expiresAt||''}')" style="width:100%;margin-top:8px;padding:11px;background:rgba(255,184,48,.1);border:1px solid rgba(255,184,48,.22);border-radius:var(--r);color:var(--amber);font:700 12px/1 var(--sans);cursor:pointer;transition:background .2s;" onmouseover="this.style.background='rgba(255,184,48,.18)'" onmouseout="this.style.background='rgba(255,184,48,.1)'">🔐 Show Secret Code</button>
+        <p style="text-align:center;font-size:11px;color:var(--text3);margin-bottom:14px;font-weight:600;letter-spacing:.5px;">SCAN WITH PAYMESH · OR SHARE LINK BELOW</p>
+        <div style="background:rgba(0,0,0,.4);border:1.5px solid var(--border2);border-radius:var(--r);padding:10px 13px;font:600 10px/1.5 var(--mono);color:var(--text2);word-break:break-all;user-select:all;cursor:text;margin-bottom:12px;">${claimUrl}</div>
+        <div style="display:flex;gap:8px;margin-bottom:8px;">
+          <button type="button" onclick="_copyClaimLink('${code}','${safeClaimUrl}')" style="flex:1;padding:11px;background:rgba(0,232,122,.12);border:1px solid rgba(0,232,122,.25);border-radius:var(--r);color:var(--em);font:700 12px/1 var(--sans);cursor:pointer;transition:background .2s;" onmouseover="this.style.background='rgba(0,232,122,.2)'" onmouseout="this.style.background='rgba(0,232,122,.12)'">📋 Copy Link</button>
+          <button type="button" onclick="_shareClaimLink('${safeClaimUrl}',${amount})" style="flex:1;padding:11px;background:rgba(77,159,255,.12);border:1px solid rgba(77,159,255,.25);border-radius:var(--r);color:var(--blue);font:700 12px/1 var(--sans);cursor:pointer;transition:background .2s;" onmouseover="this.style.background='rgba(77,159,255,.2)'" onmouseout="this.style.background='rgba(77,159,255,.12)'">↗ Share</button>
+        </div>
+        <button type="button" id="show-code-btn-${code}" onclick="window._showVoucherCode('${code}',${amount},'${safeClaimUrl}','${expiresAt||''}')" style="width:100%;padding:11px;background:rgba(255,184,48,.1);border:1px solid rgba(255,184,48,.22);border-radius:var(--r);color:var(--amber);font:700 12px/1 var(--sans);cursor:pointer;transition:background .2s;" onmouseover="this.style.background='rgba(255,184,48,.18)'" onmouseout="this.style.background='rgba(255,184,48,.1)'">🔐 Show Secret Code</button>
         ${(status === 'claimed' || status === 'needs_payout') ? `
         <div style="margin-top:10px;padding:10px 12px;background:rgba(255,184,48,.10);border:1px solid rgba(255,184,48,.22);border-radius:var(--r);font-size:12px;color:var(--amber);font-weight:600;line-height:1.5;">
-          🔔 Receiver entered their UPI ID. The admin will transfer ₹${Number(amount).toFixed(2)} to them — no action needed from you.
+          🔔 Receiver has entered their UPI ID. PayMesh admin will send the payment to them — no action needed from you.
         </div>
         ` : ''}
       </div>`;
@@ -3276,6 +3199,27 @@ function renderSingleVoucher(code, amount, status, claimUrl, expiresAt) {
   }
 
   display.insertBefore(wrapper, display.firstChild);
+
+  // ── Render QR for Phase 1 vouchers (claimUrl encoded) ──
+  if (isPhase1) {
+    const _qrId = 'vqr-p1-' + code;
+    function _makeP1QR() {
+      const el = document.getElementById(_qrId);
+      if (!el) return;
+      if (typeof QRCode === 'undefined') { setTimeout(_makeP1QR, 200); return; }
+      try {
+        el.innerHTML = '';
+        new QRCode(el, {
+          text: claimUrl,          // encodes the full claim URL — scanner opens it
+          width: 200, height: 200,
+          colorDark: '#000000', colorLight: '#ffffff',
+          correctLevel: QRCode.CorrectLevel.M
+        });
+      } catch(e) { el.innerHTML = '<div style="color:#888;font-size:11px;padding:10px;">QR failed</div>'; }
+    }
+    loadScript('https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js')
+      .then(() => _makeP1QR()).catch(() => _makeP1QR());
+  }
 }
 
 // ── Claim link helpers ──
@@ -3405,14 +3349,25 @@ window.startScan = async function() {
         const img  = ctx.getImageData(0,0,canvas.width,canvas.height);
         const code = jsQR(img.data, img.width, img.height);
         if (code) {
+          const raw = code.data.trim();
+          // ── CLAIM URL QR (Phase 1 voucher — encodes the plain claimUrl) ──
+          const claimMatch = raw.match(/[?&]t=(PM[A-Z0-9]+)/);
+          if (claimMatch && raw.includes('claim.html')) {
+            clearInterval(scannerInterval); scannerInterval = null;
+            if (scannerStream) { scannerStream.getTracks().forEach(t => t.stop()); scannerStream = null; }
+            detectedQR = { kind:'voucher_claim', token: claimMatch[1] };
+            showVoucherClaimResult(claimMatch[1]);
+            return;
+          }
           try {
-            const data = JSON.parse(code.data);
+            const data = JSON.parse(raw);
             if (data.type === 'person' && data.phone && data.name) {
               clearInterval(scannerInterval); scannerInterval = null;
               if (scannerStream) { scannerStream.getTracks().forEach(t => t.stop()); scannerStream = null; }
               detectedQR = { kind:'person', ...data };
               showPersonResult(data); return;
             }
+            // Legacy closed-loop voucher QR (backward compat)
             if (data.code && data.amount && data.from) {
               clearInterval(scannerInterval); scannerInterval = null;
               if (scannerStream) { scannerStream.getTracks().forEach(t => t.stop()); scannerStream = null; }
@@ -3427,6 +3382,210 @@ window.startScan = async function() {
     alert('Camera permission needed. Please allow camera access.');
     showScreen('screen-home');
   }
+}
+
+// ═══════════════════════════════════════════
+// VOUCHER CLAIM QR HANDLER — in-app OTP flow
+// Called when scanner detects a claim.html?t=TOKEN QR
+// ═══════════════════════════════════════════
+
+async function showVoucherClaimResult(token) {
+  const scanMsg = document.getElementById('scan-msg');
+
+  // Show loading state in scan panel
+  const scanResult = document.getElementById('scan-result');
+  scanResult.classList.remove('hidden');
+  scanResult.innerHTML = `
+    <div style="text-align:center;padding:20px 0;">
+      <div style="width:28px;height:28px;border-radius:50%;border:3px solid rgba(255,255,255,.1);border-top-color:var(--em);animation:spin .7s linear infinite;margin:0 auto 12px;"></div>
+      <div style="font-size:13px;color:var(--text2);">Loading voucher…</div>
+    </div>`;
+
+  try {
+    // Fetch voucher from Firestore
+    const { getDoc: _gd, doc: _doc } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
+    const vSnap = await _gd(_doc(db, 'vouchers', token));
+
+    if (!vSnap.exists()) {
+      scanResult.innerHTML = '<div style="text-align:center;padding:16px;color:var(--red);font-size:14px;font-weight:700;">❌ Voucher not found</div>';
+      return;
+    }
+    const v = vSnap.data();
+
+    if (v.status === 'USED' || v.status === 'completed' || v.status === 'needs_payout' || v.status === 'paid') {
+      scanResult.innerHTML = '<div style="text-align:center;padding:16px;color:var(--amber);font-size:14px;font-weight:700;">⚠️ Already claimed</div>';
+      return;
+    }
+    if (v.status === 'expired') {
+      scanResult.innerHTML = '<div style="text-align:center;padding:16px;color:var(--text2);font-size:14px;font-weight:700;">⏰ Voucher expired</div>';
+      return;
+    }
+    if (v.createdBy === CURRENT_USER.phone) {
+      scanResult.innerHTML = '<div style="text-align:center;padding:16px;color:var(--red);font-size:14px;font-weight:700;">🚫 Cannot redeem your own voucher</div>';
+      return;
+    }
+
+    const amount   = Number(v.amount || 0);
+    const fromName = v.createdByName || 'Someone';
+
+    // Render the in-app OTP panel
+    _renderClaimOtpPanel(scanResult, token, amount, fromName, v);
+
+  } catch(e) {
+    scanResult.innerHTML = `<div style="text-align:center;padding:16px;color:var(--red);font-size:14px;">${e.message || 'Error loading voucher'}</div>`;
+  }
+}
+
+function _renderClaimOtpPanel(container, token, amount, fromName, vData) {
+  let otpBuf = '';
+
+  function _updateDots() {
+    for (let i = 0; i < 6; i++) {
+      const d = container.querySelector('#cod' + i);
+      if (!d) return;
+      d.classList.toggle('filled', i < otpBuf.length);
+      d.classList.remove('error');
+      d.textContent = i < otpBuf.length ? otpBuf[i] : '';
+    }
+  }
+
+  async function _hashOtp(otp) {
+    const buf  = new TextEncoder().encode(otp + ':paymesh:' + token);
+    const hash = await crypto.subtle.digest('SHA-256', buf);
+    return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2,'0')).join('');
+  }
+
+  async function _submitOtp() {
+    const msg = container.querySelector('#claim-otp-msg');
+    if (!msg) return;
+    msg.className = 'msg success'; msg.textContent = 'Verifying…';
+    container.querySelectorAll('.key').forEach(b => b.disabled = true);
+
+    try {
+      const entered = await _hashOtp(otpBuf);
+
+      // Re-read fresh from Firestore to avoid race
+      const { runTransaction: _rt, doc: _doc, getDoc: _gd, addDoc: _ad, collection: _col, updateDoc: _ud } =
+        await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
+
+      const freshSnap = await _gd(_doc(db, 'vouchers', token));
+      if (!freshSnap.exists()) { _flashClaimError(container, msg, otpBuf, 'Voucher no longer exists.'); return; }
+      const fd = freshSnap.data();
+
+      if (fd.status === 'completed' || fd.status === 'needs_payout' || fd.status === 'paid' || fd.status === 'USED') {
+        _flashClaimError(container, msg, otpBuf, 'Already claimed.'); return;
+      }
+      if ((fd.codeAttempts || 0) >= 3) {
+        _flashClaimError(container, msg, otpBuf, 'Too many wrong attempts. Voucher locked.'); return;
+      }
+      if (entered !== fd.codeHash) {
+        await _ud(_doc(db, 'vouchers', token), { codeAttempts: (fd.codeAttempts || 0) + 1 });
+        const left = 3 - ((fd.codeAttempts || 0) + 1);
+        _flashClaimError(container, msg, otpBuf, left > 0 ? `Wrong code. ${left} attempt${left !== 1 ? 's' : ''} left.` : 'Too many attempts. Voucher locked.');
+        return;
+      }
+
+      // ── OTP correct — atomic credit ──
+      const receiverRef = _doc(db, 'users', CURRENT_USER.phone);
+      let receiverName = '';
+
+      await _rt(db, async (tx) => {
+        const vFresh = await tx.get(_doc(db, 'vouchers', token));
+        const rFresh = await tx.get(receiverRef);
+        if (!vFresh.exists()) throw new Error('Voucher disappeared.');
+        if (vFresh.data().status === 'completed' || vFresh.data().status === 'needs_payout' || vFresh.data().status === 'paid') throw new Error('Voucher already redeemed.');
+        if (!rFresh.exists()) throw new Error('Your PayMesh account not found.');
+        receiverName = rFresh.data().name || CURRENT_USER.name;
+        const rBal   = rFresh.data().balance || 0;
+        tx.update(_doc(db, 'vouchers', token), {
+          status:          'completed',
+          redeemedBy:      CURRENT_USER.phone,
+          redeemedByName:  receiverName,
+          redeemedAt:      new Date().toISOString(),
+          claimMethod:     'paymesh_scan',
+          codeAttempts:    (fd.codeAttempts || 0) + 1
+        });
+        tx.update(receiverRef, { balance: rBal + amount });
+      });
+
+      // Transaction records
+      const time = new Date().toISOString();
+      const { addDoc: _add, collection: _c } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
+      await Promise.all([
+        _add(_c(db, 'transactions'), { phone: CURRENT_USER.phone, label: `Voucher from ${fromName}`, amount, type: 'credit', time }),
+        _add(_c(db, 'transactions'), { phone: fd.createdBy, label: `Voucher redeemed by ${receiverName}`, amount, type: 'debit', time })
+      ]);
+
+      // Update session balance
+      const newBal = parseFloat(sessionStorage.getItem('pm_balance') || '0') + amount;
+      sessionStorage.setItem('pm_balance', newBal.toFixed(2));
+
+      // Success!
+      detectedQR = null;
+      if (scannerStream) { scannerStream.getTracks().forEach(t => t.stop()); scannerStream = null; }
+      if (scannerInterval) { clearInterval(scannerInterval); scannerInterval = null; }
+
+      launchConfetti(80);
+      if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 400]);
+      showOverlay('', 'Received!', `₹${amount.toFixed(2)} from ${fromName} added to wallet`);
+      pmNotify('PayMesh · Voucher Claimed 🎉', _pmPickMsg(_PM_NOTIF_MSGS.voucherReceived, {
+        amount: amount.toFixed(2),
+        user: (CURRENT_USER.name || '').split(' ')[0] || 'there'
+      }));
+      showScreen('screen-home');
+
+    } catch(e) {
+      _flashClaimError(container, msg, otpBuf, e.message || 'Error. Try again.');
+    }
+  }
+
+  function _flashClaimError(container, msg, buf, text) {
+    for (let i = 0; i < 6; i++) {
+      const d = container.querySelector('#cod' + i);
+      if (d) { d.classList.add('filled', 'error'); d.textContent = buf[i] || ''; }
+    }
+    msg.className = 'msg error'; msg.textContent = text;
+    setTimeout(() => {
+      otpBuf = ''; _updateDots();
+      container.querySelectorAll('.key').forEach(b => b.disabled = false);
+      msg.className = 'msg'; msg.textContent = '';
+    }, 1900);
+  }
+
+  // OTP dot style (reuse claim.html CSS vars defined in main app)
+  container.innerHTML = `
+    <div style="text-align:center;margin-bottom:14px;">
+      <div style="font-size:28px;margin-bottom:6px;">🔐</div>
+      <div style="font-size:17px;font-weight:800;color:var(--text);letter-spacing:-.3px;">Enter 6-Digit Code</div>
+      <div style="font-size:12px;color:var(--text2);margin-top:4px;">₹${amount.toFixed(2)} from <strong style="color:var(--text)">${fromName}</strong></div>
+      <div style="font-size:11px;color:var(--text3);margin-top:3px;">Ask the sender for the secret code</div>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:center;margin:12px 0;">
+      ${[0,1,2,3,4,5].map(i => `<div id="cod${i}" style="width:42px;height:50px;border-radius:10px;background:var(--bg3);border:1.5px solid var(--border2);display:flex;align-items:center;justify-content:center;font:600 20px/1 var(--mono);color:var(--text);transition:border-color .15s,background .15s;" class="otp-digit"></div>`).join('')}
+    </div>
+    <style>
+      .otp-digit.filled{background:rgba(0,232,122,.06)!important;border-color:rgba(0,232,122,.3)!important;color:var(--em)!important}
+      .otp-digit.error{border-color:var(--red)!important;background:rgba(232,82,106,.06)!important;color:var(--red)!important;animation:shake .35s ease both}
+    </style>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px;">
+      ${[1,2,3,4,5,6,7,8,9,'','0','⌫'].map(k =>
+        k === '' ? '<div></div>' :
+        k === '⌫' ? `<button type="button" class="key del" data-key="del" style="height:50px;border-radius:12px;border:1px solid var(--border);background:var(--bg3);font:500 18px/1 var(--mono);color:var(--text2);cursor:pointer;display:flex;align-items:center;justify-content:center;">⌫</button>` :
+        `<button type="button" class="key" data-key="${k}" style="height:50px;border-radius:12px;border:1px solid var(--border);background:var(--bg3);font:500 20px/1 var(--mono);color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:center;">${k}</button>`
+      ).join('')}
+    </div>
+    <div id="claim-otp-msg" class="msg" style="margin-top:10px;"></div>
+    <button type="button" onclick="window.stopScan()" style="width:100%;margin-top:10px;padding:11px;background:none;border:1px solid var(--border2);border-radius:var(--r);color:var(--text3);font:500 13px/1 var(--sans);cursor:pointer;">✕ Cancel</button>`;
+
+  container.querySelectorAll('.key[data-key]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const k = btn.dataset.key;
+      if (k === 'del') { if (otpBuf.length > 0) { otpBuf = otpBuf.slice(0,-1); _updateDots(); } return; }
+      if (otpBuf.length >= 6) return;
+      otpBuf += k; _updateDots();
+      if (otpBuf.length === 6) setTimeout(_submitOtp, 120);
+    });
+  });
 }
 
 function showPersonResult(data) {
