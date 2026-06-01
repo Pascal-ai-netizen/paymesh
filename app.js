@@ -148,6 +148,7 @@ const db  = getFirestore(app);
 
 const PAYMESH_UPI = "utkarshkk@yesfam";
 
+// Accepts name@bank AND phone-number handles (9876543210@ybl) — both are standard in India
 const UPI_REGEX = /^[a-zA-Z0-9.\-_+]+@(ybl|oksbi|okaxis|okicici|okhdfcbank|paytm|apl|ibl|upi|axl|airtel|jio|fbl|barodampay|centralbank|cmsidfc|dbs|equitas|federal|hsbc|idbi|idfc|indus|kotak|lvb|mahb|nsdl|pnb|postbank|psb|rbl|sbi|sc|scmobile|shbk|syndicate|tjsb|uco|union|united|vijb|yesfam|yesbank|icici|hdfc|axis|sib|dcb|karb|kvb|lax|tmb|csb|dlb|apgvb|aubank|bdbl|bgvb|bkid|bocl|bsbl|cbin|ccl|cie|citibank|csbcoin|dlxb|esfbl|fino|gbcoin|hsbc|idfcfirst|ikwik|indbank|iob|jkb|jsbl|kbl|kmbl|kscb|kvgb|mahagramin|nainital|nkgsb|nmgb|obcfin|payzapp|pingpay|pkgb|psb|qfix|rajgovt|saraswat|sbm|scbl|shb|snapwork|spices|svcbank|tjsb|ubi|uboi|ucb|ucobank|unionbank|utbi|vardhman|vbhvn|vijayabank|vitp|wpay|yapl|yesb)$/i;
 
 const CURRENT_USER = { phone: "", name: "", upi: "" };
@@ -1447,23 +1448,27 @@ function _analyzeAmountPatterns(amount, currentBal, isNewContact, isNight, ariaD
     }
   }
 
-  // Oddly precise amounts that suggest scammer-dictated values
+  // Scammer-dictated just-under-round amounts — only meaningful when sending to a new
+  // contact you haven't verified, because ₹999/₹1999/₹4999 are extremely common
+  // subscription and e-commerce prices that would produce constant false positives otherwise.
   const scamAmounts = [499, 999, 1499, 1999, 2499, 4999, 9999, 14999, 19999, 24999, 49999];
-  if (scamAmounts.includes(Math.round(amount))) {
+  if (scamAmounts.includes(Math.round(amount)) && isNewContact && isNight) {
     score += 15;
-    signals.push({ sev:'amber', icon:'🎯', text:`₹${amount.toFixed(0)} is a commonly dictated scam amount (just under a round number to seem less suspicious).` });
+    signals.push({ sev:'amber', icon:'🎯', text:`₹${amount.toFixed(0)} is a just-under-round amount that scammers commonly dictate — and you're sending to a new contact at night. Take a moment.` });
   }
 
-  // Daily accumulated spend check
+  // Daily accumulated spend — only flag when spending spans multiple NEW contacts
+  // (a person paying rent + salary advance + household in one day is perfectly normal)
   const dailyVol = _getDailyVolume();
   const projectedDaily = (dailyVol.total || 0) + amount;
-  if (projectedDaily > 10000 && (dailyVol.count || 0) >= 3) {
+  const newRecipientsToday = (dailyVol.recipients || []).filter(r => _getFcCache(r) !== 'known').length;
+  if (projectedDaily > 15000 && (dailyVol.count || 0) >= 4 && newRecipientsToday >= 2) {
     score += 25;
-    signals.push({ sev:'amber', icon:'📊', text:`This would bring your total sends today to ₹${projectedDaily.toFixed(0)} across ${(dailyVol.count||0)+1} transactions. High daily volume is a drain risk indicator.` });
+    signals.push({ sev:'amber', icon:'📊', text:`₹${projectedDaily.toFixed(0)} sent today across ${(dailyVol.count||0)+1} transactions — including ${newRecipientsToday} new contacts. Pause and verify each one.` });
   }
-  if (projectedDaily > 25000) {
+  if (projectedDaily > 30000 && newRecipientsToday >= 2) {
     score += 30;
-    signals.push({ sev:'red', icon:'📊', text:`You'd be sending over ₹${projectedDaily.toFixed(0)} today. Aria recommends pausing and verifying all recipients before proceeding.` });
+    signals.push({ sev:'red', icon:'📊', text:`Over ₹${projectedDaily.toFixed(0)} sent today including multiple new recipients. This level of outflow to unknown contacts warrants a careful review.` });
   }
 
   // Session-level recipient diversity check
@@ -1485,23 +1490,23 @@ function _analyzeRecipientUPI(upiId) {
   const [handle, bank] = upiId.split('@');
   if (!handle || !bank) return { score, signals };
 
-  // Numeric-heavy handle (mule accounts often auto-generated)
+  // 10-digit phone-number handles (e.g. 9876543210@ybl, 9876543210@okicici) are the
+  // DEFAULT format assigned by Google Pay, PhonePe, and Paytm for virtually every Indian user.
+  // They are NOT suspicious — do not score or flag them.
+  const isPhoneHandle = /^\d{10}$/.test(handle);
+  if (isPhoneHandle) return { score, signals };
+
+  // Non-phone numeric-heavy handle (true auto-generated mule pattern)
   const numericRatio = (handle.replace(/\D/g,'').length) / handle.length;
   if (numericRatio > 0.8 && handle.length > 6) {
     score += 20;
-    signals.push({ sev:'amber', icon:'🔢', text:`Recipient's UPI is ${Math.round(numericRatio*100)}% numeric — auto-generated IDs like this are common in mule accounts.` });
+    signals.push({ sev:'amber', icon:'🔢', text:`Recipient UPI handle is mostly random digits — not a standard phone-based ID. Auto-generated IDs are common in mule accounts.` });
   }
 
-  // Handle looks like a phone number (legitimate but worth noting for new contacts)
-  if (/^\d{10}$/.test(handle)) {
-    score += 8;
-    signals.push({ sev:'amber', icon:'📱', text:`Recipient's UPI handle is a 10-digit number — confirm this is who you intend to pay.` });
-  }
-
-  // Suspicious handle patterns (random alphanumeric > 18 chars = auto-generated)
+  // Very long random alphanumeric string (> 18 chars, not phone) = disposable account
   if (handle.length > 18 && /^[a-z0-9]+$/i.test(handle)) {
     score += 15;
-    signals.push({ sev:'amber', icon:'🤖', text:`Recipient's UPI handle looks auto-generated (long random string) — often associated with disposable accounts.` });
+    signals.push({ sev:'amber', icon:'🤖', text:`Recipient UPI handle is unusually long and random-looking — these are often disposable fraud accounts.` });
   }
 
   return { score, signals };
@@ -1512,6 +1517,7 @@ function _analyzeTimeContext(hour, ariaData) {
   const signals = [];
   let score = 0;
   const log = ariaData.log || [];
+  const isNight = hour >= 22 || hour < 5;
 
   // Deep night (2am-5am) — highest risk window
   if (hour >= 2 && hour < 5) {
@@ -1519,22 +1525,18 @@ function _analyzeTimeContext(hour, ariaData) {
     signals.push({ sev:'amber', icon:'🌃', text:`Transactions between 2–5 AM are statistically the highest-risk window — most pressure-based scams happen when victims are sleep-deprived and less critical.` });
   }
 
-  // Check if user has been in this send screen for < 3 minutes AND making a large send
-  // (rushed decision-making under social engineering)
-  const session = _getSessionProfile();
-  const timeOnScreen = Date.now() - (session.screenOpenTime || Date.now());
-  if (timeOnScreen < 90000) { // less than 90 seconds
-    score += 10; // soft signal — only meaningful with others
-  }
-
-  // Check if prior sends in last 1 hour (active session = possible script)
+  // Check prior sends in last 1 hour (sustained frequency = scripted or coerced)
+  // Threshold is 4+ because even 3 legitimate transfers in an hour is plausible.
   const lastHour = log.filter(e =>
     e.context === 'send' &&
     Date.now() - new Date(e.time).getTime() < 3600000
   );
-  if (lastHour.length >= 4) {
-    score += 25;
-    signals.push({ sev:'red', icon:'⏰', text:`${lastHour.length} send events in the last hour. Sustained high frequency is a hallmark of scripted or coerced payment activity.` });
+  if (lastHour.length >= 5) {
+    score += 30;
+    signals.push({ sev:'red', icon:'⏰', text:`${lastHour.length} separate sends in the last hour. Are you being asked to make payments one-by-one? That's how scammers avoid triggering limits.` });
+  } else if (lastHour.length >= 3 && isNight) {
+    score += 18;
+    signals.push({ sev:'amber', icon:'⏰', text:`${lastHour.length} sends in the past hour late at night — if someone is walking you through these steps, stop and verify them directly.` });
   }
 
   return { score, signals };
@@ -1686,6 +1688,31 @@ async function _runFraudScore(phone, amount, note) {
     return;
   }
 
+  // ── SMART ACTIVATION GATE ──
+  // Aria is a precision tool, not a paranoid one. For amounts ≥ ₹1000, Aria activates
+  // only when AT LEAST ONE of the following is true:
+  //   (a) Night-time: 22:00 – 05:00  (the highest-risk window for coerced payments)
+  //   (b) First send to this recipient (cache miss is treated conservatively as 'new')
+  //   (c) Panic pattern: PIN lockout just fired OR ≥ 2 sends in last 5 minutes
+  //   (d) Note contains any text (user filling in a note is unusual and worth checking)
+  // For known contacts, daytime, calm session, no note → Aria silently clears. ✓
+  const _gHour    = new Date().getHours();
+  const _gNight   = _gHour >= 22 || _gHour < 5;
+  const _gCachedFc = _getFcCache(phone);
+  const _gIsNew   = (_gCachedFc !== 'known');
+  const _gLocked  = isPinLocked();
+  const _gRecentN = (ariaGetData().log || []).filter(e =>
+    e.context === 'send' && Date.now() - new Date(e.time).getTime() < 5 * 60 * 1000
+  ).length;
+  const _gPanic   = _gLocked || _gRecentN >= 2;
+  const _gHasNote = note && note.trim().length > 0;
+
+  if (!_gNight && !_gIsNew && !_gPanic && !_gHasNote) {
+    // All-clear: known contact, daytime, calm, no note. Close panel silently.
+    _renderFraudPanel(0, [], amount, phone);
+    return;
+  }
+
   // Stamp a sequence number; discard result if a newer call has started
   const seq = ++_fraudSeq;
 
@@ -1694,7 +1721,7 @@ async function _runFraudScore(phone, amount, note) {
 
   const currentBal = parseFloat(sessionStorage.getItem('pm_balance') || '0');
   const hour = new Date().getHours();
-  const isNight = hour >= 20 || hour < 6;
+  const isNight = hour >= 22 || hour < 5;
   const ariaData = ariaGetData();
   const noteLc = (note || '').toLowerCase();
 
@@ -1754,16 +1781,18 @@ async function _runFraudScore(phone, amount, note) {
 
   // ══════════════════════════════════════════
   // MODULE 4 — FIRST CONTACT + CONTEXT STACKING
+  // Thresholds are calibrated for India: ₹500 splits, shopkeeper pays, and UPI
+  // transfers under ₹1500 to new contacts are extremely common legitimate uses.
   // ══════════════════════════════════════════
-  if (isNewContact && amount > 500 && isNight) {
+  if (isNewContact && amount >= 2000 && isNight) {
     score += 40;
-    signals.push({ sev:'red', icon:'🌙', text:`Triple threat: first time paying this number, amount >₹500, and it's nighttime — all three together is a high-risk combination.` });
-  } else if (isNewContact && amount > 500) {
-    score += 25;
-    signals.push({ sev:'amber', icon:'👤', text:`You've never sent money to this number before and the amount is above ₹500.` });
-  } else if (isNewContact && amount > 100 && isNight) {
-    score += 20;
-    signals.push({ sev:'amber', icon:'🌙', text:`First-time contact + nighttime — lower vigilance at night is exploited by scammers.` });
+    signals.push({ sev:'red', icon:'🌙', text:`First-time contact, ₹${amount.toFixed(0)}, and it's past 10 PM — all three at once is a high-risk combination. Verify via call before sending.` });
+  } else if (isNewContact && amount >= 3000) {
+    score += 28;
+    signals.push({ sev:'amber', icon:'👤', text:`You've never sent money to this number before. ₹${amount.toFixed(0)} to a first-time recipient — confirm you know them personally.` });
+  } else if (isNewContact && amount >= 1500 && isNight) {
+    score += 22;
+    signals.push({ sev:'amber', icon:'🌙', text:`First-time contact at night — scammers target people when they're less alert. Take a moment to verify this person.` });
   }
 
   // ══════════════════════════════════════════
@@ -1807,50 +1836,56 @@ async function _runFraudScore(phone, amount, note) {
       e.context === 'send' &&
       Date.now() - new Date(e.time).getTime() < 10 * 60 * 1000
     );
-    if (recentSends.length >= 4) {
+    if (recentSends.length >= 5) {
       score += 50;
-      signals.push({ sev:'red', icon:'⚡', text:`${recentSends.length} send attempts in the last 10 minutes. This velocity is consistent with a scammer-controlled script rapidly draining wallets.` });
-    } else if (recentSends.length >= 2) {
-      score += 25;
-      signals.push({ sev:'amber', icon:'⚡', text:`${recentSends.length} send attempts in the last 10 minutes — are you being pressured to make multiple payments quickly?` });
+      signals.push({ sev:'red', icon:'⚡', text:`${recentSends.length} sends in 10 minutes. Nobody makes 5+ legitimate UPI transfers that fast — if someone is instructing you, hang up and verify.` });
+    } else if (recentSends.length >= 3) {
+      score += 22;
+      signals.push({ sev:'amber', icon:'⚡', text:`${recentSends.length} sends in the last 10 minutes. Are you being asked to transfer money in rapid steps? That's a common pressure tactic.` });
     }
   } catch(e) {}
 
   // ══════════════════════════════════════════
-  // MODULE 7 — ROUND NUMBER PATTERN
+  // MODULE 7 — ROUND NUMBER PATTERN (context-gated)
+  // Round amounts (₹500, ₹1000, ₹5000) are overwhelmingly the MOST COMMON legitimate
+  // UPI amounts in India. This module ONLY fires when combined with new-contact + large
+  // amount + night — never as a standalone signal.
   // ══════════════════════════════════════════
-  const isRound = amount > 0 && amount % 500 === 0;
   const isExactThousand = amount > 0 && amount % 1000 === 0;
-  if (isExactThousand && isNewContact && isNight) {
-    score += 22;
-    signals.push({ sev:'amber', icon:'🎯', text:`Exact ₹${amount.toFixed(0)} to a new contact at night — three correlated signals.` });
-  } else if (isRound && isNewContact) {
-    score += 15;
-    signals.push({ sev:'amber', icon:'🎯', text:`₹${amount.toFixed(0)} is a perfectly round number — scammers dictate exact round amounts; real transactions rarely are.` });
+  // Only flag round amounts when we already have both new-contact AND night context,
+  // AND the amount is large enough to matter (≥ ₹5000).
+  if (isExactThousand && amount >= 5000 && isNewContact && isNight) {
+    score += 12; // small additive boost — never primary signal
+    signals.push({ sev:'amber', icon:'🎯', text:`Round ₹${amount.toFixed(0)}, new contact, late night — combined context adds to risk. Scammers often dictate exact round numbers.` });
   }
 
   // ══════════════════════════════════════════
   // MODULE 8 — BALANCE DRAIN ANALYSIS
   // ══════════════════════════════════════════
-  if (currentBal >= 200) {
+  if (currentBal >= 500) {
     const drainRatio = amount / currentBal;
+    const leftOver = currentBal - amount;
     if (drainRatio > 0.95 && isNewContact) {
       score += 60;
-      signals.push({ sev:'red', icon:'💸', text:`Sending ${Math.round(drainRatio*100)}% of your entire wallet balance to someone you've never paid before. This is the most common profile of a successful scam.` });
+      signals.push({ sev:'red', icon:'💸', text:`This would send ${Math.round(drainRatio*100)}% of your wallet (leaving just ₹${leftOver.toFixed(0)}) to someone you've never paid. That's the most common pattern in a successful wallet scam.` });
     } else if (drainRatio > 0.8 && isNewContact) {
       score += 40;
-      signals.push({ sev:'red', icon:'💸', text:`This drains ${Math.round(drainRatio*100)}% of your wallet in one transaction to a first-time recipient.` });
-    } else if (drainRatio > 0.9) {
-      score += 30;
-      signals.push({ sev:'amber', icon:'💸', text:`Sending ${Math.round(drainRatio*100)}% of your wallet. Even to known contacts, leaving yourself with near-zero balance is unusual.` });
+      signals.push({ sev:'red', icon:'💸', text:`₹${amount.toFixed(0)} is ${Math.round(drainRatio*100)}% of your balance — sending most of your wallet to a first-time contact is high risk.` });
+    } else if (drainRatio > 0.92 && !isNewContact) {
+      score += 25;
+      signals.push({ sev:'amber', icon:'💸', text:`This empties ${Math.round(drainRatio*100)}% of your wallet. Even for someone you know, confirm this isn't a mistake before sending.` });
     }
   }
 
   // Cap non-drain signal contribution for known contacts (reduces false positives)
+  // Only drain signals (💸) and blacklist (🚩) bypass the cap — everything else is
+  // muted for contacts you have a payment history with.
   if (isKnownContact) {
-    const drainContrib = signals.filter(s => s.icon === '💸').reduce(() => 0, 0);
-    const nonDrain = score - drainContrib;
-    if (nonDrain > 25) score = drainContrib + 25;
+    let drainContrib = 0;
+    signals.forEach(s => {
+      if (s.icon === '💸' || s.icon === '🚩' || s.icon === '🆕') drainContrib += (s.sev === 'red' ? 40 : 20);
+    });
+    if (score - drainContrib > 30) score = drainContrib + 30;
   }
 
   // ══════════════════════════════════════════
@@ -1916,8 +1951,13 @@ async function _runFraudScore(phone, amount, note) {
         recipData = rSnap.data();
         _setUdCache(phone, recipData);
       } else {
-        score += 12;
-        signals.push({ sev:'amber', icon:'❓', text:`This phone number is not registered on PayMesh — double-check you have the right number before sending.` });
+        // Phone not on PayMesh — this is normal for many legitimate sends.
+        // Only flag if combined with other risk signals (night + new + large).
+        // A standalone "not on PayMesh" signal would fire for the majority of sends.
+        if (isNight && isNewContact && amount >= 2000) {
+          score += 10;
+          signals.push({ sev:'amber', icon:'❓', text:`This number isn't on PayMesh. That's fine — just double-check you've typed the right number before sending ₹${amount.toFixed(0)}.` });
+        }
       }
     } else {
       if (seq !== _fraudSeq) return;
@@ -1965,22 +2005,30 @@ async function _runFraudScore(phone, amount, note) {
   // ══════════════════════════════════════════
   const redSignalCount  = signals.filter(s => s.sev === 'red').length;
   const warnSignalCount = signals.filter(s => s.sev === 'amber').length;
-  if (redSignalCount >= 3) {
+  // Hard signals are those from high-confidence modules (blacklist, drain, new-account,
+  // velocity, escalating amounts, linguistics). Soft signals (round number, minor bio)
+  // don't count toward the composite.
+  const HARD_ICONS = new Set(['🚩','💸','🆕','⚡','♻️','📈','🗣️','🧠','🔑','🎯','⏰']);
+  const hardReds = signals.filter(s => s.sev === 'red' && HARD_ICONS.has(s.icon)).length;
+  if (hardReds >= 3) {
     score += 20;
-    signals.push({ sev:'red', icon:'🚨', text:`${redSignalCount} independent high-risk signals detected simultaneously — combined pattern matches known fraud campaigns.` });
-  } else if (redSignalCount >= 2 && warnSignalCount >= 2) {
-    score += 12;
-    signals.push({ sev:'red', icon:'🚨', text:`Multiple independent risk signals converge on this transaction — Aria strongly recommends pausing.` });
+    signals.push({ sev:'red', icon:'🚨', text:`${hardReds} independent high-confidence risk signals at once — this combination is Aria's strongest fraud indicator. Do not proceed without a direct voice call to verify.` });
+  } else if (hardReds >= 2 && warnSignalCount >= 2) {
+    score += 10;
+    signals.push({ sev:'red', icon:'🚨', text:`Several independent risk factors converge here. Aria strongly recommends pausing and verifying before sending.` });
   }
 
-  // Deduplicate signals with same icon (keep highest severity)
-  const seen = new Set();
-  const deduped = signals.filter(s => {
-    const key = s.icon + s.sev;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
+  // Deduplicate: for each unique icon keep only the highest-severity instance.
+  // This prevents two different modules emitting the same icon from both showing.
+  const iconSevOrder = { red: 2, amber: 1, green: 0 };
+  const iconBest = new Map();
+  signals.forEach(s => {
+    const cur = iconBest.get(s.icon);
+    if (!cur || (iconSevOrder[s.sev] || 0) > (iconSevOrder[cur.sev] || 0)) {
+      iconBest.set(s.icon, s);
+    }
   });
+  const deduped = [...iconBest.values()];
 
   if (seq !== _fraudSeq) return;
   _renderFraudPanel(Math.min(score, 100), deduped, amount, phone);
@@ -2024,8 +2072,9 @@ function _renderFraudPanel(score, signals, amount, toPhone) {
       sendBtn.style.cursor  = 'pointer';
       sendBtn.textContent = 'Send Now';
     }
-    // Log safe send to Aria
-    if (typeof ariaLogEvent === 'function') ariaLogEvent('green', 'send', [], amount, toPhone);
+    // Only log safe sends for large amounts (≥ ₹5000) to keep the Aria
+    // dashboard meaningful — smaller routine sends don't need to appear in the log.
+    if (typeof ariaLogEvent === 'function' && amount >= 5000) ariaLogEvent('green', 'send', [], amount, toPhone);
     return;
   }
 
@@ -2445,7 +2494,7 @@ async function _runVoucherFraudScore(amount) {
 
   const currentBal = parseFloat(sessionStorage.getItem('pm_balance') || '0');
   const hour = new Date().getHours();
-  const isNight = hour >= 20 || hour < 6;
+  const isNight = hour >= 22 || hour < 5;
   const ariaData = ariaGetData();
   const log = ariaData.log || [];
 
